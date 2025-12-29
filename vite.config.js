@@ -4,20 +4,18 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
-    // Ensure the app works from the root path
     base: '/',
     define: {
-      // Specifically define the API key from the build environment
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY),
+      // Prevents crash if API_KEY is missing during build, though app will need it at runtime
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || ''),
     },
     plugins: [
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: 'auto', // Automatically injects the SW registration script into index.html
+        injectRegister: 'auto',
         includeAssets: ['logo.png'],
         manifestFilename: 'manifest.json',
         workbox: {
