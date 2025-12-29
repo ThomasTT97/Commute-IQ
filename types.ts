@@ -1,4 +1,5 @@
 
+
 export type Language = 'en' | 'fr' | 'nl';
 
 export interface Coordinates {

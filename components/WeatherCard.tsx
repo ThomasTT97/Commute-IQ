@@ -1,15 +1,13 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { WeatherCondition } from '../types';
-import { WEATHER_ICONS } from '../constants';
 import { 
-  Waves, 
   Wind, 
   AlertTriangle, 
   ArrowDownToLine, 
   MoveUp, 
   ShieldCheck, 
   Zap, 
-  HelpCircle,
   Clock,
   Calendar,
   ArrowLeftRight,
@@ -18,7 +16,6 @@ import {
   Navigation,
   Lightbulb,
   LightbulbOff,
-  Database,
   Bike,
   Car,
   Brain
@@ -101,8 +98,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   const scoreInfo = useMemo(() => {
     if (safetyScore === undefined || safetyScore === null) return { color: isDarkTheme ? 'text-slate-500' : 'text-slate-500', icon: <Brain className="w-5 h-5" /> };
-    if (safetyScore > 70) return { color: 'text-emerald-500', icon: <Bike className="w-5 h-5" /> };
-    if (safetyScore < 30) return { color: 'text-red-500', icon: <Car className="w-5 h-5" /> };
+    const roundedScore = Math.round(safetyScore);
+    if (roundedScore > 70) return { color: 'text-emerald-500', icon: <Bike className="w-5 h-5" /> };
+    if (roundedScore < 30) return { color: 'text-red-500', icon: <Car className="w-5 h-5" /> };
     return { color: 'text-orange-500', icon: <Brain className="w-5 h-5" /> };
   }, [safetyScore, isDarkTheme]);
 
@@ -164,7 +162,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </div>
           </div>
 
-          <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border ${wind.color} ${isDarkTheme ? 'bg-slate-950/40 border-white/5' : 'bg-slate-100 border-slate-200 shadow-sm'}`}>
+          <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border ${wind.color} ${isDarkTheme ? 'bg-slate-950/40 border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
             <span className="text-[9px] font-black tracking-[0.1em]">{wind.label.split(' ')[0]}</span>
             {wind.icon}
           </div>
@@ -172,6 +170,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       </div>
     );
   }
+
+  const hasIntelligence = !!condition?.surfaceReason;
 
   return (
     <div className={`h-full w-full rounded-[2rem] border shadow-2xl overflow-hidden flex flex-col backdrop-blur-md relative transition-all duration-500 ${isDarkTheme ? 'bg-slate-900/30 border-white/5' : 'bg-white border-slate-300 shadow-xl'}`}>
@@ -237,15 +237,15 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 grid grid-cols-2 gap-3 px-6 py-2 min-h-0">
+        <div className="flex-none grid grid-cols-2 gap-3 px-6 py-2">
           {[
             { label: 'WIND', value: wind.label, color: wind.color, icon: wind.icon },
             { label: 'SURFACE', value: surface.label, color: surface.color, icon: surface.icon },
             { label: 'ICE RISK', value: iceInfo.label, color: iceInfo.color, icon: iceInfo.icon },
-            { label: 'COMMUTE SCORE', value: safetyScore !== undefined ? `${safetyScore}%` : '--%', color: scoreInfo.color, icon: scoreInfo.icon }
+            { label: 'COMMUTE SCORE', value: safetyScore !== undefined ? `${Math.round(safetyScore)}%` : '--%', color: scoreInfo.color, icon: scoreInfo.icon }
           ].map((stat, i) => (
-            <div key={i} className={`p-4 rounded-[1.75rem] border flex flex-col justify-between h-full transition-all ${isDarkTheme ? 'bg-slate-900/50 border-white/5 hover:bg-slate-900/70 shadow-inner' : 'bg-slate-100/70 border-slate-200 shadow-sm'}`}>
-              <span className={`text-[10px] font-black uppercase tracking-[0.25em] ${isDarkTheme ? 'text-slate-600' : 'text-slate-500'}`}>{stat.label}</span>
+            <div key={i} className={`p-4 rounded-[1.75rem] border flex flex-col justify-between h-24 transition-all ${isDarkTheme ? 'bg-slate-950/80 border-white/10 hover:bg-slate-900 shadow-inner' : 'bg-slate-100/70 border-slate-200 shadow-sm'}`}>
+              <span className={`text-[10px] font-black uppercase tracking-[0.25em] ${isDarkTheme ? 'text-slate-500' : 'text-slate-500'}`}>{stat.label}</span>
               <div className="flex items-end justify-between mt-auto mb-1">
                 <span className={`text-xl font-black tracking-tight leading-none ${stat.color}`}>{stat.value}</span>
                 <div className={`scale-125 mb-0.5 ${stat.color}`}>
@@ -256,17 +256,22 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           ))}
         </div>
 
-        {condition?.surfaceReason && (
-          <div className={`mx-6 mb-5 flex-none flex flex-col gap-2 p-4 rounded-2xl border transition-colors ${isDarkTheme ? 'bg-blue-500/5 border-blue-500/10' : 'bg-blue-50 border-blue-200 shadow-sm'}`}>
-            <div className="flex items-center gap-2">
-              <Zap className={`w-3 h-3 ${isDarkTheme ? 'text-blue-500/80' : 'text-blue-600'}`} />
-              <span className={`text-[8px] font-black uppercase tracking-widest ${isDarkTheme ? 'text-blue-500/80' : 'text-blue-700'}`}>Commute Intelligence</span>
+        <div className="flex-1 px-6 pb-6 mt-1 flex flex-col min-h-0 overflow-hidden">
+          {hasIntelligence && (
+            <div className={`flex flex-col gap-2.5 p-4 rounded-[1.75rem] border h-full overflow-hidden transition-colors ${isDarkTheme ? 'bg-blue-500/10 border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.05)]' : 'bg-blue-50 border-blue-200 shadow-sm'}`}>
+              <div className="flex items-center gap-2 flex-none">
+                <Zap className={`w-3 h-3 ${isDarkTheme ? 'text-blue-500/80' : 'text-blue-600'}`} />
+                <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${isDarkTheme ? 'text-blue-500/80' : 'text-blue-700'}`}>Commute Intelligence</span>
+              </div>
+              
+              <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
+                <p className={`text-[10px] sm:text-[11px] font-medium leading-relaxed break-words overflow-wrap-anywhere whitespace-pre-line ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>
+                  {condition?.surfaceReason}
+                </p>
+              </div>
             </div>
-            <p className={`text-[11px] font-medium leading-normal ${isDarkTheme ? 'text-slate-400' : 'text-slate-700'} line-clamp-2`}>
-              {condition?.surfaceReason}
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

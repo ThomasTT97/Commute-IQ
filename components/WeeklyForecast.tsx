@@ -1,9 +1,10 @@
 
-import React from 'react';
-import { HelpCircle, ChevronRight, TrendingUp, AlertTriangle, Droplets, ShieldCheck, Database } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ChevronRight, AlertTriangle, Droplets, ShieldCheck, Database, Loader2 } from 'lucide-react';
 
 interface WeeklyForecastProps {
   pulseDataMap: Record<number, any>;
+  loadingOffsets?: number[];
   onSelectDay: (offset: number) => void;
   theme?: 'dark' | 'light';
 }
@@ -11,34 +12,60 @@ interface WeeklyForecastProps {
 const OFFSETS = [0, 1, 2, 3, 4, 5, 6];
 
 const getScoreStyles = (score: number, hasPulse: boolean, isDark: boolean) => {
-  if (!hasPulse) return { color: isDark ? 'text-slate-500' : 'text-slate-400', bg: isDark ? 'bg-slate-900/40' : 'bg-slate-100', shadow: '' };
+  if (!hasPulse) return { color: isDark ? 'text-slate-300' : 'text-slate-400', bg: isDark ? 'bg-slate-900/60 border-slate-700' : 'bg-slate-100 border-slate-200', shadow: '' };
   
-  if (score > 70) {
+  const roundedScore = Math.round(score);
+  if (roundedScore > 70) {
     return { 
-      color: 'text-emerald-500', 
-      bg: isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200', 
-      shadow: isDark ? 'shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'shadow-md' 
+      color: isDark ? 'text-emerald-300' : 'text-emerald-600', 
+      bg: isDark ? 'bg-emerald-900/40 border-emerald-500/40' : 'bg-emerald-50 border-emerald-200', 
+      shadow: isDark ? 'shadow-[0_0_25px_rgba(16,185,129,0.1)]' : 'shadow-md' 
     };
   }
-  if (score >= 30) {
+  if (roundedScore >= 30) {
     return { 
-      color: 'text-orange-500', 
-      bg: isDark ? 'bg-orange-500/5 border-orange-500/20' : 'bg-orange-50 border-orange-200', 
+      color: isDark ? 'text-orange-300' : 'text-orange-600', 
+      bg: isDark ? 'bg-orange-900/40 border-orange-500/40' : 'bg-orange-50 border-orange-200', 
       shadow: isDark ? '' : 'shadow-sm' 
     };
   }
   return { 
-    color: 'text-red-500', 
-    bg: isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200', 
-    shadow: isDark ? 'shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'shadow-md' 
+    color: isDark ? 'text-red-300' : 'text-red-600', 
+    bg: isDark ? 'bg-red-900/40 border-red-500/40' : 'bg-red-50 border-red-200', 
+    shadow: isDark ? 'shadow-[0_0_25px_rgba(239,68,68,0.1)]' : 'shadow-md' 
   };
 };
 
-export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, onSelectDay, theme = 'dark' }) => {
+export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, loadingOffsets = [], onSelectDay, theme = 'dark' }) => {
   const isDark = theme === 'dark';
+
+  const progress = useMemo(() => {
+    const loadedCount = OFFSETS.filter(o => pulseDataMap[o] && !loadingOffsets.includes(o)).length;
+    return (loadedCount / OFFSETS.length) * 100;
+  }, [pulseDataMap, loadingOffsets]);
+
+  const isCompleted = progress >= 100;
 
   return (
     <div className="flex flex-col gap-4 pb-6">
+      {!isCompleted && (
+        <div className={`flex flex-col gap-2 p-4 rounded-3xl border transition-all duration-500 animate-in fade-in slide-in-from-top-2 ${isDark ? 'bg-slate-900/80 border-white/20' : 'bg-white border-slate-200 shadow-sm'}`}>
+          <div className="flex justify-between items-center px-1">
+            <div className="flex items-center gap-2">
+               <Database className={`w-3 h-3 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+               <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-slate-200' : 'text-slate-600'}`}>Syncing Forecast</span>
+            </div>
+            <span className={`text-[10px] font-mono font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(progress)}%</span>
+          </div>
+          <div className={`h-1.5 w-full rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+            <div 
+              className="h-full bg-blue-500 transition-all duration-700 ease-out shadow-[0_0_10px_rgba(37,99,235,0.4)]" 
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3">
         {OFFSETS.map((offset) => {
           const d = new Date();
@@ -47,8 +74,9 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
           const dateNum = d.getDate();
           
           const pulse = pulseDataMap[offset];
+          const isLoading = loadingOffsets.includes(offset);
           const score = pulse?.score ?? 0;
-          const styles = getScoreStyles(score, !!pulse, isDark);
+          const styles = getScoreStyles(score, !!pulse && !isLoading, isDark);
           
           const isWet = pulse?.summary?.isWet ?? false;
           const hasIce = pulse?.summary?.isIcy ?? false;
@@ -57,33 +85,37 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
             <button
               key={offset}
               onClick={() => onSelectDay(offset)}
-              className={`group relative flex items-center justify-between p-4 rounded-3xl border transition-all duration-300 overflow-hidden ${styles.bg} ${styles.shadow} hover:scale-[1.01] active:scale-[0.99] ${isDark ? 'border-white/5' : 'border-slate-200 shadow-sm'}`}
+              disabled={isLoading}
+              className={`group relative flex items-center justify-between p-4 rounded-3xl border transition-all duration-300 overflow-hidden ${styles.bg} ${styles.shadow} ${isLoading ? 'opacity-70 animate-pulse' : 'hover:scale-[1.01] active:scale-[0.99] hover:border-blue-400'}`}
             >
               <div className="flex items-center gap-5 z-10">
                 <div className="flex flex-col items-center justify-center min-w-[3rem]">
-                  <span className={`text-[10px] font-black tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>{dayName}</span>
+                  <span className={`text-[10px] font-black tracking-widest ${isDark ? 'text-slate-200' : 'text-slate-600'}`}>{dayName}</span>
                   <span className={`text-xl font-black mt-1 leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>{dateNum}</span>
                 </div>
 
-                <div className={`h-8 w-px ${isDark ? 'bg-slate-800/40' : 'bg-slate-300'}`} />
+                <div className={`h-8 w-px ${isDark ? 'bg-white/20' : 'bg-slate-300'}`} />
 
                 <div className="flex flex-col gap-1.5 min-w-[120px]">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[7px] font-black uppercase tracking-widest leading-none ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>Conditions</span>
+                    <span className={`text-[7px] font-black uppercase tracking-widest outline-none leading-none ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>
+                      {isLoading ? 'Calculating...' : 'Conditions'}
+                    </span>
+                    {isLoading && <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />}
                   </div>
                   <div className="flex items-center gap-2">
-                    {!pulse ? (
+                    {!pulse || isLoading ? (
                       <div className="flex items-center gap-2 opacity-20">
                          <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-400'}`} />
                          <div className={`w-8 h-1 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-300'}`} />
                       </div>
                     ) : (
                       <>
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${isWet ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-500'}`}>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${isWet ? 'bg-blue-500/20 border-blue-400 text-blue-300' : 'bg-emerald-500/20 border-emerald-400 text-emerald-300'}`}>
                           {isWet ? <Droplets className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5" />}
                           {isWet ? 'WET' : 'DRY'}
                         </div>
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${hasIce ? 'bg-red-500/10 border-red-500/30 text-red-500 animate-pulse' : (isDark ? 'bg-slate-800 border-slate-700/50 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-500')}`}>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${hasIce ? 'bg-red-500/20 border-red-400 text-red-300 animate-pulse' : (isDark ? 'bg-slate-800 border-slate-600 text-slate-300' : 'bg-slate-200 border-slate-300 text-slate-500')}`}>
                           {hasIce ? <AlertTriangle className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5 opacity-30" />}
                           {hasIce ? 'ICE' : 'NO ICE'}
                         </div>
@@ -95,21 +127,21 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
 
               <div className="flex items-center gap-6 z-10">
                 <div className="flex flex-col items-end">
-                  <span className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>Score</span>
+                  <span className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>Score</span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-2xl font-black font-mono leading-none ${styles.color}`}>
-                      {pulse ? score : '--'}
+                      {pulse && !isLoading ? Math.round(score) : '--'}
                     </span>
                     <span className={`text-[9px] font-bold uppercase tracking-tight opacity-90 ${styles.color}`}>%</span>
                   </div>
                 </div>
-                <ChevronRight className={`w-5 h-5 group-hover:text-blue-600 group-hover:translate-x-1 transition-all ${isDark ? 'text-slate-800' : 'text-slate-400'}`} />
+                <ChevronRight className={`w-5 h-5 group-hover:text-blue-400 group-hover:translate-x-1 transition-all ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
               </div>
 
-              {pulse && (
+              {pulse && !isLoading && (
                 <div 
-                  className="absolute bottom-0 left-0 h-1 bg-current opacity-20 transition-all duration-1000" 
-                  style={{ width: `${score}%`, color: 'inherit' }}
+                  className="absolute bottom-0 left-0 h-1 bg-current opacity-40 transition-all duration-1000" 
+                  style={{ width: `${Math.round(score)}%`, color: 'inherit' }}
                 />
               )}
             </button>
