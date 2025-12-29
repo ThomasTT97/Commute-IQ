@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { HelpCircle, ChevronRight, TrendingUp, AlertTriangle, Droplets, ShieldCheck } from 'lucide-react';
+import { HelpCircle, ChevronRight, TrendingUp, AlertTriangle, Droplets, ShieldCheck, Database } from 'lucide-react';
 
 interface WeeklyForecastProps {
   pulseDataMap: Record<number, any>;
@@ -49,8 +49,8 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
           const pulse = pulseDataMap[offset];
           const score = pulse?.score ?? 0;
           const styles = getScoreStyles(score, !!pulse, isDark);
+          const isDummy = pulse?.isDummy;
           
-          // Use AI-grounded summary instead of local UI calculation
           const isWet = pulse?.summary?.isWet ?? false;
           const hasIce = pulse?.summary?.isIcy ?? false;
 
@@ -69,7 +69,9 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
                 <div className={`h-8 w-px ${isDark ? 'bg-slate-800/40' : 'bg-slate-300'}`} />
 
                 <div className="flex flex-col gap-1.5 min-w-[120px]">
-                  <span className={`text-[7px] font-black uppercase tracking-widest leading-none ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>Conditions</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[7px] font-black uppercase tracking-widest leading-none ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>Conditions</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     {!pulse ? (
                       <div className="flex items-center gap-2 opacity-20">

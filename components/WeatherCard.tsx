@@ -18,7 +18,8 @@ import {
   ArrowRight,
   Navigation,
   Lightbulb,
-  LightbulbOff
+  LightbulbOff,
+  Database
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -33,6 +34,7 @@ interface WeatherCardProps {
   distance?: number;
   safetyScore?: number;
   theme?: 'dark' | 'light';
+  isDummy?: boolean;
 }
 
 export const WeatherCard: React.FC<WeatherCardProps> = ({ 
@@ -45,7 +47,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   targetTime,
   distance,
   safetyScore,
-  theme = 'dark'
+  theme = 'dark',
+  isDummy = false
 }) => {
   const [timeLeft, setTimeLeft] = useState<{ h: string, m: string, s: string } | null>(null);
   const isDarkTheme = theme === 'dark';
@@ -81,8 +84,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   }, [condition?.headwindImpact, condition?.windSpeed, isDarkTheme]);
 
   const surface = useMemo(() => {
-    // Grounding: If the AI says wetSurfaceChance > 50, it is wet. 
-    // Increased from 30 to 50 to avoid over-warning on minor dampness/spots.
     const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
     return isWet 
       ? { label: 'WET', color: 'text-blue-600', icon: <Waves className="w-4 h-4" /> }
@@ -101,7 +102,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
 
     return (
-      <div className={`w-full rounded-3xl p-5 border flex flex-col gap-4 transition-all backdrop-blur-sm shadow-xl ${isDarkTheme ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-white border-slate-200 hover:bg-slate-50 shadow-md'}`}>
+      <div className={`w-full rounded-3xl p-5 border flex flex-col gap-4 transition-all backdrop-blur-sm shadow-xl relative ${isDarkTheme ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-white border-slate-200 hover:bg-slate-50 shadow-md'}`}>
         <div className={`flex items-center gap-4 text-[10px] font-bold uppercase tracking-[0.2em] ${isDarkTheme ? 'text-slate-500' : 'text-slate-600'}`}>
           <div className="flex items-center gap-2">
             <Calendar className={`w-3.5 h-3.5 ${isDarkTheme ? 'text-blue-500/60' : 'text-blue-600'}`} /> 

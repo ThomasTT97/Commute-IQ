@@ -19,7 +19,8 @@ import {
   Loader2,
   Search,
   ExternalLink,
-  CheckCircle2
+  CheckCircle2,
+  Database
 } from 'lucide-react';
 
 const ROAD_DETOUR_FACTOR = 1.32;
@@ -74,12 +75,12 @@ const App: React.FC = () => {
   const [loadingStatus, setLoadingStatus] = useState("Idle");
   const [pulseDataMap, setPulseDataMap] = useState<Record<number, any>>({});
   const [resolving, setResolving] = useState<'home' | 'work' | null>(null);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
 
   const t = TRANSLATIONS[settings.language || 'en'];
   const isDark = settings.theme === 'dark';
 
   const [editSettings, setEditSettings] = useState<CommuteSettings>(settings);
-  const [mapsUris, setMapsUris] = useState<{home?: string, work?: string}>({});
   const initialSyncStarted = useRef(false);
 
   const displayedDistance = useMemo(() => {
@@ -94,16 +95,21 @@ const App: React.FC = () => {
       : { primary: { type: 'evening' as const, offset: primaryOffset }, secondary: { type: 'morning' as const, offset: primaryOffset + 1 } };
   }, [selectedDateOffset, nextCommuteInfo]);
 
-  // Refined loading function with prioritization
   const syncData = useCallback(async (currentSettings: CommuteSettings, offsets: number[], isBackground = false) => {
     if (!isBackground) {
       setLoading(true);
       setLoadingProgress(10);
-      setLoadingStatus("Initial Sync...");
+      setLoadingStatus("Retrieving Telemetry...");
     }
 
     try {
       const results = await getPulseBatch(currentSettings, offsets);
+      
+      // Check if any results are dummy to set the global UI flag
+      const hasDummy = Object.values(results).some((r: any) => r.isDummy);
+      if (hasDummy) setIsQuotaExceeded(true);
+      else setIsQuotaExceeded(false);
+
       setPulseDataMap(prev => ({ ...prev, ...results }));
       if (!isBackground) setLoadingProgress(100);
     } catch (err) {
@@ -116,9 +122,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!initialSyncStarted.current) {
       initialSyncStarted.current = true;
-      // STRATEGY: Fetch offsets 0, 1 first for immediate dashboard display
       syncData(settings, [0, 1]).then(() => {
-        // Then fetch the rest of the week in the background
         syncData(settings, [2, 3, 4, 5, 6], true);
       });
     }
@@ -161,7 +165,6 @@ const App: React.FC = () => {
           [type === 'home' ? 'homeLocation' : 'workLocation']: result.address,
           [type === 'home' ? 'homeCoords' : 'workCoords']: result.coords
         }));
-        setMapsUris(prev => ({ ...prev, [type]: result.mapsUri }));
       } catch (e) { setError("Resolution failed."); } finally { setResolving(null); }
     }, () => { setError("Location access denied."); setResolving(null); });
   };
@@ -184,7 +187,8 @@ const App: React.FC = () => {
       condition: dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null,
       score: dayPulse?.score,
       dateLabel: formatDateLabel(config.offset),
-      targetDate
+      targetDate,
+      isDummy: dayPulse?.isDummy
     };
   }, [commuteSequence.primary, pulseDataMap, settings, t]);
 
@@ -199,13 +203,22 @@ const App: React.FC = () => {
       endLocation: getLocality(isMorning ? settings.workLocation : settings.homeLocation),
       condition: dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null,
       dateLabel: formatDateLabel(config.offset),
+      isDummy: dayPulse?.isDummy
     };
   }, [commuteSequence.secondary, pulseDataMap, settings, t]);
 
   return (
     <div className={`h-screen w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <header className="flex-none px-6 py-4 flex items-center justify-between z-50">
-        <h1 className="text-xl font-bold tracking-tight">Commute<span className="text-blue-500">IQ</span></h1>
+        <div className="flex flex-col">
+          <h1 className="text-xl font-bold tracking-tight">Commute<span className="text-blue-500">IQ</span></h1>
+          {isQuotaExceeded && (
+            <div className="flex items-center gap-1.5 mt-1.5 animate-pulse">
+              <Database className="w-3 h-3 text-orange-500" />
+              <span className="text-[9px] font-black uppercase tracking-[0.15em] text-orange-500">Offline Simulation Mode</span>
+            </div>
+          )}
+        </div>
         
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -296,7 +309,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="relative group">
                       <input type="text" value={isHome ? editSettings.homeLocation : editSettings.workLocation} onChange={e => setEditSettings({...editSettings, [isHome ? 'homeLocation' : 'workLocation']: e.target.value})} className={`w-full border rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-600 transition-all pr-12 ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 shadow-sm'}`} />
-                      <button onClick={async () => { setResolving(type); try { const result = await resolveAddress(isHome ? editSettings.homeLocation : editSettings.workLocation); setEditSettings(prev => ({ ...prev, [isHome ? 'homeLocation' : 'workLocation']: result.address, [isHome ? 'homeCoords' : 'workCoords']: result.coords })); setMapsUris(prev => ({ ...prev, [type]: result.mapsUri })); } catch (e) { setError("Location not found."); } finally { setResolving(null); } }} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 bg-slate-700 hover:bg-blue-600 rounded-xl transition-colors">
+                      <button onClick={async () => { setResolving(type); try { const result = await resolveAddress(isHome ? editSettings.homeLocation : editSettings.workLocation); setEditSettings(prev => ({ ...prev, [isHome ? 'homeLocation' : 'workLocation']: result.address, [isHome ? 'homeCoords' : 'workCoords']: result.coords })); } catch (e) { setError("Location not found."); } finally { setResolving(null); } }} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 bg-slate-700 hover:bg-blue-600 rounded-xl transition-colors">
                         {resolving === type ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Search className="w-4 h-4 text-white" />}
                       </button>
                     </div>

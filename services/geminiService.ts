@@ -96,16 +96,64 @@ const weatherConditionSchema = {
   required: ["temp", "condition", "windSpeed", "windDirection", "isDark", "slipperyChance", "wetSurfaceChance", "headwindImpact", "iceRisk", "surfaceReason"]
 };
 
+// Fallback data generator for API Quota issues
+const generateDummyData = (offset: number, settings: CommuteSettings): any => {
+  const isWeekend = [0, 6].includes(new Date(Date.now() + offset * 86400000).getDay());
+  return {
+    offset,
+    isDummy: true,
+    summary: { isWet: false, isIcy: false },
+    score: 85,
+    weather: {
+      morning: {
+        temp: 12 + Math.random() * 5,
+        condition: "Cloudy",
+        windSpeed: 10,
+        windDirection: 45,
+        humidity: 60,
+        precipitation: 0,
+        isDark: false,
+        slipperyChance: 5,
+        wetSurfaceChance: 10,
+        headwindImpact: 0,
+        iceRisk: false,
+        surfaceReason: "Simulated data due to API quota limit. Conditions likely stable."
+      },
+      evening: {
+        temp: 15 + Math.random() * 5,
+        condition: "Sunny",
+        windSpeed: 8,
+        windDirection: 180,
+        humidity: 50,
+        precipitation: 0,
+        isDark: false,
+        slipperyChance: 2,
+        wetSurfaceChance: 5,
+        headwindImpact: 0,
+        iceRisk: false,
+        surfaceReason: "Quota exceeded. This insight is locally generated."
+      }
+    }
+  };
+};
+
 export const getPulseBatch = async (settings: CommuteSettings, offsets: number[]): Promise<Record<number, any>> => {
   const home = settings.homeCoords || { lat: 0, lng: 0 };
   const work = settings.workCoords || { lat: 0, lng: 0 };
   const morningHeading = calculateBearing(home, work);
   const eveningHeading = calculateBearing(work, home);
 
-  const [homeRaw, workRaw] = await Promise.all([
-    fetchRawWeatherData(home),
-    fetchRawWeatherData(work)
-  ]);
+  let homeRaw: any, workRaw: any;
+  try {
+    [homeRaw, workRaw] = await Promise.all([
+      fetchRawWeatherData(home),
+      fetchRawWeatherData(work)
+    ]);
+  } catch (e) {
+    const fallback: Record<number, any> = {};
+    offsets.forEach(o => { fallback[o] = generateDummyData(o, settings); });
+    return fallback;
+  }
 
   const batchContext = offsets.map(offset => {
     const mRaw = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
@@ -121,80 +169,98 @@ export const getPulseBatch = async (settings: CommuteSettings, offsets: number[]
     };
   });
 
-  return callWithRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Cycle analysis for offsets: ${offsets.join(',')}. Context: ${JSON.stringify(batchContext)}. Language: ${settings.language}.
-      
-      SURFACE MOISTURE LOGIC (LENIENT):
-      - 'isWet' is TRUE ONLY if the surface is predominately wet. 
-      - If there is only minor residual rain or isolated wet spots but the road is mostly dry/safe, flag it as DRY.
-      - 'wetSurfaceChance' > 50% = WET. 
-      - 30-50% = DRY with a note about "some damp spots".
-      - Below 30% = DRY.
-      
-      Residual rain in history only flags 'Wet' if it was heavy (>1mm) and recent/high-humidity. Small puddles do not trigger 'Wet' status.
-      Reasoning max 20 words.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              offset: { type: Type.NUMBER },
-              summary: {
-                type: Type.OBJECT,
-                properties: { isWet: { type: Type.BOOLEAN }, isIcy: { type: Type.BOOLEAN } },
-                required: ["isWet", "isIcy"]
+  try {
+    return await callWithRetry(async () => {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Cycle analysis for offsets: ${offsets.join(',')}. Context: ${JSON.stringify(batchContext)}. Language: ${settings.language}.
+        
+        SURFACE MOISTURE LOGIC (LENIENT):
+        - 'isWet' is TRUE ONLY if the surface is predominately wet. 
+        - If there is only minor residual rain or isolated wet spots but the road is mostly dry/safe, flag it as DRY.
+        - 'wetSurfaceChance' > 50% = WET. 
+        - 30-50% = DRY with a note about "some damp spots".
+        - Below 30% = DRY.
+        
+        Residual rain in history only flags 'Wet' if it was heavy (>1mm) and recent/high-humidity. Small puddles do not trigger 'Wet' status.
+        Reasoning max 20 words.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                offset: { type: Type.NUMBER },
+                summary: {
+                  type: Type.OBJECT,
+                  properties: { isWet: { type: Type.BOOLEAN }, isIcy: { type: Type.BOOLEAN } },
+                  required: ["isWet", "isIcy"]
+                },
+                weather: {
+                  type: Type.OBJECT,
+                  properties: { morning: weatherConditionSchema, evening: weatherConditionSchema },
+                  required: ["morning", "evening"]
+                },
+                score: { type: Type.NUMBER }
               },
-              weather: {
-                type: Type.OBJECT,
-                properties: { morning: weatherConditionSchema, evening: weatherConditionSchema },
-                required: ["morning", "evening"]
-              },
-              score: { type: Type.NUMBER }
-            },
-            required: ["offset", "summary", "weather", "score"]
+              required: ["offset", "summary", "weather", "score"]
+            }
           }
         }
-      }
-    });
+      });
 
-    const parsed = JSON.parse(response.text || "[]");
-    const result: Record<number, any> = {};
-    parsed.forEach((item: any) => { result[item.offset] = item; });
-    return result;
-  });
+      const parsed = JSON.parse(response.text || "[]");
+      const result: Record<number, any> = {};
+      parsed.forEach((item: any) => { 
+        result[item.offset] = { ...item, isDummy: false }; 
+      });
+      return result;
+    });
+  } catch (error: any) {
+    // If quota or any error, return dummy data
+    console.warn("Gemini API Error, falling back to dummy data:", error);
+    const fallback: Record<number, any> = {};
+    offsets.forEach(o => { fallback[o] = generateDummyData(o, settings); });
+    return fallback;
+  }
 };
 
 export const resolveAddress = async (query: string, userLoc?: { lat: number, lng: number }): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {
   const normalizedQuery = query.trim();
   if (BELGIAN_CITIES[normalizedQuery]) return { address: normalizedQuery, coords: BELGIAN_CITIES[normalizedQuery] };
   
-  return callWithRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview", 
-      contents: `Extract coordinates for: "${query}". Respond JSON: { "address": string, "lat": number, "lng": number }`,
-      config: { 
-        responseMimeType: "application/json",
-        tools: [{ googleMaps: {} }],
-        toolConfig: { retrievalConfig: { latLng: userLoc ? { latitude: userLoc.lat, longitude: userLoc.lng } : undefined } }
-      },
+  try {
+    return await callWithRetry(async () => {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview", 
+        contents: `Extract coordinates for: "${query}". Respond JSON: { "address": string, "lat": number, "lng": number }`,
+        config: { 
+          responseMimeType: "application/json",
+          tools: [{ googleMaps: {} }],
+          toolConfig: { retrievalConfig: { latLng: userLoc ? { latitude: userLoc.lat, longitude: userLoc.lng } : undefined } }
+        },
+      });
+      const data = JSON.parse(response.text || "{}");
+      const mapsUri = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.find(c => c.maps)?.maps?.uri;
+      return { address: data.address || query, coords: { lat: data.lat, lng: data.lng }, mapsUri };
     });
-    const data = JSON.parse(response.text || "{}");
-    const mapsUri = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.find(c => c.maps)?.maps?.uri;
-    return { address: data.address || query, coords: { lat: data.lat, lng: data.lng }, mapsUri };
-  });
+  } catch (e) {
+    return { address: query, coords: { lat: 50.8503, lng: 4.3517 } }; // Fallback to Brussels
+  }
 };
 
 export const getCommuteRoadDistance = async (origin: string, destination: string): Promise<number | null> => {
-  return callWithRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Cycling route distance in KM between ${origin} and ${destination}. Only return JSON: { "distance": number }`,
-      config: { responseMimeType: "application/json", tools: [{ googleMaps: {} }] }
+  try {
+    return await callWithRetry(async () => {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Cycling route distance in KM between ${origin} and ${destination}. Only return JSON: { "distance": number }`,
+        config: { responseMimeType: "application/json", tools: [{ googleMaps: {} }] }
+      });
+      return JSON.parse(response.text || "{}").distance || null;
     });
-    return JSON.parse(response.text || "{}").distance || null;
-  });
+  } catch (e) {
+    return null;
+  }
 };
