@@ -1,5 +1,7 @@
 {
   "name": "Commute IQ",
   "description": "An advanced cycling companion app that optimizes your daily commute with intelligent weather insights, wind-aware routing, and personalized gear recommendations.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }
