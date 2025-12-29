@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { WeatherCondition } from '../types';
 import { 
@@ -35,6 +36,11 @@ interface WeatherCardProps {
   theme?: 'dark' | 'light';
   isDummy?: boolean;
 }
+
+const getWindDir = (deg: number) => {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round(deg / 45) % 8];
+};
 
 export const WeatherCard: React.FC<WeatherCardProps> = ({ 
   condition, 
@@ -172,6 +178,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   }
 
   const hasIntelligence = !!condition?.surfaceReason;
+  const windDetail = (condition?.windSpeed !== undefined && condition?.windDirection !== undefined) 
+    ? ` • ${Math.round(condition.windSpeed)}KM/H ${getWindDir(condition.windDirection)}` 
+    : '';
 
   return (
     <div className={`h-full w-full rounded-[2rem] border shadow-2xl overflow-hidden flex flex-col backdrop-blur-md relative transition-all duration-500 ${isDarkTheme ? 'bg-slate-900/30 border-white/5' : 'bg-white border-slate-300 shadow-xl'}`}>
@@ -239,7 +248,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
         <div className="flex-none grid grid-cols-2 gap-3 px-6 py-2">
           {[
-            { label: 'WIND', value: wind.label, color: wind.color, icon: wind.icon },
+            { label: `WIND${windDetail}`, value: wind.label, color: wind.color, icon: wind.icon },
             { label: 'SURFACE', value: surface.label, color: surface.color, icon: surface.icon },
             { label: 'ICE RISK', value: iceInfo.label, color: iceInfo.color, icon: iceInfo.icon },
             { label: 'COMMUTE SCORE', value: safetyScore !== undefined ? `${Math.round(safetyScore)}%` : '--%', color: scoreInfo.color, icon: scoreInfo.icon }

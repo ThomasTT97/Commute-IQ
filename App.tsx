@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, Language } from './types';
 import { DEFAULT_SETTINGS, TRANSLATIONS, LANGUAGES, BELGIAN_CITIES } from './constants';
@@ -19,7 +20,8 @@ import {
   MapPin,
   ChevronDown,
   Info,
-  Database // New icon for Data Insights
+  Database,
+  Clock // Imported Clock icon
 } from 'lucide-react';
 
 const ROAD_DETOUR_FACTOR = 1.32;
@@ -258,6 +260,7 @@ const App: React.FC = () => {
       
       {/* Shortened list focusing on Inference vs Telemetry */}
       {[
+        { title: t.commuteScore, content: t.commuteScoreContent },
         { title: t.generalSources, content: t.generalSourcesContent },
         { title: t.iceRisk, content: t.iceRiskContent },
         { title: t.surfaceCondition, content: t.surfaceConditionContent },
@@ -429,6 +432,40 @@ const App: React.FC = () => {
                           ))}
                         </div>
                       )}
+                    </div>
+
+                    <div className={`mt-4 pt-3 border-t border-dashed ${isDark ? 'border-white/10' : 'border-slate-200'} flex items-center justify-between`}>
+                       <div className="flex items-center gap-2">
+                          <Clock className={`w-3 h-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{isHome ? 'Morning' : 'Evening'} Window</span>
+                       </div>
+                       <div className="flex items-center gap-2">
+                          <input 
+                            type="time" 
+                            value={isHome ? editSettings.morningWindow[0] : editSettings.eveningWindow[0]}
+                            onChange={e => {
+                                const val = e.target.value;
+                                setEditSettings(prev => ({
+                                    ...prev, 
+                                    [isHome ? 'morningWindow' : 'eveningWindow']: [val, isHome ? prev.morningWindow[1] : prev.eveningWindow[1]]
+                                }))
+                            }}
+                            className={`bg-transparent text-xs font-bold focus:outline-none text-right w-16 ${isDark ? 'text-white' : 'text-slate-700'}`}
+                          />
+                          <span className="text-slate-500">-</span>
+                           <input 
+                            type="time" 
+                            value={isHome ? editSettings.morningWindow[1] : editSettings.eveningWindow[1]}
+                            onChange={e => {
+                                const val = e.target.value;
+                                setEditSettings(prev => ({
+                                    ...prev, 
+                                    [isHome ? 'morningWindow' : 'eveningWindow']: [isHome ? prev.morningWindow[0] : prev.eveningWindow[0], val]
+                                }))
+                            }}
+                            className={`bg-transparent text-xs font-bold focus:outline-none w-16 ${isDark ? 'text-white' : 'text-slate-700'}`}
+                          />
+                       </div>
                     </div>
                   </div>
                 );
