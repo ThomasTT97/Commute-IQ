@@ -98,41 +98,42 @@ const weatherConditionSchema = {
 
 // Fallback data generator for API Quota issues
 const generateDummyData = (offset: number, settings: CommuteSettings): any => {
-  const isWeekend = [0, 6].includes(new Date(Date.now() + offset * 86400000).getDay());
+  // Scenario-based dummy data for realistic variation
+  const scenarios = [
+    { name: "Perfect Day", temp: 18, cond: "Sunny", wind: 5, impact: -20, wet: 0, ice: false, score: 95, reason: "Ideal cycling conditions. Tailwinds expected." },
+    { name: "Morning Mist", temp: 12, cond: "Cloudy", wind: 12, impact: 10, wet: 35, ice: false, score: 78, reason: "Damp roads but drying fast. Light layers recommended." },
+    { name: "Stormy Monday", temp: 14, cond: "Rainy", wind: 28, impact: 85, wet: 95, ice: false, score: 32, reason: "Heavy rain and strong headwinds. Extreme effort required." },
+    { name: "Winter Chill", temp: -2, cond: "Clear", wind: 8, impact: 0, wet: 20, ice: true, score: 18, reason: "Dangerous ice risk detected. Transit not recommended." },
+    { name: "Spring Breeze", temp: 15, cond: "Sunny", wind: 22, impact: -60, wet: 5, ice: false, score: 88, reason: "Crisp air with a supportive tailwind. High visibility." },
+    { name: "Autumn Gale", temp: 10, cond: "Windy", wind: 45, impact: 90, wet: 40, ice: false, score: 25, reason: "Gale force winds. High risk of debris and instability." },
+    { name: "Balanced", temp: 13, cond: "Cloudy", wind: 10, impact: 40, wet: 10, ice: false, score: 68, reason: "Moderate conditions. Standard commute pulse." }
+  ];
+
+  const s = scenarios[offset % scenarios.length];
+  
+  const weatherBase = {
+    temp: s.temp,
+    condition: s.cond,
+    windSpeed: s.wind,
+    windDirection: 45,
+    humidity: s.wet > 50 ? 90 : 40,
+    precipitation: s.wet > 50 ? 4.0 : 0,
+    isDark: false,
+    slipperyChance: s.wet,
+    wetSurfaceChance: s.wet,
+    headwindImpact: s.impact,
+    iceRisk: s.ice,
+    surfaceReason: s.reason
+  };
+
   return {
     offset,
     isDummy: true,
-    summary: { isWet: false, isIcy: false },
-    score: 85,
+    summary: { isWet: s.wet > 50, isIcy: s.ice },
+    score: s.score,
     weather: {
-      morning: {
-        temp: 12 + Math.random() * 5,
-        condition: "Cloudy",
-        windSpeed: 10,
-        windDirection: 45,
-        humidity: 60,
-        precipitation: 0,
-        isDark: false,
-        slipperyChance: 5,
-        wetSurfaceChance: 10,
-        headwindImpact: 0,
-        iceRisk: false,
-        surfaceReason: "Simulated data due to API quota limit. Conditions likely stable."
-      },
-      evening: {
-        temp: 15 + Math.random() * 5,
-        condition: "Sunny",
-        windSpeed: 8,
-        windDirection: 180,
-        humidity: 50,
-        precipitation: 0,
-        isDark: false,
-        slipperyChance: 2,
-        wetSurfaceChance: 5,
-        headwindImpact: 0,
-        iceRisk: false,
-        surfaceReason: "Quota exceeded. This insight is locally generated."
-      }
+      morning: { ...weatherBase, isDark: true, temp: s.temp - 4 },
+      evening: { ...weatherBase, temp: s.temp + 3 }
     }
   };
 };

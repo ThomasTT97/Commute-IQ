@@ -15,20 +15,20 @@ const getScoreStyles = (score: number, hasPulse: boolean, isDark: boolean) => {
   
   if (score > 70) {
     return { 
-      color: 'text-emerald-600', 
+      color: 'text-emerald-500', 
       bg: isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200', 
       shadow: isDark ? 'shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'shadow-md' 
     };
   }
   if (score >= 30) {
     return { 
-      color: 'text-orange-600', 
+      color: 'text-orange-500', 
       bg: isDark ? 'bg-orange-500/5 border-orange-500/20' : 'bg-orange-50 border-orange-200', 
       shadow: isDark ? '' : 'shadow-sm' 
     };
   }
   return { 
-    color: 'text-red-600', 
+    color: 'text-red-500', 
     bg: isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200', 
     shadow: isDark ? 'shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'shadow-md' 
   };
@@ -49,7 +49,6 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
           const pulse = pulseDataMap[offset];
           const score = pulse?.score ?? 0;
           const styles = getScoreStyles(score, !!pulse, isDark);
-          const isDummy = pulse?.isDummy;
           
           const isWet = pulse?.summary?.isWet ?? false;
           const hasIce = pulse?.summary?.isIcy ?? false;
@@ -80,11 +79,11 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
                       </div>
                     ) : (
                       <>
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${isWet ? 'bg-blue-500/10 border-blue-500/20 text-blue-600' : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600'}`}>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${isWet ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-500'}`}>
                           {isWet ? <Droplets className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5" />}
                           {isWet ? 'WET' : 'DRY'}
                         </div>
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${hasIce ? 'bg-red-500/10 border-red-500/30 text-red-600 animate-pulse' : (isDark ? 'bg-slate-800 border-slate-700/50 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-500')}`}>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[8px] font-black border transition-colors ${hasIce ? 'bg-red-500/10 border-red-500/30 text-red-500 animate-pulse' : (isDark ? 'bg-slate-800 border-slate-700/50 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-500')}`}>
                           {hasIce ? <AlertTriangle className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5 opacity-30" />}
                           {hasIce ? 'ICE' : 'NO ICE'}
                         </div>
@@ -96,7 +95,7 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
 
               <div className="flex items-center gap-6 z-10">
                 <div className="flex flex-col items-end">
-                  <span className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>Pulse</span>
+                  <span className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>Score</span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-2xl font-black font-mono leading-none ${styles.color}`}>
                       {pulse ? score : '--'}

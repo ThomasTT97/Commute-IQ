@@ -105,7 +105,6 @@ const App: React.FC = () => {
     try {
       const results = await getPulseBatch(currentSettings, offsets);
       
-      // Check if any results are dummy to set the global UI flag
       const hasDummy = Object.values(results).some((r: any) => r.isDummy);
       if (hasDummy) setIsQuotaExceeded(true);
       else setIsQuotaExceeded(false);
@@ -208,7 +207,7 @@ const App: React.FC = () => {
   }, [commuteSequence.secondary, pulseDataMap, settings, t]);
 
   return (
-    <div className={`h-screen w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
+    <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <header className="flex-none px-6 py-4 flex items-center justify-between z-50">
         <div className="flex flex-col">
           <h1 className="text-xl font-bold tracking-tight">Commute<span className="text-blue-500">IQ</span></h1>
@@ -251,8 +250,8 @@ const App: React.FC = () => {
         {loading && <div className="absolute top-0 left-0 w-full px-6 z-50"><LoadingVisual progress={loadingProgress} status={loadingStatus} theme={settings.theme} /></div>}
         
         {viewMode === 'daily' ? (
-          <div className={`flex flex-col gap-4 min-h-0 flex-1 overflow-hidden transition-opacity duration-300 ${loading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
-            <div className="flex-1 min-h-0 flex flex-col">
+          <div className={`flex flex-col gap-4 h-full overflow-hidden transition-opacity duration-300 ${loading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+            <div className="flex-1 min-h-0">
               <WeatherCard {...primaryData} distance={displayedDistance} safetyScore={primaryData.score} theme={settings.theme} />
             </div>
             <div className="flex-none">
@@ -260,7 +259,7 @@ const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 min-h-0 overflow-y-auto transition-opacity duration-300 ${loading ? 'opacity-40' : 'opacity-100'}`}>
+          <div className={`flex-1 min-h-0 overflow-y-auto hide-scrollbar transition-opacity duration-300 ${loading ? 'opacity-40' : 'opacity-100'}`}>
             <WeeklyForecast pulseDataMap={pulseDataMap} theme={settings.theme} onSelectDay={(offset) => { setSelectedDateOffset(offset); setViewMode('daily'); }} />
           </div>
         )}

@@ -1,82 +1,43 @@
-# Commute IQ | Advanced Cycling Intelligence 🚲
+# Commute IQ | Cycling Intelligence Dashboard
 
-**Commute IQ** is a high-fidelity decision support system designed for the modern urban cyclist. It moves beyond standard weather forecasting by transforming raw atmospheric telemetry into a proprietary "Safety Pulse"—a weighted risk assessment that optimizes transit windows for safety, efficiency, and gear selection.
-
----
-
-## 🎯 Executive Summary
-
-The platform serves as an operational dashboard for the daily commuter. By integrating real-time weather data with Large Language Model (LLM) reasoning, Commute IQ identifies non-obvious hazards—such as micro-frost risks, headwind-induced exhaustion, and low-visibility windows—allowing riders to make data-driven decisions before they leave the door.
+**Commute IQ** is a professional-grade decision support tool for urban cyclists. It synthesizes real-time atmospheric telemetry into actionable transit intelligence, helping commuters optimize their safety and gear strategy.
 
 ---
 
-## 🧠 The "Pulse" Methodology
+## 🚀 Core Functionalities
 
-Unlike generic weather apps, Commute IQ calculates a **Safety Score (0-100%)** using a specialized weighting algorithm processed by **Google Gemini 3 Flash**:
-
-*   **Ice & Thermal Dynamics (50%)**: Aggressive down-weighting for freezing point intersections and micro-frost alerts.
-*   **Surface Integrity (30%)**: Calculation of "slippery chance" based on precipitation intensity and duration.
-*   **Kinetic Effort (15%)**: Wind vector analysis to estimate physical exertion and battery drain (for e-bikes).
-*   **Visibility & Lumens (5%)**: Solar cycles are computed to provide mandatory lighting requirements.
-
-> **Safety Protocol**: If the AI detects a critical Ice Risk, the platform enforces a maximum safety ceiling of 30%, regardless of other favorable conditions.
-
----
-
-## 🛠 Functional Pillars
-
-### 1. Environmental Intelligence
-*   **Micro-Forecasts**: Hourly precision mapping for the specific windows of your morning and evening commute.
-*   **Tactical Surface Analysis**: Real-time feedback on road conditions (Wet, Dry, or Icy) with technical riding advice.
-*   **Vector-Based Wind Analysis**: Directional wind data optimized for your specific route heading to detect tailwinds vs. headwinds.
-
-### 2. Tactical Gear Strategy
-*   **Multi-Layer Logic**: Clothing recommendations derived from wind chill, humidity, and precipitation thresholds.
-*   **Safety Gear Compliance**: Automatic detection of lighting requirements based on transit-hour darkness.
-
-### 3. Localization & Personalization
-*   **Multi-Language Architecture**: Native support for **English, French, and Dutch (NL)**.
-*   **Dual-Theme Interface**: A high-contrast **Daylight** mode for outdoor visibility and a premium **Obsidian** mode for low-light planning.
-*   **European Hub Optimization**: Pre-cached resolution for Belgian cities and municipalities to ensure zero-latency address validation.
+*   **Commute Score (The Pulse)**: A weighted safety assessment (0–100%) calculated via AI reasoning that accounts for precipitation, wind intensity, and thermal risk.
+*   **Tactical Vitals Grid**:
+    *   **Wind Vectors**: Analysis of headwinds vs. tailwinds based on specific route headings.
+    *   **Surface Condition**: High-precision detection of wet vs. dry road surfaces.
+    *   **Ice Risk Monitoring**: Critical alerts for micro-frost and sub-zero surface dynamics.
+    *   **Lumen Requirements**: Automatic detection of darkness windows to mandate lighting.
+*   **7-Day Forecast**: A forward-looking outlook allowing for long-term commute planning.
+*   **Localized Context**: Full native support for **English, French, and Dutch**, with pre-cached Belgian municipality resolution.
+*   **PWA Optimized**: Full standalone support for iOS and Android, ensuring the dashboard is accessible directly from the home screen.
 
 ---
 
-## 🏗 Technical Architecture
+## 🛠 Technical Setup
 
-*   **Logic Layer**: [React 19](https://react.dev/) with TypeScript for type-safe state management.
-*   **Intelligence Engine**: [Google Gemini API](https://ai.google.dev/) using the `@google/genai` SDK for grounded reasoning.
-*   **Telemetry Provider**: [Open-Meteo](https://open-meteo.com/) for high-resolution, open-source weather data.
-*   **Styling**: [Tailwind CSS](https://tailwindcss.com/) for a responsive, high-performance UI.
-*   **Iconography**: [Lucide React](https://lucide.dev/) for precise, minimalist visual cues.
+### Stack Architecture
+*   **Framework**: [React 19](https://react.dev/) with TypeScript for a high-performance, type-safe UI.
+*   **Intelligence Engine**: [Google Gemini 3 Flash](https://ai.google.dev/) (LLM) for grounding weather data into human-centric safety advice.
+*   **Telemetry Data**: [Open-Meteo API](https://open-meteo.com/) for hyper-local, high-resolution weather forecasting.
+*   **Visual Design**: [Tailwind CSS](https://tailwindcss.com/) and [Lucide React](https://lucide.dev/) for a responsive, high-contrast interface.
+*   **Build System**: [Vite](https://vitejs.dev/) for ultra-fast HMR and optimized production bundles.
 
----
-
-## ⚙️ Operational Setup
-
-### Prerequisites
-*   A browser environment supporting ES6 Modules.
-*   A valid Google Gemini `API_KEY` configured in the execution environment.
-
-### Installation
-```bash
-# Clone the repository
-git clone https://github.com/your-repo/commute-iq.git
-
-# Install dependencies
-npm install
-
-# Launch development environment
-npm run dev
-```
+### PWA & Performance
+*   **Manifest**: Standalone display mode with maskable icons for Android and meta-tag parity for iOS.
+*   **Offline Resiliency**: Implemented dummy-data fallback logic to maintain UX during API rate-limiting or network disruptions.
+*   **Client-Side Security**: All settings and location data are persisted strictly in `localStorage`.
 
 ---
 
-## 📐 Philosophy
+## ⚙️ Development Config
 
-Commute IQ is built on the principles of **Lean Digital** development:
-*   **Zero-Waste Performance**: Minimalist bundle size with no redundant dependencies.
-*   **Privacy First**: Location data and settings are persisted locally in-browser; no external tracking or user profiling.
-*   **Resiliency**: Robust error handling for third-party API disruptions with graceful fallback states.
+1.  **Environment**: Ensure `process.env.API_KEY` is set with a valid Google Gemini key.
+2.  **Dependencies**: Install via `npm install`.
+3.  **Local Execution**: Start the dev server with `npm run dev`.
 
----
-*Developed for the discerning commuter. Driven by Intelligence.*
+*Built for precision. Driven by Intelligence.*
