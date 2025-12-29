@@ -80,11 +80,14 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     return { label: 'SIDE WIND', color: 'text-blue-600', icon: <ArrowLeftRight className="w-4 h-4" /> };
   }, [condition?.headwindImpact, condition?.windSpeed, isDarkTheme]);
 
-  const surface = useMemo(() => 
-    (condition?.wetSurfaceChance ?? 0) > 30 
+  const surface = useMemo(() => {
+    // Grounding: If the AI says wetSurfaceChance > 50, it is wet. 
+    // Increased from 30 to 50 to avoid over-warning on minor dampness/spots.
+    const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
+    return isWet 
       ? { label: 'WET', color: 'text-blue-600', icon: <Waves className="w-4 h-4" /> }
-      : { label: 'DRY', color: 'text-emerald-600', icon: <ShieldCheck className="w-4 h-4" /> }
-  , [condition?.wetSurfaceChance]);
+      : { label: 'DRY', color: 'text-emerald-600', icon: <ShieldCheck className="w-4 h-4" /> };
+  }, [condition?.wetSurfaceChance]);
 
   const pulseColor = useMemo(() => {
     if (safetyScore === undefined || safetyScore === null) return isDarkTheme ? 'text-slate-500' : 'text-slate-500';
@@ -95,7 +98,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   if (compact) {
     const isIce = !!condition?.iceRisk;
-    const isWet = (condition?.wetSurfaceChance ?? 0) > 30;
+    const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
 
     return (
       <div className={`w-full rounded-3xl p-5 border flex flex-col gap-4 transition-all backdrop-blur-sm shadow-xl ${isDarkTheme ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-white border-slate-200 hover:bg-slate-50 shadow-md'}`}>

@@ -1,16 +1,17 @@
-
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/',
+  // Use relative base path to ensure the app works regardless of the hosting subfolder
+  base: './',
   define: {
-    // This allows the code to use process.env.API_KEY in the browser
+    // Specifically define the API key and a fallback process object to prevent 'process is not defined' errors
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
     'process.env': process.env
   },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: false,
   },
   server: {
     host: true,

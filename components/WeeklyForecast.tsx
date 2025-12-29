@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { WEATHER_ICONS } from '../constants';
 import { HelpCircle, ChevronRight, TrendingUp, AlertTriangle, Droplets, ShieldCheck } from 'lucide-react';
 
 interface WeeklyForecastProps {
@@ -14,7 +13,6 @@ const OFFSETS = [0, 1, 2, 3, 4, 5, 6];
 const getScoreStyles = (score: number, hasPulse: boolean, isDark: boolean) => {
   if (!hasPulse) return { color: isDark ? 'text-slate-500' : 'text-slate-400', bg: isDark ? 'bg-slate-900/40' : 'bg-slate-100', shadow: '' };
   
-  // Score-based coloring logic
   if (score > 70) {
     return { 
       color: 'text-emerald-600', 
@@ -52,12 +50,9 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, on
           const score = pulse?.score ?? 0;
           const styles = getScoreStyles(score, !!pulse, isDark);
           
-          const morning = pulse?.weather?.morning;
-          const evening = pulse?.weather?.evening;
-
-          // Aggregated surface logic for the day
-          const isWet = (morning?.wetSurfaceChance > 30) || (evening?.wetSurfaceChance > 30);
-          const hasIce = morning?.iceRisk || evening?.iceRisk;
+          // Use AI-grounded summary instead of local UI calculation
+          const isWet = pulse?.summary?.isWet ?? false;
+          const hasIce = pulse?.summary?.isIcy ?? false;
 
           return (
             <button
