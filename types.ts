@@ -18,8 +18,25 @@ export interface CommuteSettings {
   disableAI: boolean;
 }
 
+export interface LocationSuggestion {
+  name: string;
+  distanceFromHome: number;
+  distanceFromTrainingCenter?: number;
+  score?: number;
+}
+
+export interface TrainingState {
+  location: string;
+  coords: Coordinates;
+  distance: number;
+  dateOffset: number;
+  preferredDirection: number; 
+}
+
 export interface WeatherCondition {
   temp: number;
+  minTemp?: number;
+  maxTemp?: number;
   condition: 'Sunny' | 'Rainy' | 'Cloudy' | 'Windy' | 'Stormy';
   precipitation: number;
   windSpeed: number;
@@ -29,7 +46,9 @@ export interface WeatherCondition {
   slipperyChance: number; 
   wetSurfaceChance: number; 
   headwindImpact: number; // -100 to 100
-  iceRisk: boolean; // Explicit indicator for "Slippery due to ice: yes/no"
+  iceRisk: boolean; 
+  overnightFreeze?: boolean;
+  activeFreezing?: boolean;
   surfaceReason?: string;
 }
 

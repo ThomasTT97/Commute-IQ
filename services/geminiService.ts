@@ -11,6 +11,17 @@ const MODEL_CHAIN = [
   "gemini-flash-lite-latest"
 ];
 
+// Helper to extract JSON from text output that might be wrapped in markdown
+const extractJson = (text?: string): any => {
+  if (!text) return {};
+  const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  try {
+    return JSON.parse(cleanText);
+  } catch (e) {
+    return {};
+  }
+};
+
 const callWithRetry = async <T>(
   fn: (aiInstance: GoogleGenAI, modelName: string) => Promise<T>, 
   specificModel?: string,
@@ -45,7 +56,16 @@ const callWithRetry = async <T>(
   throw lastFnError;
 };
 
-const calculateBearing = (start: Coordinates, end: Coordinates): number => {
+export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
+  if (!c1 || !c2) return 0;
+  const R = 6371; 
+  const dLat = (c2.lat - c1.lat) * Math.PI / 180;
+  const dLon = (c2.lng - c1.lng) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+};
+
+export const calculateBearing = (start: Coordinates, end: Coordinates): number => {
   const startLat = (start.lat * Math.PI) / 180;
   const startLng = (start.lng * Math.PI) / 180;
   const endLat = (end.lat * Math.PI) / 180;
@@ -55,7 +75,7 @@ const calculateBearing = (start: Coordinates, end: Coordinates): number => {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 };
 
-const calculateAverageWindImpact = (heading: number, directions: number[]): number => {
+export const calculateAverageWindImpact = (heading: number, directions: number[]): number => {
   if (!directions.length) return 0;
   const radHeading = (heading * Math.PI) / 180;
   let totalImpact = 0;
@@ -79,7 +99,7 @@ const resolveCondition = (code: number, windSpeed: number, precip: number): Weat
   return 'Cloudy';
 };
 
-const calculateSegmentScore = (w: WeatherCondition): number => {
+export const calculateSegmentScore = (w: WeatherCondition): number => {
   let score = 100;
   if (w.iceRisk) score -= 70; 
   if (w.precipitation > 0) {
@@ -97,13 +117,14 @@ const calculateSegmentScore = (w: WeatherCondition): number => {
   return Math.max(0, Math.min(100, Math.round(score)));
 };
 
-const aggregateRawWeather = (
+export const aggregateRawWeather = (
   rawSlice: any, 
   heading: number, 
   isMorning: boolean,
   settings: CommuteSettings,
   sunTimes?: { sunrise: string, sunset: string },
-  minPastTemp: number = 99
+  minPastTemp: number = 99,
+  customWindow?: [string, string]
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
   const precips = (rawSlice.precipitation || []) as number[];
@@ -122,57 +143,78 @@ const aggregateRawWeather = (
 
   const avgTemp = temps.reduce((a, b) => a + b, 0) / temps.length;
   const minTemp = Math.min(...temps);
+  const maxTemp = Math.max(...temps);
   const totalPrecip = precips.reduce((a, b) => a + b, 0);
   const maxWind = Math.max(...winds);
   const avgDir = dirs.reduce((a, b) => a + b, 0) / dirs.length;
+  const avgDirRounded = Math.round(avgDir);
   const avgHum = humidities.reduce((a, b) => a + b, 0) / humidities.length;
   const maxCode = Math.max(...codes);
 
   const condition = resolveCondition(maxCode, maxWind, totalPrecip);
   const headwindImpact = Math.round(calculateAverageWindImpact(heading, dirs));
-  const timeWindow = isMorning ? settings.morningWindow : settings.eveningWindow;
+  
+  // Use custom window if provided (for training), otherwise fallback to commute windows
+  const timeWindow = customWindow || (isMorning ? settings.morningWindow : settings.eveningWindow);
   
   let isDark = false;
   if (sunTimes) {
-    const commuteStart = getMinutes(timeWindow[0]);
-    const commuteEnd = getMinutes(timeWindow[1]);
+    const sessionStart = getMinutes(timeWindow[0]);
+    const sessionEnd = getMinutes(timeWindow[1]);
     const sunrise = getMinutes(sunTimes.sunrise);
     const sunset = getMinutes(sunTimes.sunset);
-    isDark = commuteStart < sunrise || commuteEnd > sunset;
+    // Dark if any part of the window is outside daylight hours
+    isDark = sessionStart < sunrise || sessionEnd > sunset;
   } else {
     const startHour = parseInt(timeWindow[0].split(':')[0]);
     isDark = startHour < 6 || startHour >= 21; 
   }
 
   const hasMoisture = totalPrecip > 0 || avgHum > 80;
-  const freezingNow = minTemp <= 0;
-  const surfaceLikelyFrozen = (minPastTemp <= 0) && (minTemp <= 4);
-  const iceRisk = hasMoisture && (freezingNow || surfaceLikelyFrozen);
+  const activeFreezing = minTemp <= 0;
+  const overnightFreeze = minPastTemp <= 0;
+  const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && minTemp <= 4));
 
   return {
     temp: parseFloat(avgTemp.toFixed(1)),
+    minTemp: parseFloat(minTemp.toFixed(1)),
+    maxTemp: parseFloat(maxTemp.toFixed(1)),
     condition,
     precipitation: parseFloat(totalPrecip.toFixed(1)),
     windSpeed: parseFloat(maxWind.toFixed(1)),
-    windDirection: Math.round(avgDir),
+    windDirection: avgDirRounded,
     humidity: Math.round(avgHum),
     isDark,
     slipperyChance: totalPrecip > 0 ? 60 : (avgTemp < 3 ? 40 : 10),
     wetSurfaceChance: totalPrecip > 0 ? 90 : 10,
     headwindImpact,
     iceRisk, 
+    activeFreezing,
+    overnightFreeze,
     surfaceReason: undefined
   };
 };
 
-const fetchRawWeatherData = async (coords: Coordinates) => {
+export const getStandardizedAdvice = (w: WeatherCondition): string => {
+  if (w.iceRisk) return "Ice Style: Stay strictly upright in corners and avoid leaning; use 90% rear braking bias to prevent front-wheel slides.";
+  if (w.precipitation > 4) return "Survival Style: Brake early to clear water film from pads; avoid painted road lines and metal utility covers which act as ice.";
+  if (w.precipitation > 0) return "Cornering Style: Moderate your speed before entering turns; take a wider line with less lean to maximize the tire contact patch.";
+  if (w.windSpeed > 35) return "Gust Style: Maintain a relaxed but firm grip to absorb frame movement; stay tucked and watch for cross-gusts behind buildings.";
+  if (w.headwindImpact > 35) return "Aero Style: Tuck your elbows in and lower your torso; shift to a lower gear to maintain 85+ RPM and preserve leg muscle.";
+  if (w.temp < 2) return "Tactical Style: Test road surface grip in safe straightaways; stay alert for micro-frost in shaded or bridge sections.";
+  if (w.temp > 30) return "Efficiency Style: Moderate your power output to prevent overheating; stick to shaded paths where possible and prioritize hydration.";
+  if (w.isDark) return "Visibility Style: Ride wider in the lane to be seen; assume total motorist invisibility and watch for road debris hidden by shadows.";
+  return "Optimal Style: Maintain a steady, predictable tempo and keep a high visual horizon for smooth integration into traffic flow.";
+};
+
+export const fetchRawWeatherData = async (coords: Coordinates) => {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&daily=sunrise,sunset&timezone=auto&forecast_days=10`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather telemetry offline.");
   return res.json();
 };
 
-const sliceWeatherData = (raw: any, window: [string, string], dateOffset: number) => {
+export const sliceWeatherData = (raw: any, window: [string, string], dateOffset: number) => {
   if (!raw || !raw.time) return {};
   const startHour = parseInt(window[0].split(':')[0]);
   const endHour = parseInt(window[1].split(':')[0]);
@@ -186,11 +228,6 @@ const sliceWeatherData = (raw: any, window: [string, string], dateOffset: number
   return sliced;
 };
 
-/**
- * Optimized for performance: 
- * Stage 1: Fast meteorological calculation.
- * Stage 2: (Optional) Async AI Advice enhancement.
- */
 export const getPulseBatch = async (
   settings: CommuteSettings, 
   offsets: number[], 
@@ -201,13 +238,11 @@ export const getPulseBatch = async (
   const morningHeading = calculateBearing(home, work);
   const eveningHeading = calculateBearing(work, home);
 
-  // Fetch telemetry in parallel
   const [homeRaw, workRaw] = await Promise.all([
     fetchRawWeatherData(home),
     fetchRawWeatherData(work)
   ]);
 
-  // Stage 1: Instant Meteorological Processing
   const batchContext = offsets.map(offset => {
     const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
     const eSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
@@ -238,8 +273,8 @@ export const getPulseBatch = async (
         isIcy: morning.iceRisk || evening.iceRisk
       }, 
       weather: { 
-        morning: { ...morning, surfaceReason: skipAI ? "Fast-sync meteorological mode." : undefined }, 
-        evening: { ...evening, surfaceReason: skipAI ? "Fast-sync meteorological mode." : undefined } 
+        morning: { ...morning }, 
+        evening: { ...evening } 
       },
       lastUpdated: Date.now()
     };
@@ -248,9 +283,14 @@ export const getPulseBatch = async (
   const result: Record<number, any> = {};
   batchContext.forEach(ctx => { result[ctx.offset] = ctx; });
 
-  if (settings.disableAI || skipAI) return result;
+  if (settings.disableAI || skipAI) {
+    batchContext.forEach(ctx => {
+      ctx.weather.morning.surfaceReason = getStandardizedAdvice(ctx.weather.morning);
+      ctx.weather.evening.surfaceReason = getStandardizedAdvice(ctx.weather.evening);
+    });
+    return result;
+  }
 
-  // Stage 2: AI Enhancement
   try {
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
@@ -275,11 +315,10 @@ export const getPulseBatch = async (
       }
     });
   } catch (error) {
-    // Silently fall back to meteorological-only data if AI fails
     batchContext.forEach(ctx => {
       if (!ctx.weather.morning.surfaceReason) {
-        ctx.weather.morning.surfaceReason = "Telemetry standard: increase braking distance if wet.";
-        ctx.weather.evening.surfaceReason = "Telemetry standard: increase braking distance if wet.";
+        ctx.weather.morning.surfaceReason = getStandardizedAdvice(ctx.weather.morning);
+        ctx.weather.evening.surfaceReason = getStandardizedAdvice(ctx.weather.evening);
       }
     });
   }
@@ -289,6 +328,7 @@ export const getPulseBatch = async (
 
 export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {
   const normalizedQuery = query.trim();
+  // Instruction to skip local city lookup review and use AI directly for resolving non-trivial queries
   for (const [name, coords] of Object.entries(BELGIAN_CITIES)) {
     if (name.toLowerCase() === normalizedQuery.toLowerCase()) return { address: name, coords };
   }
@@ -299,14 +339,14 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
       contents: `Full address and coords for: "${query}". Return JSON: { "address": string, "lat": number, "lng": number }`,
       config: { 
         temperature: 0, 
-        responseMimeType: "application/json", 
+        // responseMimeType is NOT permitted when googleMaps tool is active.
         tools: [{ googleMaps: {} }] 
       },
     });
     
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
-    const parsed = JSON.parse(response.text || "{}");
+    const parsed = extractJson(response.text);
     return { ...parsed, mapsUri };
   }, "gemini-2.5-flash");
   
@@ -324,11 +364,11 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
       contents: `Cycling distance KM between ${origin} and ${destination}. Only JSON: { "distance": number }`,
       config: { 
         temperature: 0, 
-        responseMimeType: "application/json", 
+        // responseMimeType is NOT permitted when googleMaps tool is active.
         tools: [{ googleMaps: {} }] 
       }
     });
-    return JSON.parse(response.text || "{}");
+    return extractJson(response.text);
   }, "gemini-2.5-flash");
   
   return data.distance || null;
