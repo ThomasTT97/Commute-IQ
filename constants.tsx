@@ -129,9 +129,9 @@ export const TRANSLATIONS: Record<Language, any> = {
     distanceCalculation: 'Route Distance',
     distanceCalculationContent: 'Estimated by taking the direct line distance and adding a 32% "detour factor" to account for real-world turns and bike paths.',
     surfaceCondition: 'Surface Status',
-    surfaceConditionContent: 'Inferred from recent rainfall and humidity. If it rained within the last few hours, we assume roads are still drying.',
+    surfaceConditionContent: 'Surface conditions are dynamically inferred. If precipitation has occurred within the last few hours, roads are assumed wet, gradually drying over time. Otherwise, conditions are considered optimal.',
     iceRisk: 'Ice Risk',
-    iceRiskContent: 'Determined by checking moisture levels against ground temperatures. We look back 6 hours to see if the ground likely stayed frozen.',
+    iceRiskContent: 'Ice risk is assessed by combining real-time moisture detection with ground temperature data. We actively monitor for temperatures at or below 0°C, and analyze the past 6 hours of temperature trends to account for thermal inertia, where surfaces may remain frozen even if air temperatures rise slightly.',
   },
   fr: {
     dashboard: 'Aperçu Quotidien',
@@ -169,9 +169,9 @@ export const TRANSLATIONS: Record<Language, any> = {
     distanceCalculation: 'Distance du Trajet',
     distanceCalculationContent: 'Estimation basée sur la ligne droite + 32% pour simuler les virages et pistes cyclables réelles.',
     surfaceCondition: 'État du Sol',
-    surfaceConditionContent: 'Déduit des précipitations récentes. S\'il a plu récemment, on considère que la route est encore humide.',
+    surfaceConditionContent: 'L\'état du sol est déduit dynamiquement. Si des précipitations sont survenues au cours des dernières heures, les routes sont considérées comme humides, séchant progressivement. Sinon, les conditions sont optimales.',
     iceRisk: 'Risque de Verglas',
-    iceRiskContent: 'Basé sur l\'humidité et l\'historique des températures au sol sur les 6 dernières heures.',
+    iceRiskContent: 'Le risque de verglas est évalué en combinant la détection de l\'humidité en temps réel avec les données de température au sol. Nous surveillons activement les températures égales ou inférieures à 0°C, et analysons les tendances de température des 6 dernières heures pour tenir compte de l\'inertie thermique, où les surfaces peuvent rester gelées même si les températures de l\'air augmentent légèrement.',
   },
   nl: {
     dashboard: 'Dagelijks Overzicht',
@@ -209,8 +209,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     distanceCalculation: 'Afstandsschatting',
     distanceCalculationContent: 'Berekend door de vogelvluchtafstand te verhogen met 32% om rekening te houden met bochten en fietspaden.',
     surfaceCondition: 'Wegdek Status',
-    surfaceConditionContent: 'Afgeleid van recente regenval. Als het kort geleden heeft geregend, gaan we ervan uit dat de weg nog nat is.',
+    surfaceConditionContent: 'De staat van het wegdek wordt dynamisch afgeleid. Als er de afgelopen uren neerslag is geweest, worden de wegen als nat beschouwd en drogen ze geleidelijk. Anders worden de omstandigheden als optimaal beschouwd.',
     iceRisk: 'IJsrisico',
-    iceRiskContent: 'Berekend op basis van vochtigheid en de bodemtemperatuur van de afgelopen 6 uur.',
+    iceRiskContent: 'IJsrisico wordt beoordeeld door real-time vochtigheidsdetectie te combineren met bodemtemperatuurgegevens. We monitoren actief temperaturen van 0°C of lager en analyseren de temperatuurtrends van de afgelopen 6 uur om rekening te houden met thermische inertie, waarbij oppervlakken bevroren kunnen blijven, zelfs als de luchttemperaturen enigszins stijgen.',
   }
 };

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { LocationSuggestion } from '../types';
+import { BelgianLocation } from '../locations';
 import { 
   Wind, 
   AlertTriangle, 
@@ -34,8 +35,9 @@ interface WeatherCardProps {
   safetyScore?: number;
   theme?: 'dark' | 'light';
   showRawWind?: boolean;
-  optimizationAdvice?: LocationSuggestion[];
-  locationAdvice?: LocationSuggestion[];
+  optimizationAdvice?: LocationSuggestion[] | undefined; // Explicitly allow undefined
+  locationAdvice?: LocationSuggestion[] | undefined;     // Explicitly allow undefined
+  onSelectLocationAdvice?: (loc: BelgianLocation) => void;
 }
 
 const getCardinal = (angle: number): string => {
@@ -54,8 +56,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   safetyScore, 
   theme = 'dark',
   showRawWind = false,
-  optimizationAdvice = [],
-  locationAdvice = []
+  optimizationAdvice, // No default empty array
+  locationAdvice,     // No default empty array
+  onSelectLocationAdvice
 }) => {
   const isDark = theme === 'dark';
   const [showWindDetails, setShowWindDetails] = useState(false);
@@ -74,6 +77,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     return { label: 'SIDEWIND', color: 'text-blue-500', icon: <ArrowLeftRight className="w-3.5 h-3.5" /> };
   }, [condition?.headwindImpact, condition?.windSpeed]);
 
+  // FIX: Removed windReason useMemo as it's no longer used in the popup.
+
   const surface = useMemo(() => {
     const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
     return isWet 
@@ -91,14 +96,16 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const scoreBreakdown = useMemo(() => {
     if (!condition) return [];
     const items = [];
-    if (condition.iceRisk) items.push({ label: "Critical Ice Risk", val: "-70%", icon: <AlertTriangle className="w-3 h-3 text-red-500" /> });
-    if (condition.precipitation > 0) items.push({ label: "Active Precipitation", val: `-${Math.round(20 + Math.min(20, condition.precipitation * 4))}%`, icon: <CloudRain className="w-3 h-3 text-blue-500" /> });
-    else if (condition.wetSurfaceChance > 50) items.push({ label: "Wet Roads", val: "-10%", icon: <AlertTriangle className="w-3 h-3 text-blue-400" /> });
-    if (condition.windSpeed > 15) items.push({ label: "Wind Intensity", val: `-${Math.round((condition.windSpeed - 15) * 1.5)}%`, icon: <Wind className="w-3 h-3 text-slate-400" /> });
-    if (condition.headwindImpact > 20) items.push({ label: "Headwind Drag", val: `-${Math.round(condition.headwindImpact / 4)}%`, icon: <ArrowDownToLine className="w-3 h-3 text-orange-500" /> });
-    if (condition.temp < 5) items.push({ label: "Cold Exposure", val: `-${Math.round((5 - condition.temp) * 2)}%`, icon: <Thermometer className="w-3 h-3 text-blue-300" /> });
-    else if (condition.temp > 28) items.push({ label: "Heat Stress", val: `-${Math.round((condition.temp - 28) * 2)}%`, icon: <Thermometer className="w-3 h-3 text-red-400" /> });
-    if (condition.isDark) items.push({ label: "Darkness / Visibility", val: "-5%", icon: <Moon className="w-3 h-3 text-indigo-400" /> });
+    if (condition.iceRisk) items.push({ label: "Critical Ice Risk", val: -70, icon: <AlertTriangle className="w-3 h-3 text-red-500" /> });
+    if (condition.precipitation > 0) items.push({ label: "Active Precipitation", val: -(20 + Math.min(20, condition.precipitation * 4)), icon: <CloudRain className="w-3 h-3 text-blue-500" /> });
+    else if (condition.wetSurfaceChance > 50) items.push({ label: "Wet Roads", val: -10, icon: <AlertTriangle className="w-3 h-3 text-blue-400" /> });
+    if (condition.windSpeed > 15) items.push({ label: "Wind Intensity", val: -((condition.windSpeed - 15) * 1.5), icon: <Wind className="w-3 h-3 text-slate-400" /> });
+    if (condition.headwindImpact > 20) items.push({ label: "Headwind Drag", val: -(condition.headwindImpact / 4), icon: <ArrowDownToLine className="w-3 h-3 text-orange-500" /> });
+    // FIX: Add a positive entry for tailwind impact
+    else if (condition.headwindImpact < -20) items.push({ label: "Tailwind Boost", val: 5, icon: <MoveUp className="w-3 h-3 text-emerald-500" /> });
+    if (condition.temp < 5) items.push({ label: "Cold Exposure", val: -((5 - condition.temp) * 2), icon: <Thermometer className="w-3 h-3 text-blue-300" /> });
+    else if (condition.temp > 28) items.push({ label: "Heat Stress", val: -((condition.temp - 28) * 2), icon: <Thermometer className="w-3 h-3 text-red-400" /> });
+    if (condition.isDark) items.push({ label: "Darkness / Visibility", val: -5, icon: <Moon className="w-3 h-3 text-indigo-400" /> });
     return items;
   }, [condition]);
 
@@ -150,6 +157,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleIce = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showIceDetails) setShowIceDetails(false); else { closeAllPopups(); setShowIceDetails(true); } };
   const toggleSurface = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showSurfaceDetails) setShowSurfaceDetails(false); else { closeAllPopups(); setShowSurfaceDetails(true); } };
   const toggleScore = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showScoreDetails) setShowScoreDetails(false); else { closeAllPopups(); setShowScoreDetails(true); } };
+  // FIX: Only render advice buttons if the props are explicitly defined (not undefined) AND have items
   const toggleRoute = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
@@ -237,10 +245,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         )}
       </div>
 
-      {/* TRAINING ADVICE BUTTONS */}
-      {(optimizationAdvice.length > 0 || locationAdvice.length > 0) && (
+      {/* TRAINING ADVICE BUTTONS - Only render if relevant props are defined and not compact */}
+      {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && locationAdvice.length > 0)) && !compact && (
         <div className="flex-none mb-3 flex gap-2 relative z-[100]">
-          {optimizationAdvice.length > 0 && (
+          {optimizationAdvice && optimizationAdvice.length > 0 && (
             <button 
               onClick={toggleRoute}
               className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20'}`}
@@ -249,7 +257,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               route advice
             </button>
           )}
-          {locationAdvice.length > 0 && (
+          {locationAdvice && locationAdvice.length > 0 && (
             <button 
               onClick={toggleLocation}
               className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-orange-600 border-orange-500 text-white shadow-lg' : 'bg-orange-500/10 border-orange-500/20 text-orange-400 hover:bg-orange-500/20'}`}
@@ -268,7 +276,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               </div>
               <p className="text-[10px] font-bold text-slate-400 mb-3 leading-tight uppercase tracking-tight">Optimal turnaround points based on wind direction for a balanced loop:</p>
               <div className="flex flex-col gap-2">
-                {optimizationAdvice.map((loc, idx) => (
+                {optimizationAdvice && optimizationAdvice.map((loc, idx) => (
                   <div key={idx} className={`p-2.5 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-900 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                     <div className="flex items-center gap-2">
                        <MapPin className="w-3 h-3 text-blue-500" />
@@ -292,17 +300,31 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               </div>
               <p className="text-[10px] font-bold text-slate-400 mb-3 leading-tight uppercase tracking-tight">Municipalities nearby with potentially better training conditions:</p>
               <div className="flex flex-col gap-2">
-                {locationAdvice.map((loc, idx) => (
-                  <div key={idx} className={`p-2.5 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-900 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-                    <div className="flex items-center gap-2">
-                       <MapIcon className="w-3 h-3 text-orange-500" />
-                       <span className={`text-[11px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                    </div>
-                    {loc.distanceFromHome !== undefined && (
-                      <span className="text-[8px] font-black text-slate-500">{loc.distanceFromHome.toFixed(1)} KM FROM HOME</span>
-                    )}
-                  </div>
-                ))}
+                {locationAdvice && locationAdvice.length > 0 ? (
+                  locationAdvice.map((loc, idx) => (
+                    <button 
+                      key={idx} 
+                      onClick={(e) => { 
+                        e.preventDefault(); 
+                        e.stopPropagation(); 
+                        if (onSelectLocationAdvice) onSelectLocationAdvice({ name: loc.name, lat: loc.lat, lng: loc.lng });
+                      }}
+                      className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors hover:bg-orange-500/10 active:scale-[0.98] ${isDark ? 'bg-slate-900 border-white/5' : 'bg-slate-50 border-slate-200'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                         <MapIcon className="w-3 h-3 text-orange-500" />
+                         <span className={`text-[11px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                      </div>
+                      {loc.distanceFromHome !== undefined && (
+                        <span className="text-[8px] font-black text-slate-500">{loc.distanceFromHome.toFixed(1)} KM FROM HOME</span>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <p className={`text-[10px] font-bold text-center p-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    No better locations found nearby for today's session.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -360,7 +382,14 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           </div>
           {showWindDetails && (
             <div className={`absolute bottom-full mb-3 left-0 right-0 p-3 rounded-2xl border shadow-2xl z-[60] flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/20' : 'bg-white border-slate-300'}`}>
-              <div className="flex flex-col gap-0.5"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Flow Context</span><div className="flex items-center gap-2"><Wind className="w-3.5 h-3.5 text-blue-500" /><span className={`text-[11px] font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{condition?.windSpeed} km/h • {getCardinal(condition?.windDirection ?? 0)}</span></div></div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Wind Details</span>
+                {/* FIX: Simplified wind details popup content */}
+                <p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                  Speed: {Math.round(condition?.windSpeed ?? 0)} km/h<br/>
+                  Direction: {getCardinal(condition?.windDirection ?? 0)}
+                </p>
+              </div>
               <button onClick={() => setShowWindDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button>
             </div>
           )}
@@ -418,8 +447,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               <div className="space-y-2">
                 {scoreBreakdown.length > 0 ? scoreBreakdown.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
-                    <div className="flex items-center gap-2">{item.icon}<span className={isDark ? 'text-slate-300' : 'text-slate-600'}>{item.label}</span></div>
-                    <span className="text-red-400">{item.val}</span>
+                    <div className="flex items-center gap-2">{item.icon}<span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span></div> {/* FIX: Conditional text color */}
+                    <span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span> {/* FIX: Display + for positive values */}
                   </div>
                 )) : <p className="text-[10px] font-bold text-emerald-500">Perfect conditions: No deductions applied.</p>}
               </div>

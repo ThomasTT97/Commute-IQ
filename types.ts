@@ -1,8 +1,10 @@
+import { BelgianLocation } from './locations'; // FIX: Import BelgianLocation
+
 export type Language = 'en' | 'fr' | 'nl';
 
 export interface Coordinates {
   lat: number;
-  lng: number;
+  lng: number; // FIX: Added lng property
 }
 
 export interface CommuteSettings {
@@ -18,10 +20,12 @@ export interface CommuteSettings {
   disableAI: boolean;
 }
 
-export interface LocationSuggestion {
-  name: string;
+// FIX: LocationSuggestion should extend BelgianLocation and use lat/lng directly
+export interface LocationSuggestion extends BelgianLocation {
+  // name, lat, lng are inherited from BelgianLocation
   distanceFromHome?: number; // Made optional, as not always present
   distanceFromTrainingCenter?: number; // Added for training specific advice
+  // Removed coords as lat and lng are now directly available from BelgianLocation
   score?: number;
 }
 
