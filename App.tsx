@@ -224,7 +224,7 @@ const App: React.FC = () => {
         localStorage.setItem(CACHE_KEY, JSON.stringify(next));
         return next;
       });
-    } catch (err: any) { // FIX: Type 'err' as any
+    } catch (err: any) { // FIX: Explicitly type 'err' as any
       console.error("Sync data failed:", err);
     } finally {
       // FIX: Corrected state setter usage
@@ -388,7 +388,7 @@ const App: React.FC = () => {
             if (candidateRaw.hourly) {
               Object.keys(candidateRaw.hourly).forEach((k) => {
                 // FIX: Corrected slice method arguments and property access
-                if (Array.isArray(candidateRaw.hourly[k]) && startIndex <= endIndex && endIndex < candidateRaw.hourly[k].length) {
+                if (Array.isArray(candidateRaw.hourly[k]) && startIndex <= endIndex && endIndex < rawCurrentLocation.hourly[k].length) {
                   slice[k] = (candidateRaw.hourly[k] as number[]).slice(startIndex, endIndex + 1);
                 } else if (Array.isArray(candidateRaw.hourly[k]) && startIndex > endIndex) {
                   slice[k] = [];
@@ -585,11 +585,10 @@ const App: React.FC = () => {
 
   const handleSelectLocationAdvice = useCallback((loc: BelgianLocation) => {
     const newCoords: Coordinates = { lat: loc.lat, lng: loc.lng };
-    // FIX: Corrected object spread for prevTraining and property access for coords
     setTraining((prevTraining: TrainingState) => ({ ...prevTraining, location: loc.name, coords: newCoords }));
     setTrainingSearch(loc.name);
     setManualStartHour(null); // Reset manual hour when location changes
-    // Removed setShowLocationPopup(false) from here as WeatherCard manages its own internal state to close on click
+    // WeatherCard now calls closeAllPopups internally after this callback.
   }, []); // FIX: Add dependencies
 
   return (
@@ -615,7 +614,7 @@ const App: React.FC = () => {
             >
               <Calendar className="w-3 text-blue-500" />
               <div className="flex flex-col items-center leading-[0.9]">
-                <span className="text-[9px]">{selectedDateOffset === 0 ? 'TODAY' : selectedDateOffset === 1 ? 'TOMORROW' : `${activeDayLabels.name} ${activeDayLabels.num}`}</span>
+                <span className="text-[9px]">{selectedDateOffset === 0 ? 'TODAY' : `${activeDayLabels.name} ${activeDayLabels.num}`}</span>
                 <span className="text-[9px] opacity-60 font-bold tracking-tight">{activeDayLabels.month}</span>
               </div>
             </button>
@@ -627,7 +626,7 @@ const App: React.FC = () => {
           )}
 
           {isDateDropdownOpen && viewMode !== 'training' && (
-            <div className={`absolute top-11 right-0 w-48 border rounded-2xl shadow-2xl z-[100] p-1.5 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}> {/* FIX: Removed animation classes */}
+            <div className={`absolute top-11 right-0 w-48 border rounded-2xl shadow-2xl z-[100] p-1.5 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
               {[0, 1, 2, 3, 4, 5, 6].map(o => {
                 const l = getDayLabel(o);
                 const isSelected = selectedDateOffset === o;
@@ -637,7 +636,7 @@ const App: React.FC = () => {
                     onClick={() => { setSelectedDateOffset(o); setViewMode('daily'); setIsDateDropdownOpen(false); }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-tight transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-50'}`}
                   >
-                    <span>{o === 0 ? 'TODAY' : o === 1 ? 'TOMORROW' : `${l.name} ${l.num} ${l.month}`}</span>
+                    <span>{o === 0 ? 'TODAY' : `${l.name} ${l.num} ${l.month}`}</span>
                     {isSelected && <Check className="w-2.5 h-2.5" />}
                   </button>
                 );
@@ -1101,7 +1100,7 @@ const App: React.FC = () => {
               <AccordionItem 
                 id="distance" 
                 title="ROUTE DISTANCE" 
-                content="Estimated by taking the 'as-the-crow-flies' distance between your locations and adding a 32% detour factor to account for real-world twists and turns of bike paths and streets." 
+                content="Estimated by taking the direct line distance and adding a 32% detour factor to account for real-world twists and turns of bike paths and streets." 
               />
             </div>
 

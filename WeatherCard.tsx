@@ -77,8 +77,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     return { label: 'SIDEWIND', color: 'text-blue-500', icon: <ArrowLeftRight className="w-3.5 h-3.5" /> };
   }, [condition?.headwindImpact, condition?.windSpeed]);
 
-  // FIX: Removed windReason useMemo as it's no longer used in the popup.
-
   const surface = useMemo(() => {
     const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
     return isWet 
@@ -101,7 +99,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     else if (condition.wetSurfaceChance > 50) items.push({ label: "Wet Roads", val: -10, icon: <AlertTriangle className="w-3 h-3 text-blue-400" /> });
     if (condition.windSpeed > 15) items.push({ label: "Wind Intensity", val: -((condition.windSpeed - 15) * 1.5), icon: <Wind className="w-3 h-3 text-slate-400" /> });
     if (condition.headwindImpact > 20) items.push({ label: "Headwind Drag", val: -(condition.headwindImpact / 4), icon: <ArrowDownToLine className="w-3 h-3 text-orange-500" /> });
-    // FIX: Add a positive entry for tailwind impact, but only if not in training mode (where showRawWind is true)
+    // Exclude Tailwind Boost in training mode (where showRawWind is true for loop context)
     else if (!showRawWind && condition.headwindImpact < -20) items.push({ label: "Tailwind Boost", val: 5, icon: <MoveUp className="w-3 h-3 text-emerald-500" /> });
     if (condition.temp < 5) items.push({ label: "Cold Exposure", val: -((5 - condition.temp) * 2), icon: <Thermometer className="w-3 h-3 text-blue-300" /> });
     else if (condition.temp > 28) items.push({ label: "Heat Stress", val: -((condition.temp - 28) * 2), icon: <Thermometer className="w-3 h-3 text-red-400" /> });
@@ -157,7 +155,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleIce = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showIceDetails) setShowIceDetails(false); else { closeAllPopups(); setShowIceDetails(true); } };
   const toggleSurface = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showSurfaceDetails) setShowSurfaceDetails(false); else { closeAllPopups(); setShowSurfaceDetails(true); } };
   const toggleScore = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showScoreDetails) setShowScoreDetails(false); else { closeAllPopups(); setShowScoreDetails(true); } };
-  // FIX: Only render advice buttons if the props are explicitly defined (not undefined) AND have items
+  // Only render advice buttons if the props are explicitly defined (not undefined) AND have items
   const toggleRoute = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
@@ -308,7 +306,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                         e.preventDefault(); 
                         e.stopPropagation(); 
                         if (onSelectLocationAdvice) onSelectLocationAdvice({ name: loc.name, lat: loc.lat, lng: loc.lng });
-                        setShowLocationPopup(false); // FIX: Close the popup after selecting a location
+                        closeAllPopups(); // Close all popups in WeatherCard
                       }}
                       className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors hover:bg-orange-500/10 active:scale-[0.98] ${isDark ? 'bg-slate-900 border-white/5' : 'bg-slate-50 border-slate-200'}`}
                     >
@@ -355,7 +353,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </div>
           )}
         </div>
-        <div className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] ${isDark ? 'bg-slate-900/50 border border-white/5' : 'bg-slate-50 border border-slate-200'}`}>
+        <div className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] ${isDark ? 'bg-slate-900/50 border border-white/5' : 'bg-slate-50 border-slate-200'}`}>
           <Lightbulb className={`w-6 h-6 ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
           <div className="flex flex-col">
             <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span>
@@ -385,7 +383,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className={`absolute bottom-full mb-3 left-0 right-0 p-3 rounded-2xl border shadow-2xl z-[60] flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/20' : 'bg-white border-slate-300'}`}>
               <div className="flex flex-col gap-1.5 flex-1">
                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Wind Details</span>
-                {/* FIX: Simplified wind details popup content */}
                 <p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                   Speed: {Math.round(condition?.windSpeed ?? 0)} km/h<br/>
                   Direction: {getCardinal(condition?.windDirection ?? 0)}
@@ -448,8 +445,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               <div className="space-y-2">
                 {scoreBreakdown.length > 0 ? scoreBreakdown.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
-                    <div className="flex items-center gap-2">{item.icon}<span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span></div> {/* FIX: Conditional text color */}
-                    <span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span> {/* FIX: Display + for positive values */}
+                    <div className="flex items-center gap-2">{item.icon}<span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span></div>
+                    <span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span>
                   </div>
                 )) : <p className="text-[10px] font-bold text-emerald-500">Perfect conditions: No deductions applied.</p>}
               </div>
