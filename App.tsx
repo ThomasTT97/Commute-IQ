@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { CommuteSettings, Coordinates, Language, TrainingState, LocationSuggestion } from './types';
+import { CommuteSettings, Coordinates, Language, TrainingState, LocationSuggestion } from './types'; 
 import { DEFAULT_SETTINGS, TRANSLATIONS, BELGIAN_CITIES } from './constants';
 import { BELGIAN_LOCATIONS, BelgianLocation } from './locations';
 import { WeatherCard } from './components/WeatherCard';
@@ -282,24 +282,45 @@ const App: React.FC = () => {
           }, [])
           .slice(0, 3);
 
-        // Location Advice: Find alternative START locations within 50km of user HOME with better weather
+        // Location Advice: Find alternative START locations within specified distance ranges
         const userHome = settings.homeCoords || training.coords;
-        const locationSuggestions = BELGIAN_LOCATIONS
-          .map(loc => {
-            const distanceFromHome = calculateDistance(userHome, { lat: loc.lat, lng: loc.lng });
-            return { name: loc.name, coords: { lat: loc.lat, lng: loc.lng }, distanceFromHome };
-          })
-          // Filter to locations at least 40km away, and within 50km
-          .filter(loc => loc.distanceFromHome >= 40 && loc.distanceFromHome < 50 && loc.name !== training.location)
-          .sort((a, b) => a.distanceFromHome - b.distanceFromHome)
-          .reduce((acc: any[], curr) => {
-             if (!acc.find(a => a.name === curr.name)) acc.push(curr);
-             return acc;
-          }, [])
-          .slice(0, 3);
+        const allPotentialLocations = BELGIAN_LOCATIONS
+          .filter(loc => loc.name !== training.location) // Exclude current training location
+          .map(loc => ({
+            name: loc.name,
+            coords: { lat: loc.lat, lng: loc.lng },
+            distanceFromHome: calculateDistance(userHome, { lat: loc.lat, lng: loc.lng })
+          }));
 
-        finalSlot.optimizationAdvice = routeSuggestions.map(s => ({ name: s.name, distanceFromHome: calculateDistance(userHome, BELGIAN_CITIES[s.name] || training.coords) }));
-        finalSlot.locationAdvice = locationSuggestions;
+        const selectRandom = (arr: LocationSuggestion[], count: number) => {
+          const shuffled = [...arr].sort(() => 0.5 - Math.random());
+          return shuffled.slice(0, count);
+        };
+
+        const locationSuggestions: LocationSuggestion[] = [];
+
+        // Try to get one for ~40km
+        const candidates40 = allPotentialLocations.filter(loc => loc.distanceFromHome >= 30 && loc.distanceFromHome <= 50);
+        if (candidates40.length > 0) locationSuggestions.push(selectRandom(candidates40, 1)[0]);
+
+        // Try to get one for ~60-70km
+        const candidates60_70 = allPotentialLocations.filter(loc => loc.distanceFromHome > 50 && loc.distanceFromHome <= 75);
+        if (candidates60_70.length > 0) locationSuggestions.push(selectRandom(candidates60_70, 1)[0]);
+
+        // Try to get one for ~100km
+        const candidates100 = allPotentialLocations.filter(loc => loc.distanceFromHome > 75 && loc.distanceFromHome <= 110);
+        if (candidates100.length > 0) locationSuggestions.push(selectRandom(candidates100, 1)[0]);
+
+        // Fill remaining slots if fewer than 3 unique suggestions were found
+        if (locationSuggestions.length < 3) {
+          const existingNames = new Set(locationSuggestions.map(s => s.name));
+          const remainingCandidates = allPotentialLocations.filter(loc => !existingNames.has(loc.name));
+          const fillCount = 3 - locationSuggestions.length;
+          locationSuggestions.push(...selectRandom(remainingCandidates, fillCount));
+        }
+
+        finalSlot.optimizationAdvice = routeSuggestions.map(s => ({ name: s.name, distanceFromTrainingCenter: s.distFromCenter }));
+        finalSlot.locationAdvice = locationSuggestions.slice(0, 3); // Ensure max 3 results
         setTrainingData(finalSlot);
       }
     } catch (e) {
@@ -501,10 +522,10 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3 max-w-xl mx-auto w-full min-h-0 overflow-y-auto relative">
+      <main className="flex-1 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3 max-w-md mx-auto w-full min-h-0 overflow-y-auto relative">
         {viewMode === 'daily' && (
-          <div className="flex flex-col gap-4">
-            <div className="flex-[6] min-h-0">
+          <div className="flex flex-col gap-4 flex-1"> {/* Added flex-1 here */}
+            <div className="flex-[3] min-h-0"> {/* Primary WeatherCard now takes more space */}
               <WeatherCard 
                 {...primaryData} 
                 distance={displayedDistance} 
@@ -526,7 +547,7 @@ const App: React.FC = () => {
               </p>
             </button>
 
-            <div className="flex-[3] min-h-0">
+            <div className="flex-[1] min-h-0"> {/* Secondary WeatherCard takes less relative space */}
               <WeatherCard compact {...secondaryData} safetyScore={secondaryData.score} theme={settings.theme} />
             </div>
           </div>

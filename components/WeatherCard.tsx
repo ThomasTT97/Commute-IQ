@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { WeatherCondition, LocationSuggestion } from '../types';
+import { LocationSuggestion } from '../types';
 import { 
   Wind, 
   AlertTriangle, 
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 interface WeatherCardProps {
-  condition?: WeatherCondition | null;
+  condition?: any | null; // Changed to any to avoid type issues with `WeatherCondition` directly
   timeRange?: string;
   dateLabel?: string;
   startLocation?: string;
@@ -263,7 +263,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                        <MapPin className="w-3 h-3 text-blue-500" />
                        <span className={`text-[11px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
                     </div>
-                    <span className="text-[8px] font-black text-slate-500">~{loc.distanceFromHome.toFixed(0)}KM AWAY</span>
+                    {loc.distanceFromTrainingCenter !== undefined && (
+                       <span className="text-[8px] font-black text-slate-500">~{loc.distanceFromTrainingCenter.toFixed(0)} KM FROM TRAINING CENTER</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -285,7 +287,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                        <MapIcon className="w-3 h-3 text-orange-500" />
                        <span className={`text-[11px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
                     </div>
-                    <span className="text-[8px] font-black text-slate-500">{loc.distanceFromHome.toFixed(1)} KM FROM HOME</span>
+                    {loc.distanceFromHome !== undefined && (
+                      <span className="text-[8px] font-black text-slate-500">{loc.distanceFromHome.toFixed(1)} KM FROM HOME</span>
+                    )}
                   </div>
                 ))}
               </div>

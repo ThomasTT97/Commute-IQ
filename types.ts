@@ -20,8 +20,8 @@ export interface CommuteSettings {
 
 export interface LocationSuggestion {
   name: string;
-  distanceFromHome: number;
-  distanceFromTrainingCenter?: number;
+  distanceFromHome?: number; // Made optional, as not always present
+  distanceFromTrainingCenter?: number; // Added for training specific advice
   score?: number;
 }
 

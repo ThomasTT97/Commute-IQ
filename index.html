@@ -20,20 +20,18 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #05070a;
-            color: #f8fafc;
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            height: 100%;
+            background-color: #05070a; /* Default dark background */
+            color: #f8fafc; /* Default text color */
+            height: 100dvh; /* Use dynamic viewport height */
+            width: 100vw; /* Use viewport width */
+            position: fixed; /* Keep it fixed for smooth scrolling of inner content */
+            overflow: auto; /* Allow body to scroll if content somehow overflows, but prefer inner elements to manage */
         }
         #root {
             height: 100%;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
-            padding-top: env(safe-area-inset-top);
-            padding-bottom: env(safe-area-inset-bottom);
+            overflow: hidden; /* App component's outer div will manage its own overflow */
         }
         .font-mono {
             font-family: 'JetBrains Mono', monospace;
