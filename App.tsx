@@ -458,10 +458,15 @@ const App: React.FC = () => {
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <header className="flex-none px-6 py-2 flex items-center justify-between z-50 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setIsInfoOpen(true)}>
+        <button 
+          onClick={() => setIsInfoOpen(true)}
+          className="flex items-center gap-2 select-none cursor-pointer group"
+          aria-label="Commute IQ Information"
+        >
           <span className={`text-2xl font-bold tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>Commute</span>
           <span className="text-3xl font-black italic text-blue-500">IQ</span>
-        </div>
+          <Info className={`w-4 h-4 ml-1 transition-colors ${isDark ? 'text-slate-500 group-hover:text-blue-400' : 'text-slate-400 group-hover:text-blue-600'}`} />
+        </button>
         
         <div className="flex items-center gap-2 relative">
           {viewMode !== 'training' ? (
@@ -890,6 +895,11 @@ const App: React.FC = () => {
                 id="score" 
                 title="HOW THE SCORE WORKS" 
                 content={"We start with a perfect 100% and deduct points for things that make your ride harder or riskier:\n\n• Ice Risk: -70 (Major hazard!)\n• Rain: -20 to -40 (depending on intensity)\n• Wind: Points lost for high speeds and tough headwinds\n• Temperature: Deductions for extreme cold or heat\n• Darkness: -5 (for visibility)\n\nThe final score shown is the 'worst-case' scenario between your morning and evening trips."} 
+              />
+              <AccordionItem
+                id="training-mode"
+                title="TRAINING MODE"
+                content="Enter training mode to plan and optimize your cycling workouts. This feature allows you to select a training area, set your desired distance, and choose a specific day. The app then scans various time windows to suggest the optimal start time based on weather conditions, providing tactical advice for your session and even suggesting route turning points or alternative starting locations."
               />
               <AccordionItem 
                 id="retrieval" 

@@ -104,10 +104,21 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   const iceRiskReason = useMemo(() => {
     if (!condition) return "";
-    if (condition.activeFreezing) return "Critical: Surface moisture has frozen solid. Air and ground temperatures have been at or below 0°C, creating a treacherous layer of ice.";
-    if (condition.overnightFreeze) return "Caution: Sub-zero temperatures were recorded recently. Due to thermal inertia, the road surface remains colder than the air, and damp patches may be frozen.";
-    if (condition.iceRisk) return "Surface Alert: Near-freezing air with high humidity is causing frost or 'black ice' to settle on the asphalt.";
-    return "Safe: Air and ground temperatures have consistently remained above freezing, ensure no latent ice remains.";
+
+    if (condition.iceRisk) { // If there IS an overall ice risk...
+      if (condition.activeFreezing) {
+        return "Critical: Surface moisture has frozen solid. Air and ground temperatures have been at or below 0°C, creating a treacherous layer of ice.";
+      }
+      // If not actively freezing, but there was an overnight freeze (and overall iceRisk is true, meaning minTemp <= 4)
+      if (condition.overnightFreeze) {
+        return "Caution: Sub-zero temperatures were recorded recently. Due to thermal inertia, the road surface remains colder than the air, and damp patches may be frozen.";
+      }
+      // General case if iceRisk is true but not active freezing or strong overnight freeze conditions for "Caution"
+      // This means hasMoisture is true and minTemp is near 0, but not fully meeting higher risk criteria
+      return "Surface Alert: Near-freezing air with high humidity is causing frost or 'black ice' to settle on the asphalt.";
+    } else { // If there is NO overall ice risk...
+      return "Safe: Air and ground temperatures have consistently remained above freezing, ensuring no latent ice remains.";
+    }
   }, [condition]);
 
   const surfaceRiskReason = useMemo(() => {
