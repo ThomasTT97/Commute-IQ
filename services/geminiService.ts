@@ -6,10 +6,6 @@ import { BELGIAN_CITIES } from "../constants";
 export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
 
-/**
- * Optimized Model Chain for Intelligence:
- * Using Gemini 3 series for superior reasoning and speed.
- */
 const MODEL_CHAIN = [
   "gemini-3-flash-preview",       
   "gemini-flash-lite-latest"
@@ -17,18 +13,20 @@ const MODEL_CHAIN = [
 
 const callWithRetry = async <T>(
   fn: (aiInstance: GoogleGenAI, modelName: string) => Promise<T>, 
+  specificModel?: string,
   maxRetriesPerModel = 1
 ): Promise<{ data: T; model: string }> => {
   let lastFnError: any;
   const apiKey = process.env.API_KEY;
   
   if (!apiKey || apiKey.length < 5) {
-    throw new Error("API Key is missing. Check your environment variables.");
+    throw new Error("API Key is missing.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
+  const modelsToTry = specificModel ? [specificModel] : MODEL_CHAIN;
 
-  for (const modelName of MODEL_CHAIN) {
+  for (const modelName of modelsToTry) {
     for (let i = 0; i <= maxRetriesPerModel; i++) {
       try {
         const result = await fn(ai, modelName);
@@ -118,7 +116,7 @@ const aggregateRawWeather = (
     return {
       temp: 15, condition: 'Cloudy', precipitation: 0, windSpeed: 10, windDirection: 0,
       humidity: 50, isDark: false, slipperyChance: 0, wetSurfaceChance: 0, headwindImpact: 0,
-      iceRisk: false, surfaceReason: "Data unavailable"
+      iceRisk: false, surfaceReason: undefined
     };
   }
 
@@ -188,47 +186,71 @@ const sliceWeatherData = (raw: any, window: [string, string], dateOffset: number
   return sliced;
 };
 
-export const getPulseBatch = async (settings: CommuteSettings, offsets: number[]): Promise<Record<number, any>> => {
+/**
+ * Optimized for performance: 
+ * Stage 1: Fast meteorological calculation.
+ * Stage 2: (Optional) Async AI Advice enhancement.
+ */
+export const getPulseBatch = async (
+  settings: CommuteSettings, 
+  offsets: number[], 
+  skipAI: boolean = false
+): Promise<Record<number, any>> => {
   const home = settings.homeCoords || { lat: 0, lng: 0 };
   const work = settings.workCoords || { lat: 0, lng: 0 };
   const morningHeading = calculateBearing(home, work);
   const eveningHeading = calculateBearing(work, home);
 
+  // Fetch telemetry in parallel
   const [homeRaw, workRaw] = await Promise.all([
     fetchRawWeatherData(home),
     fetchRawWeatherData(work)
   ]);
 
+  // Stage 1: Instant Meteorological Processing
   const batchContext = offsets.map(offset => {
     const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
     const eSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
+    
     const sunTimes = {
       sunrise: homeRaw.daily?.sunrise?.[offset] || "07:00",
       sunset: homeRaw.daily?.sunset?.[offset] || "20:00"
     };
-    const mStartHour = parseInt(settings.morningWindow[0].split(':')[0]);
-    const mIdx = offset * 24 + mStartHour;
-    const mPastTemps = (homeRaw.hourly.temperature_2m || []).slice(Math.max(0, mIdx - 6), mIdx);
-    const mMinPastTemp = mPastTemps.length ? Math.min(...mPastTemps) : 10;
-    const eStartHour = parseInt(settings.eveningWindow[0].split(':')[0]);
-    const eIdx = offset * 24 + eStartHour;
-    const ePastTemps = (workRaw.hourly.temperature_2m || []).slice(Math.max(0, eIdx - 6), eIdx);
-    const eMinPastTemp = ePastTemps.length ? Math.min(...ePastTemps) : 10;
 
-    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, mMinPastTemp);
-    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, eMinPastTemp);
+    const getMinPastTemp = (raw: any, offset: number, window: [string, string]) => {
+      const startHour = parseInt(window[0].split(':')[0]);
+      const idx = offset * 24 + startHour;
+      const pastTemps = (raw.hourly.temperature_2m || []).slice(Math.max(0, idx - 6), idx);
+      return pastTemps.length ? Math.min(...pastTemps) : 10;
+    };
+
+    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, getMinPastTemp(homeRaw, offset, settings.morningWindow));
+    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, getMinPastTemp(workRaw, offset, settings.eveningWindow));
+    
     const mScore = calculateSegmentScore(morning);
     const eScore = calculateSegmentScore(evening);
-    const dailyScore = Math.min(mScore, eScore);
-    const isWet = (morning.precipitation > 0 || morning.wetSurfaceChance > 50) || 
-                  (evening.precipitation > 0 || evening.wetSurfaceChance > 50);
-    const isIcy = morning.iceRisk || evening.iceRisk;
-
-    return { offset, score: dailyScore, summary: { isWet, isIcy }, morning, evening };
+    
+    return { 
+      offset, 
+      score: Math.min(mScore, eScore), 
+      summary: { 
+        isWet: (morning.precipitation > 0 || morning.wetSurfaceChance > 50) || (evening.precipitation > 0 || evening.wetSurfaceChance > 50),
+        isIcy: morning.iceRisk || evening.iceRisk
+      }, 
+      weather: { 
+        morning: { ...morning, surfaceReason: skipAI ? "Fast-sync meteorological mode." : undefined }, 
+        evening: { ...evening, surfaceReason: skipAI ? "Fast-sync meteorological mode." : undefined } 
+      },
+      lastUpdated: Date.now()
+    };
   });
 
   const result: Record<number, any> = {};
+  batchContext.forEach(ctx => { result[ctx.offset] = ctx; });
 
+  if (settings.disableAI || skipAI) return result;
+
+  // Stage 2: AI Enhancement
   try {
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
@@ -238,36 +260,30 @@ export const getPulseBatch = async (settings: CommuteSettings, offsets: number[]
         Focus on specific tactics like cornering speed, braking distance, or effort management against wind.
         
         Language: ${settings.language}
-        Data: ${JSON.stringify(batchContext.map(({offset, morning, evening}) => ({offset, morning, evening})))}
+        Data: ${JSON.stringify(batchContext.map(({offset, weather}) => ({offset, morning: weather.morning, evening: weather.evening})))}
         Return JSON Array: [{ "offset": number, "weather": { "morning": { "surfaceReason": string }, "evening": { "surfaceReason": string } } }]`,
         config: { temperature: 0.4, responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "[]");
     });
 
-    batchContext.forEach(ctx => {
-      const aiRes = parsedAIResults.find((r: any) => r.offset === ctx.offset);
-      result[ctx.offset] = {
-        ...ctx,
-        isSynthesized: false,
-        weather: {
-          morning: { ...ctx.morning, surfaceReason: aiRes?.weather?.morning?.surfaceReason || "Maintain steady cadence and standard cornering speed." },
-          evening: { ...ctx.evening, surfaceReason: aiRes?.weather?.evening?.surfaceReason || "Maintain steady cadence and standard cornering speed." }
-        }
-      };
+    parsedAIResults.forEach((aiRes: any) => {
+      if (result[aiRes.offset]) {
+        result[aiRes.offset].weather.morning.surfaceReason = aiRes.weather.morning.surfaceReason;
+        result[aiRes.offset].weather.evening.surfaceReason = aiRes.weather.evening.surfaceReason;
+        result[aiRes.offset].isEnhanced = true;
+      }
     });
-  } catch (error: any) {
+  } catch (error) {
+    // Silently fall back to meteorological-only data if AI fails
     batchContext.forEach(ctx => {
-      result[ctx.offset] = {
-        ...ctx,
-        isSynthesized: false, 
-        weather: {
-          morning: { ...ctx.morning, surfaceReason: "Adjust braking distance and cornering speed to local road conditions." },
-          evening: { ...ctx.evening, surfaceReason: "Adjust braking distance and cornering speed to local road conditions." }
-        }
-      };
+      if (!ctx.weather.morning.surfaceReason) {
+        ctx.weather.morning.surfaceReason = "Telemetry standard: increase braking distance if wet.";
+        ctx.weather.evening.surfaceReason = "Telemetry standard: increase braking distance if wet.";
+      }
     });
   }
+
   return result;
 };
 
@@ -276,15 +292,29 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
   for (const [name, coords] of Object.entries(BELGIAN_CITIES)) {
     if (name.toLowerCase() === normalizedQuery.toLowerCase()) return { address: name, coords };
   }
+  
   const { data } = await callWithRetry(async (aiInstance, modelName) => {
     const response = await aiInstance.models.generateContent({
       model: modelName, 
       contents: `Full address and coords for: "${query}". Return JSON: { "address": string, "lat": number, "lng": number }`,
-      config: { temperature: 0, responseMimeType: "application/json", tools: [{ googleMaps: {} }] },
+      config: { 
+        temperature: 0, 
+        responseMimeType: "application/json", 
+        tools: [{ googleMaps: {} }] 
+      },
     });
-    return JSON.parse(response.text || "{}");
-  });
-  return { address: data.address || query, coords: { lat: data.lat, lng: data.lng } };
+    
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
+    const parsed = JSON.parse(response.text || "{}");
+    return { ...parsed, mapsUri };
+  }, "gemini-2.5-flash");
+  
+  return { 
+    address: data.address || query, 
+    coords: { lat: data.lat, lng: data.lng },
+    mapsUri: data.mapsUri
+  };
 };
 
 export const getCommuteRoadDistance = async (origin: string, destination: string): Promise<number | null> => {
@@ -292,9 +322,14 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
     const response = await aiInstance.models.generateContent({
       model: modelName,
       contents: `Cycling distance KM between ${origin} and ${destination}. Only JSON: { "distance": number }`,
-      config: { temperature: 0, responseMimeType: "application/json", tools: [{ googleMaps: {} }] }
+      config: { 
+        temperature: 0, 
+        responseMimeType: "application/json", 
+        tools: [{ googleMaps: {} }] 
+      }
     });
     return JSON.parse(response.text || "{}");
-  });
+  }, "gemini-2.5-flash");
+  
   return data.distance || null;
 };

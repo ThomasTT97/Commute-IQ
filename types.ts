@@ -1,5 +1,3 @@
-
-
 export type Language = 'en' | 'fr' | 'nl';
 
 export interface Coordinates {
@@ -17,6 +15,7 @@ export interface CommuteSettings {
   roadDistance?: number;
   language: Language;
   theme: 'dark' | 'light';
+  disableAI: boolean;
 }
 
 export interface WeatherCondition {

@@ -6,7 +6,7 @@ import { LoadingVisual } from './components/LoadingVisual';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { getPulseBatch, resolveAddress, getCommuteRoadDistance, lastApiErrorMessage, lastApiErrorType } from './services/geminiService';
 import { 
-  Settings, 
+  Settings as SettingsIcon, 
   RefreshCw,
   Calendar,
   LayoutGrid,
@@ -19,10 +19,15 @@ import {
   ChevronDown,
   Info,
   Clock,
-  ChevronUp
+  ChevronUp,
+  Brain,
+  Zap,
+  X,
+  ArrowRight
 } from 'lucide-react';
 
 const ROAD_DETOUR_FACTOR = 1.32;
+const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 
 const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
   if (!c1 || !c2) return 0;
@@ -46,10 +51,32 @@ const getLocality = (address: string): string => {
 };
 
 const App: React.FC = () => {
+  // Load settings first
   const [settings, setSettings] = useState<CommuteSettings>(() => {
     const saved = localStorage.getItem('velo_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
     return { ...DEFAULT_SETTINGS, ...parsed };
+  });
+
+  // Pulse data cache implementation
+  const [pulseDataMap, setPulseDataMap] = useState<Record<number, any>>(() => {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return {};
+    try {
+      const parsed = JSON.parse(cached);
+      // Optional: Filter out data that is too old (e.g., > 24 hours)
+      const now = Date.now();
+      const filtered: Record<number, any> = {};
+      Object.keys(parsed).forEach(k => {
+        const key = Number(k);
+        if (now - (parsed[key].lastUpdated || 0) < 24 * 60 * 60 * 1000) {
+          filtered[key] = parsed[key];
+        }
+      });
+      return filtered;
+    } catch (e) {
+      return {};
+    }
   });
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -73,7 +100,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingStatus, setLoadingStatus] = useState("Idle");
-  const [pulseDataMap, setPulseDataMap] = useState<Record<number, any>>({});
   const [loadingOffsets, setLoadingOffsets] = useState<number[]>([]);
   const [resolving, setResolving] = useState<'home' | 'work' | null>(null);
 
@@ -112,44 +138,59 @@ const App: React.FC = () => {
       : { primary: { type: 'evening' as const, offset: primaryOffset }, secondary: { type: 'morning' as const, offset: primaryOffset + 1 } };
   }, [selectedDateOffset, nextCommuteInfo]);
 
-  const syncData = useCallback(async (currentSettings: CommuteSettings, offsets: number[], isBackground = false) => {
+  const syncData = useCallback(async (currentSettings: CommuteSettings, offsets: number[], isSilent = false) => {
     if (!offsets.length) return;
     
-    if (!isBackground) {
+    // Only show global loading if we don't have cached data for these offsets
+    const hasMissingData = offsets.some(o => !pulseDataMap[o]);
+    if (!isSilent && hasMissingData) {
       setLoading(true);
       setLoadingProgress(10);
-      setLoadingStatus("Retrieving Telemetry...");
+      setLoadingStatus("Connecting Telemetry...");
     }
+    
     setLoadingOffsets(prev => [...new Set([...prev, ...offsets])]);
 
     try {
-      const results = await getPulseBatch(currentSettings, offsets);
-      setPulseDataMap(prev => ({ ...prev, ...results }));
-      if (!isBackground) setLoadingProgress(100);
+      // First pass: Fast Meteorological sync
+      const results = await getPulseBatch(currentSettings, offsets, false);
+      
+      setPulseDataMap(prev => {
+        const next = { ...prev, ...results };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(next));
+        return next;
+      });
+      
+      if (!isSilent) setLoadingProgress(100);
     } catch (err: any) {
       console.error("Sync data failed:", err);
     } finally {
       setLoadingOffsets(prev => prev.filter(o => !offsets.includes(o)));
-      if (!isBackground) setTimeout(() => setLoading(false), 300);
+      if (!isSilent) setTimeout(() => setLoading(false), 300);
     }
-  }, []);
+  }, [pulseDataMap]);
 
   useEffect(() => {
     if (!initialSyncStarted.current) {
       initialSyncStarted.current = true;
-      syncData(settings, [0]).then(() => {
+      
+      // STAGGERED LOAD: 
+      // 1. Immediate refresh for today (silent if we have cache)
+      syncData(settings, [0], !!pulseDataMap[0]).then(() => {
+        // 2. Background refresh for rest of week
         syncData(settings, [1, 2, 3], true).then(() => {
           syncData(settings, [4, 5, 6], true);
         });
       });
     }
-  }, [syncData, settings]);
+  }, [syncData, settings, pulseDataMap]);
 
   const handleSave = async () => {
-    setLoadingStatus("Optimizing Commute Parameters...");
+    setLoadingStatus("Optimizing Parameters...");
     setLoading(true);
     let roadDistance = editSettings.roadDistance;
     const locationChanged = editSettings.homeLocation !== settings.homeLocation || editSettings.workLocation !== settings.workLocation;
+    const aiToggled = editSettings.disableAI !== settings.disableAI;
 
     if (locationChanged) {
       try {
@@ -163,8 +204,10 @@ const App: React.FC = () => {
     localStorage.setItem('velo_settings', JSON.stringify(updated));
     setIsSettingsOpen(false);
 
-    if (locationChanged || lastApiErrorType !== null) { 
+    // Clear cache on location change
+    if (locationChanged || aiToggled) { 
       setPulseDataMap({});
+      localStorage.removeItem(CACHE_KEY);
       syncData(updated, [0]).then(() => {
         syncData(updated, [1, 2, 3], true).then(() => {
           syncData(updated, [4, 5, 6], true);
@@ -227,7 +270,7 @@ const App: React.FC = () => {
       dateLabel: formatDateLabel(config.offset),
       targetDate,
       isDummy: dayPulse?.isDummy, 
-      isSynthesized: dayPulse?.isSynthesized || false,
+      isSynthesized: dayPulse?.isEnhanced || false,
     };
   }, [commuteSequence.primary, pulseDataMap, settings, t]);
 
@@ -243,7 +286,7 @@ const App: React.FC = () => {
       condition: dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null,
       dateLabel: formatDateLabel(config.offset),
       isDummy: dayPulse?.isDummy, 
-      isSynthesized: dayPulse?.isSynthesized || false,
+      isSynthesized: dayPulse?.isEnhanced || false,
     };
   }, [commuteSequence.secondary, pulseDataMap, settings, t]);
 
@@ -300,23 +343,51 @@ const App: React.FC = () => {
     );
   };
 
+  // Helper to split date label for 2-line display
+  const dateParts = useMemo(() => {
+    const full = formatDateLabel(selectedDateOffset); // e.g. "TUE 30 DEC"
+    const split = full.split(' ');
+    return {
+      day: split[0],
+      date: split.slice(1).join(' ')
+    };
+  }, [selectedDateOffset]);
+
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <header className="flex-none px-6 py-4 flex items-center justify-between z-50">
         <div className="flex items-center gap-3">
           <div className="flex flex-col">
-            <h1 className="text-xl font-black tracking-tight flex flex-col leading-none">
-              <span className="uppercase text-sm tracking-[0.2em] text-slate-500">Commute</span>
-              <span className="text-2xl text-blue-500 italic -mt-1">IQ</span>
+            <h1 className="flex flex-col items-center leading-none text-center select-none">
+              <span className="uppercase text-[14px] font-black tracking-[0.45em] text-slate-500/80 ml-1">Commute</span>
+              <span className="text-3xl text-blue-500 italic font-black -mt-1">IQ</span>
             </h1>
           </div>
         </div>
         
         <div className="flex items-center gap-2">
           <div className="relative">
-            <button onClick={() => setIsCalendarOpen(!isCalendarOpen)} className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'weekly' ? 'bg-blue-600 border-blue-500 text-white' : (isDark ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700' : 'bg-white border-slate-300 text-slate-700 shadow-sm')}`}>
-              {viewMode === 'weekly' ? <LayoutGrid className="w-3 h-3" /> : <Calendar className={`w-3 h-3 ${isDark ? 'text-blue-500/80' : 'text-blue-600'}`} />} 
-              {viewMode === 'weekly' ? "FORECAST" : formatDateLabel(selectedDateOffset).split(',')[0]}
+            <button 
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)} 
+              className={`flex items-center gap-2 px-3 h-12 rounded-xl border text-[8px] font-black uppercase tracking-[0.15em] transition-all ${
+                viewMode === 'weekly' 
+                  ? 'bg-blue-600 border-blue-500 text-white shadow-lg' 
+                  : (isDark 
+                      ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700' 
+                      : 'bg-white border-slate-300 text-slate-700 shadow-sm')
+              }`}
+            >
+              {viewMode === 'weekly' ? <LayoutGrid className="w-3.5 h-3.5" /> : <Calendar className={`w-3.5 h-3.5 ${isDark ? 'text-blue-500/80' : 'text-blue-600'}`} />} 
+              <div className="flex flex-col items-start leading-tight">
+                {viewMode === 'weekly' ? (
+                  <span className="text-[10px] tracking-[0.1em]">FORECAST</span>
+                ) : (
+                  <>
+                    <span className="text-[10px] opacity-70">{dateParts.day}</span>
+                    <span className="text-[9px] -mt-0.5 whitespace-nowrap">{dateParts.date}</span>
+                  </>
+                )}
+              </div>
             </button>
             {isCalendarOpen && (
               <div className={`absolute top-full right-0 mt-2 w-48 border rounded-2xl shadow-2xl p-1 z-[60] animate-in fade-in zoom-in-95 duration-150 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
@@ -330,14 +401,14 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-          <button onClick={() => { setPulseDataMap({}); syncData(settings, [0]).then(() => syncData(settings, [1,2,3], true).then(() => syncData(settings, [4,5,6], true))); }} className={`p-2 border rounded-lg transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-500' : ''}`} />
+          <button onClick={() => { setPulseDataMap({}); localStorage.removeItem(CACHE_KEY); syncData(settings, [0]).then(() => syncData(settings, [1,2,3], true).then(() => syncData(settings, [4,5,6], true))); }} className={`h-12 w-12 flex items-center justify-center border rounded-xl transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
-          <button onClick={() => setIsDataInfoOpen(true)} className={`p-2 border rounded-lg transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
-            <Info className="w-4 h-4" />
+          <button onClick={() => setIsDataInfoOpen(true)} className={`h-12 w-12 flex items-center justify-center border rounded-xl transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
+            <Info className="w-5 h-5" />
           </button>
-          <button onClick={() => { setEditSettings(settings); setHomeQuery(settings.homeLocation); setWorkQuery(settings.workLocation); setIsSettingsOpen(true); }} className={`p-2 border rounded-lg transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
-            <Settings className="w-4 h-4" />
+          <button onClick={() => { setEditSettings(settings); setHomeQuery(settings.homeLocation); setWorkQuery(settings.workLocation); setIsSettingsOpen(true); }} className={`h-12 w-12 flex items-center justify-center border rounded-xl transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
+            <SettingsIcon className="w-5 h-5" />
           </button>
         </div>
       </header>
@@ -346,7 +417,7 @@ const App: React.FC = () => {
         {loading && <div className="absolute top-0 left-0 w-full px-6 z-50"><LoadingVisual progress={loadingProgress} status={loadingStatus} theme={settings.theme} /></div>}
         
         {viewMode === 'daily' ? (
-          <div className={`flex flex-col gap-4 h-full overflow-hidden transition-opacity duration-300 ${loading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+          <div className="flex flex-col gap-4 h-full overflow-hidden">
             <div className="flex-1 min-h-0">
               <WeatherCard {...primaryData} distance={displayedDistance} safetyScore={primaryData.score} theme={settings.theme} />
             </div>
@@ -355,7 +426,7 @@ const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 min-h-0 overflow-y-auto hide-scrollbar transition-opacity duration-300 ${loading ? 'opacity-40' : 'opacity-100'}`}>
+          <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
             <WeeklyForecast 
               pulseDataMap={pulseDataMap} 
               loadingOffsets={loadingOffsets}
@@ -367,119 +438,136 @@ const App: React.FC = () => {
       </main>
 
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 overflow-y-auto">
-          <div className={`w-full max-w-md rounded-[2.5rem] border p-8 shadow-2xl space-y-6 my-auto transition-all ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'}`}>
-            <div className="flex items-center justify-between">
-              <h2 className={`text-xl font-bold uppercase tracking-tight flex items-center gap-3 ${isDark ? 'text-white' : 'text-slate-950'}`}><Settings className="text-blue-600 w-5 h-5" /> {t.settings}</h2>
-              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-500 hover:text-blue-600 transition-colors">✕</button>
+        <div className="fixed inset-0 z-[100] bg-[#05070a] flex flex-col animate-in fade-in duration-300 overflow-y-auto hide-scrollbar">
+          <div className={`flex-1 max-w-lg mx-auto w-full flex flex-col p-4 space-y-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center gap-2">
+                <SettingsIcon className="text-blue-500 w-5 h-5" />
+                <h2 className="text-xl font-black uppercase tracking-tighter">{t.settings}</h2>
+              </div>
+              <button onClick={() => setIsSettingsOpen(false)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors active:scale-90">
+                <X className="w-6 h-6 text-slate-500" />
+              </button>
             </div>
             
-            <div className="space-y-6">
-              <div className={`p-5 rounded-[2rem] border space-y-4 ${isDark ? 'bg-slate-800/40 border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
-                <div className="flex items-center gap-2 px-1">
-                  <Globe className="w-3 h-3 text-blue-600" />
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{t.preferences}</label>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <span className={`text-[9px] font-bold uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t.theme}</span>
-                    <div className={`flex p-1 rounded-xl ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
-                      <button onClick={() => setEditSettings({...editSettings, theme: 'light'})} className={`flex-1 flex justify-center py-1.5 rounded-lg transition-all ${editSettings.theme === 'light' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500'}`}><Sun className="w-4 h-4" /></button>
-                      <button onClick={() => setEditSettings({...editSettings, theme: 'dark'})} className={`flex-1 flex justify-center py-1.5 rounded-lg transition-all ${editSettings.theme === 'dark' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500'}`}><Moon className="w-4 h-4" /></button>
+            <div className="flex flex-col gap-2.5">
+              
+              {/* AI INTELLIGENCE COMMAND CENTER - TOP BOX (MORE COMPACT) */}
+              <div className={`p-4 rounded-[1.5rem] border transition-all duration-500 shadow-xl ${!editSettings.disableAI ? 'bg-blue-600/10 border-blue-500/40' : 'bg-slate-900 border-slate-800'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl shadow-md ${!editSettings.disableAI ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-600'}`}>
+                      <Brain className="w-5 h-5" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-500 leading-none mb-1">{t.aiInsights}</span>
+                      <span className="text-sm font-bold tracking-tight">
+                        {!editSettings.disableAI ? 'Full Intelligence' : 'Performance Only'}
+                      </span>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <span className={`text-[9px] font-bold uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t.language}</span>
-                    <div className={`flex p-1 rounded-xl ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
-                      {LANGUAGES.map(lang => (
-                        <button key={lang.code} onClick={() => setEditSettings({...editSettings, language: lang.code})} className={`flex-1 py-1 rounded-lg text-[10px] font-black transition-all ${editSettings.language === lang.code ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500'}`}>{lang.code.toUpperCase()}</button>
-                      ))}
-                    </div>
+                  <button 
+                    onClick={() => setEditSettings({...editSettings, disableAI: !editSettings.disableAI})}
+                    className={`w-12 h-6 rounded-full relative transition-all duration-300 shadow-inner overflow-hidden ${!editSettings.disableAI ? 'bg-blue-600' : 'bg-slate-800'}`}
+                  >
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-lg transition-all duration-500 transform ${!editSettings.disableAI ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* PREFERENCES GRID (MORE COMPACT) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-[1.25rem] border bg-slate-900/40 border-white/5">
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <Sun className="w-3 h-3 text-slate-500" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{t.theme}</span>
+                  </div>
+                  <div className="flex p-1 rounded-xl bg-slate-950 border border-white/5">
+                    <button onClick={() => setEditSettings({...editSettings, theme: 'light'})} className={`flex-1 flex justify-center py-1.5 rounded-lg transition-all ${editSettings.theme === 'light' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}><Sun className="w-4 h-4" /></button>
+                    <button onClick={() => setEditSettings({...editSettings, theme: 'dark'})} className={`flex-1 flex justify-center py-1.5 rounded-lg transition-all ${editSettings.theme === 'dark' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}><Moon className="w-4 h-4" /></button>
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-[1.25rem] border bg-slate-900/40 border-white/5">
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <Globe className="w-3 h-3 text-slate-500" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{t.language}</span>
+                  </div>
+                  <div className="flex p-1 rounded-xl bg-slate-950 border border-white/5">
+                    {['en', 'fr', 'nl'].map(lang => (
+                      <button key={lang} onClick={() => setEditSettings({...editSettings, language: lang as Language})} className={`flex-1 py-1.5 text-[8px] font-black rounded-lg transition-all ${editSettings.language === lang ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}>{lang.toUpperCase()}</button>
+                    ))}
                   </div>
                 </div>
               </div>
 
+              {/* LOCATION CARDS (HIGH DENSITY) */}
               {(['home', 'work'] as const).map((type) => {
                 const isHome = type === 'home';
                 const query = isHome ? homeQuery : workQuery;
                 const setQuery = isHome ? setHomeQuery : setWorkQuery;
+                const suggestions = isHome ? homeSuggestions : workSuggestions;
                 const showSuggestions = isHome ? showHomeSuggestions : showWorkSuggestions;
                 const setShowSuggestions = isHome ? setShowHomeSuggestions : setShowWorkSuggestions;
-                const suggestions = isHome ? homeSuggestions : workSuggestions;
 
                 return (
-                  <div key={type} className={`space-y-3 p-5 rounded-[2rem] border relative ${isDark ? 'bg-slate-800/40 border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
-                    <div className="flex items-center justify-between px-1">
+                  <div key={type} className="p-4 rounded-[1.75rem] border bg-slate-900/30 border-white/5 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                         <MapPin className="w-3 h-3 text-blue-600" />
-                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{isHome ? t.home : t.work}</label>
+                         <MapPin className="w-4 h-4 text-blue-500" />
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{isHome ? t.home : t.work}</label>
                       </div>
                     </div>
                     
-                    <div className="relative">
-                      <input 
-                        type="text" 
-                        value={query} 
-                        onFocus={() => setShowSuggestions(true)}
-                        onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
-                        placeholder={`Start typing Belgian city...`}
-                        className={`w-full border rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-600 transition-all pr-12 ${isDark ? 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-600' : 'bg-white border-slate-300 shadow-sm placeholder:text-slate-400'}`} 
-                      />
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input 
+                          type="text" 
+                          value={query} 
+                          onFocus={() => setShowSuggestions(true)}
+                          onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
+                          placeholder={`Locality...`}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:border-blue-600 transition-all shadow-inner" 
+                        />
+                        {showSuggestions && suggestions.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-2 rounded-xl border border-slate-800 bg-slate-900 shadow-2xl z-[70] overflow-hidden backdrop-blur-xl">
+                            {suggestions.map(city => (
+                              <button key={city} onClick={() => selectSuggestion(type, city)} className="w-full px-4 py-3 text-left text-xs font-bold transition-all border-b border-white/5 last:border-0 hover:bg-blue-600 hover:text-white">{city}</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button 
                         onClick={() => handleResolve(type)} 
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors shadow-lg shadow-blue-600/20"
+                        className="p-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-95 flex-none"
                       >
                         {resolving === type ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Navigation className="w-4 h-4 text-white" />}
                       </button>
-
-                      {showSuggestions && suggestions.length > 0 && (
-                        <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-2xl z-[70] overflow-hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-                          <div className={`px-4 py-2 text-[8px] font-black uppercase tracking-widest border-b ${isDark ? 'text-slate-600 border-slate-800' : 'text-slate-400 border-slate-100'}`}>Quick Select (Local)</div>
-                          {suggestions.map(city => (
-                            <button 
-                              key={city} 
-                              onClick={() => selectSuggestion(type, city)}
-                              className={`w-full px-4 py-3 text-left text-xs font-semibold flex items-center justify-between group transition-colors ${isDark ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}
-                            >
-                              <span>{city}</span>
-                              <ChevronDown className="w-3 h-3 -rotate-90 opacity-40 group-hover:opacity-100 transition-all" />
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
-                    <div className={`mt-4 pt-3 border-t border-dashed ${isDark ? 'border-white/10' : 'border-slate-200'} flex items-center justify-between`}>
-                       <div className="flex items-center gap-2">
-                          <Clock className={`w-3 h-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{isHome ? 'Morning' : 'Evening'} Window</span>
-                       </div>
-                       <div className="flex items-center gap-2">
-                          <input 
-                            type="time" 
-                            value={isHome ? editSettings.morningWindow[0] : editSettings.eveningWindow[0]}
-                            onChange={e => {
-                                const val = e.target.value;
-                                setEditSettings(prev => ({
-                                    ...prev, 
-                                    [isHome ? 'morningWindow' : 'eveningWindow']: [val, isHome ? prev.morningWindow[1] : prev.eveningWindow[1]]
-                                }))
-                            }}
-                            className={`bg-transparent text-xs font-bold focus:outline-none text-right w-16 ${isDark ? 'text-white' : 'text-slate-700'}`}
-                          />
-                          <span className="text-slate-500">-</span>
-                           <input 
-                            type="time" 
-                            value={isHome ? editSettings.morningWindow[1] : editSettings.eveningWindow[1]}
-                            onChange={e => {
-                                const val = e.target.value;
-                                setEditSettings(prev => ({
-                                    ...prev, 
-                                    [isHome ? 'morningWindow' : 'eveningWindow']: [isHome ? prev.morningWindow[0] : prev.eveningWindow[0], val]
-                                }))
-                            }}
-                            className={`bg-transparent text-xs font-bold focus:outline-none w-16 ${isDark ? 'text-white' : 'text-slate-700'}`}
-                          />
+                    <div className="flex items-center gap-3">
+                       <Clock className="w-3.5 h-3.5 text-blue-500 flex-none" />
+                       <div className="flex-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                          <div className="bg-slate-950 border border-white/5 rounded-lg px-2 py-1.5 flex flex-col items-center">
+                            <span className="text-[6px] font-black uppercase tracking-widest text-slate-600 leading-none mb-1">In</span>
+                            <input 
+                              type="time" 
+                              value={isHome ? editSettings.morningWindow[0] : editSettings.eveningWindow[0]}
+                              onChange={e => setEditSettings(prev => ({...prev, [isHome ? 'morningWindow' : 'eveningWindow']: [e.target.value, prev[isHome ? 'morningWindow' : 'eveningWindow'][1]]}))}
+                              className="bg-transparent text-xs font-bold font-mono outline-none text-center text-white leading-none appearance-none"
+                            />
+                          </div>
+                          <ArrowRight className="w-3 h-3 text-slate-700" />
+                          <div className="bg-slate-950 border border-white/5 rounded-lg px-2 py-1.5 flex flex-col items-center">
+                            <span className="text-[6px] font-black uppercase tracking-widest text-slate-600 leading-none mb-1">Out</span>
+                            <input 
+                              type="time" 
+                              value={isHome ? editSettings.morningWindow[1] : editSettings.eveningWindow[1]}
+                              onChange={e => setEditSettings(prev => ({...prev, [isHome ? 'morningWindow' : 'eveningWindow']: [prev[isHome ? 'morningWindow' : 'eveningWindow'][0], e.target.value]}))}
+                              className="bg-transparent text-xs font-bold font-mono outline-none text-center text-white leading-none appearance-none"
+                            />
+                          </div>
                        </div>
                     </div>
                   </div>
@@ -487,9 +575,20 @@ const App: React.FC = () => {
               })}
             </div>
 
-            <div className="flex gap-3 pt-4">
-              <button onClick={() => setIsSettingsOpen(false)} className={`flex-1 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] transition-all ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>{t.cancel}</button>
-              <button onClick={handleSave} className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-lg shadow-blue-500/20 transition-all text-white">{t.apply}</button>
+            {/* ACTION FOOTER (MORE COMPACT) */}
+            <div className="pt-2 pb-6 flex flex-col gap-2 flex-none">
+              <button 
+                onClick={handleSave} 
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-600/20 transition-all text-white active:scale-95 flex items-center justify-center gap-2"
+              >
+                {t.apply}
+              </button>
+              <button 
+                onClick={() => setIsSettingsOpen(false)} 
+                className="w-full py-3 rounded-2xl font-black uppercase text-[10px] tracking-[0.15em] transition-all active:scale-95 bg-slate-900 border border-white/5 text-slate-500 hover:text-white"
+              >
+                {t.cancel}
+              </button>
             </div>
           </div>
         </div>

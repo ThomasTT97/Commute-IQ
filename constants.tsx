@@ -82,7 +82,8 @@ export const DEFAULT_SETTINGS: CommuteSettings = {
   morningWindow: ["07:30", "09:00"],
   eveningWindow: ["17:00", "18:30"],
   language: 'en',
-  theme: 'dark'
+  theme: 'dark',
+  disableAI: false
 };
 
 export const LANGUAGES: { code: Language; label: string; flag: string }[] = [
@@ -98,7 +99,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     evening: 'Evening Return',
     tomorrow: 'Tomorrow',
     details: 'Analysis',
-    settings: 'Commute Config',
+    settings: 'Settings',
     update: 'Update Pulse',
     cancel: 'Cancel',
     home: 'Home',
@@ -117,6 +118,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     theme: 'Theme',
     apply: 'Apply Changes',
     dataInsights: 'Information',
+    aiInsights: 'AI Insights',
+    fasterLoading: 'Faster',
     purposeTitle: 'Purpose of Commute IQ',
     purposeContent: 'Commute IQ is a professional cycling intelligence dashboard designed to optimize your safety and transit efficiency. By analyzing real-time atmospheric data, it helps you make informed decisions on gear, riding style, and timing.',
     commuteScore: 'How the Score is Calculated',
@@ -136,7 +139,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     evening: 'Retour Soir',
     tomorrow: 'Demain',
     details: 'Analyse',
-    settings: 'Config. Trajet',
+    settings: 'Réglages',
     update: 'Mettre à Jour',
     cancel: 'Annuler',
     home: 'Accueil',
@@ -155,6 +158,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     theme: 'Thème',
     apply: 'Appliquer',
     dataInsights: 'Informations',
+    aiInsights: 'Conseils IA',
+    fasterLoading: 'Rapide',
     purposeTitle: 'But de Commute IQ',
     purposeContent: 'Commute IQ est un tableau de bord d\'intelligence cycliste conçu pour optimiser votre sécurité et l\'efficacité de vos trajets. En analysant les données atmosphériques, il vous aide à choisir votre équipement et votre style de conduite.',
     commuteScore: 'Calcul du Score',
@@ -174,7 +179,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     evening: 'Avondrit Terug',
     tomorrow: 'Morgen',
     details: 'Analyse',
-    settings: 'Rit Instellingen',
+    settings: 'Instellingen',
     update: 'Update Status',
     cancel: 'Annuleren',
     home: 'Home',
@@ -193,6 +198,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     theme: 'Thema',
     apply: 'Opslaan',
     dataInsights: 'Informatie',
+    aiInsights: 'AI Inzichten',
+    fasterLoading: 'Snel',
     purposeTitle: 'Doel van Commute IQ',
     purposeContent: 'Commute IQ is een professioneel dashboard voor fietsintelligentie, ontworpen om uw veiligheid en efficiëntie te verbeteren door real-time atmosferische gegevens te vertalen naar praktisch advies.',
     commuteScore: 'Berekening van de Score',

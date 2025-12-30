@@ -18,7 +18,6 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          // Prevent build failure if logo.png is missing
           globPatterns: ['**/*.{js,css,html,ico,svg}'] 
         },
         manifest: {
