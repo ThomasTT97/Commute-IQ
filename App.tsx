@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, Language } from './types';
 import { DEFAULT_SETTINGS, TRANSLATIONS, LANGUAGES, BELGIAN_CITIES } from './constants';
@@ -20,8 +18,8 @@ import {
   MapPin,
   ChevronDown,
   Info,
-  Database,
-  Clock // Imported Clock icon
+  Clock,
+  ChevronUp
 } from 'lucide-react';
 
 const ROAD_DETOUR_FACTOR = 1.32;
@@ -57,7 +55,8 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('daily');
-  const [isDataInfoOpen, setIsDataInfoOpen] = useState(false); // New state for data info page
+  const [isDataInfoOpen, setIsDataInfoOpen] = useState(false);
+  const [expandedTopic, setExpandedTopic] = useState<string | null>('purpose');
 
   const nextCommuteInfo = useMemo(() => {
     const now = new Date();
@@ -129,7 +128,6 @@ const App: React.FC = () => {
       if (!isBackground) setLoadingProgress(100);
     } catch (err: any) {
       console.error("Sync data failed:", err);
-      // lastApiErrorMessage and lastApiErrorType are set by geminiService
     } finally {
       setLoadingOffsets(prev => prev.filter(o => !offsets.includes(o)));
       if (!isBackground) setTimeout(() => setLoading(false), 300);
@@ -157,7 +155,7 @@ const App: React.FC = () => {
       try {
         const dist = await getCommuteRoadDistance(editSettings.homeLocation, editSettings.workLocation);
         if (dist) roadDistance = dist;
-      } catch (e) { } // Errors are handled by geminiService, will set lastApiErrorMessage
+      } catch (e) { } 
     }
 
     const updated = { ...editSettings, roadDistance };
@@ -165,7 +163,7 @@ const App: React.FC = () => {
     localStorage.setItem('velo_settings', JSON.stringify(updated));
     setIsSettingsOpen(false);
 
-    if (locationChanged || lastApiErrorType !== null) { // Force full refresh if location changed or any API error occurred
+    if (locationChanged || lastApiErrorType !== null) { 
       setPulseDataMap({});
       syncData(updated, [0]).then(() => {
         syncData(updated, [1, 2, 3], true).then(() => {
@@ -193,7 +191,6 @@ const App: React.FC = () => {
       else { setWorkQuery(result.address); setShowWorkSuggestions(false); }
     } catch (e: any) {
       console.error("Address resolution failed:", e);
-      // lastApiErrorMessage and lastApiErrorType are set by geminiService
     } finally {
       setResolving(null);
     }
@@ -250,41 +247,67 @@ const App: React.FC = () => {
     };
   }, [commuteSequence.secondary, pulseDataMap, settings, t]);
 
-  const DataInfoContent: React.FC = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className={`text-xl font-bold uppercase tracking-tight flex items-center gap-3 ${isDark ? 'text-white' : 'text-slate-950'}`}><Database className="text-blue-600 w-5 h-5" /> {t.dataInsights}</h2>
-        <button onClick={() => setIsDataInfoOpen(false)} className="text-slate-500 hover:text-blue-600 transition-colors">✕</button>
-      </div>
-      <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t.dataInsightsDesc}</p>
-      
-      {/* Shortened list focusing on Inference vs Telemetry */}
-      {[
-        { title: t.commuteScore, content: t.commuteScoreContent },
-        { title: t.generalSources, content: t.generalSourcesContent },
-        { title: t.iceRisk, content: t.iceRiskContent },
-        { title: t.surfaceCondition, content: t.surfaceConditionContent },
-        { title: t.distanceCalculation, content: t.distanceCalculationContent },
-      ].map((section, index) => (
-        <div key={index} className={`p-5 rounded-[2rem] border space-y-2 ${isDark ? 'bg-slate-800/40 border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
-          <h3 className={`text-sm font-bold uppercase tracking-wide ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{section.title}</h3>
-          <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{section.content}</p>
-        </div>
-      ))}
+  const DataInfoContent: React.FC = () => {
+    const sections = [
+      { id: 'purpose', title: t.purposeTitle, content: t.purposeContent },
+      { id: 'score', title: t.commuteScore, content: t.commuteScoreContent },
+      { id: 'indicators', title: t.generalSources, content: t.generalSourcesContent }
+    ];
 
-      <div className="flex gap-3 pt-4">
-        <button onClick={() => setIsDataInfoOpen(false)} className={`flex-1 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] transition-all ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>Close</button>
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className={`text-xl font-bold uppercase tracking-tight flex items-center gap-3 ${isDark ? 'text-white' : 'text-slate-950'}`}>
+            <Info className="text-blue-600 w-5 h-5" /> {t.dataInsights}
+          </h2>
+          <button onClick={() => setIsDataInfoOpen(false)} className="text-slate-500 hover:text-blue-600 transition-colors">✕</button>
+        </div>
+        
+        <div className="space-y-3">
+          {sections.map((section) => {
+            const isExpanded = expandedTopic === section.id;
+            return (
+              <div 
+                key={section.id} 
+                className={`rounded-[1.5rem] border overflow-hidden transition-all duration-300 ${isDark ? 'bg-slate-800/40 border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'}`}
+              >
+                <button 
+                  onClick={() => setExpandedTopic(isExpanded ? null : section.id)}
+                  className="w-full px-5 py-4 flex items-center justify-between text-left group"
+                >
+                  <h3 className={`text-xs font-bold uppercase tracking-wide transition-colors ${isExpanded ? (isDark ? 'text-blue-400' : 'text-blue-600') : (isDark ? 'text-slate-300' : 'text-slate-700')} group-hover:text-blue-500`}>
+                    {section.title}
+                  </h3>
+                  {isExpanded ? <ChevronUp className="w-4 h-4 text-blue-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                </button>
+                
+                <div className={`transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'} overflow-hidden`}>
+                  <div className={`px-5 pb-5 pt-0 text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    {section.content}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="pt-6">
+          <button onClick={() => setIsDataInfoOpen(false)} className={`w-full py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] transition-all ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>
+            Close
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <header className="flex-none px-6 py-4 flex items-center justify-between z-50">
         <div className="flex items-center gap-3">
           <div className="flex flex-col">
-            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-              Commute<span className="text-blue-500">IQ</span>
+            <h1 className="text-xl font-black tracking-tight flex flex-col leading-none">
+              <span className="uppercase text-sm tracking-[0.2em] text-slate-500">Commute</span>
+              <span className="text-2xl text-blue-500 italic -mt-1">IQ</span>
             </h1>
           </div>
         </div>
@@ -311,7 +334,7 @@ const App: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
           <button onClick={() => setIsDataInfoOpen(true)} className={`p-2 border rounded-lg transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
-            <Database className="w-4 h-4" />
+            <Info className="w-4 h-4" />
           </button>
           <button onClick={() => { setEditSettings(settings); setHomeQuery(settings.homeLocation); setWorkQuery(settings.workLocation); setIsSettingsOpen(true); }} className={`p-2 border rounded-lg transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-600 shadow-sm'}`}>
             <Settings className="w-4 h-4" />
@@ -390,14 +413,6 @@ const App: React.FC = () => {
                       <div className="flex items-center gap-2">
                          <MapPin className="w-3 h-3 text-blue-600" />
                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{isHome ? t.home : t.work}</label>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {editSettings[isHome ? 'homeCoords' : 'workCoords'] && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                            <Info className="w-2.5 h-2.5 text-emerald-500" />
-                            <span className="text-[7px] font-black text-emerald-500 uppercase">Cached</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                     
