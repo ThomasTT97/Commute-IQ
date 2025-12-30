@@ -1,6 +1,5 @@
-
 import React, { useMemo } from 'react';
-import { ChevronRight, AlertTriangle, Droplets, ShieldCheck, Database, Loader2 } from 'lucide-react';
+import { ChevronRight, AlertTriangle, Droplets, ShieldCheck, Info, Loader2 } from 'lucide-react';
 
 interface WeeklyForecastProps {
   pulseDataMap: Record<number, any>;
@@ -52,7 +51,7 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, lo
         <div className={`flex flex-col gap-2 p-4 rounded-3xl border transition-all duration-500 animate-in fade-in slide-in-from-top-2 ${isDark ? 'bg-slate-900/80 border-white/20' : 'bg-white border-slate-200 shadow-sm'}`}>
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center gap-2">
-               <Database className={`w-3 h-3 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+               <Info className={`w-3 h-3 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
                <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-slate-200' : 'text-slate-600'}`}>Syncing Forecast</span>
             </div>
             <span className={`text-[10px] font-mono font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(progress)}%</span>
