@@ -201,7 +201,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   }
 
   return (
-    <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-6 sm:pb-8 shadow-2xl transition-all ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white'}`}>
+    <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-6 sm:pb-8 shadow-2xl transition-all ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
       <div className="flex-none flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">
         <div className="flex items-center gap-2">
           <Calendar className="w-3.5 h-3.5 text-blue-500/50" />

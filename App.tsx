@@ -229,7 +229,13 @@ const App: React.FC = () => {
         
         const slice: any = {};
         Object.keys(raw.hourly).forEach(k => {
-          if (Array.isArray(raw.hourly[k])) slice[k] = raw.hourly[k].slice(startIndex, endIndex + 1);
+          // Ensure we only slice if the raw data for this key is an array and within bounds
+          if (Array.isArray(raw.hourly[k]) && startIndex <= endIndex && endIndex < raw.hourly[k].length) {
+            slice[k] = raw.hourly[k].slice(startIndex, endIndex + 1);
+          } else if (Array.isArray(raw.hourly[k]) && startIndex > endIndex) {
+            // Handle cases where the window might span across midnight for single day view (unlikely with 3-21h range, but defensive)
+            slice[k] = []; 
+          }
         });
 
         const pastTemps = (raw.hourly.temperature_2m || []).slice(Math.max(0, startIndex - 6), startIndex);
@@ -495,9 +501,9 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3 max-w-xl mx-auto w-full min-h-0 overflow-hidden relative">
+      <main className="flex-1 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3 max-w-xl mx-auto w-full min-h-0 overflow-y-auto relative">
         {viewMode === 'daily' && (
-          <div className="flex flex-col gap-4 h-full overflow-hidden">
+          <div className="flex flex-col gap-4">
             <div className="flex-[6] min-h-0">
               <WeatherCard 
                 {...primaryData} 
@@ -667,7 +673,7 @@ const App: React.FC = () => {
       {/* Settings Modal */}
       {isSettingsOpen && (
         <div className={`fixed inset-0 z-[200] flex flex-col animate-in fade-in duration-300 ${isDark ? 'bg-[#05070a]' : 'bg-white'}`}>
-          <div className="flex-1 max-w-md mx-auto w-full flex flex-col px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))]">
+          <div className="flex-1 max-w-md mx-auto w-full flex flex-col px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between pb-1.5">
               <h2 className={`text-xl font-bold uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Settings</h2>
               <button onClick={() => setIsSettingsOpen(false)} className={`p-2 rounded-full ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}><X className={`w-5 h-5 ${isDark ? 'text-white' : 'text-slate-900'}`} /></button>
@@ -840,7 +846,7 @@ const App: React.FC = () => {
       {isInfoOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={() => setIsInfoOpen(false)} />
-          <div className={`relative w-full max-sm border rounded-[2rem] flex flex-col shadow-3xl p-6 animate-in zoom-in-95 duration-200 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
+          <div className={`relative w-full max-sm border rounded-[2rem] flex flex-col shadow-3xl px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] animate-in zoom-in-95 duration-200 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2.5">
                 <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
