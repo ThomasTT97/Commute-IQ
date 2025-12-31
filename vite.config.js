@@ -31,9 +31,16 @@ export default defineConfig(({ mode }) => {
           start_url: "/",
           icons: [
             {
-              "src": "https://cdn-icons-png.flaticon.com/512/3112/3112946.png",
+              "src": "/logo.png",
               "sizes": "192x192",
-              "type": "image/png"
+              "type": "image/png",
+              "purpose": "any maskable"
+            },
+            {
+              "src": "/logo.png",
+              "sizes": "512x512",
+              "type": "image/png",
+              "purpose": "any maskable"
             }
           ]
         }
