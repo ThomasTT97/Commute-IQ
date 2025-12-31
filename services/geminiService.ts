@@ -1,8 +1,8 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { CommuteSettings, WeatherCondition, Language, Coordinates } from "../types";
+import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction } from "../types";
 import { BELGIAN_CITIES } from "../constants";
 
-// Track the last error for UI reporting
 export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
 
@@ -11,7 +11,40 @@ const MODEL_CHAIN = [
   "gemini-flash-lite-latest"
 ];
 
-// Helper to extract JSON from text output that might be wrapped in markdown
+export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Weather telemetry failed");
+  return res.json();
+};
+
+export const sliceWeatherData = (hourly: any, window: [string, string], offset: number): any => {
+  const startHour = parseInt(window[0].split(':')[0]);
+  const endHour = parseInt(window[1].split(':')[0]);
+  const dayStartIdx = offset * 24;
+  
+  const startIndex = dayStartIdx + startHour;
+  const endIndex = dayStartIdx + endHour;
+  
+  const slice: any = {};
+  Object.keys(hourly).forEach(key => {
+    if (Array.isArray(hourly[key])) {
+      slice[key] = hourly[key].slice(startIndex, endIndex + 1);
+    }
+  });
+  return slice;
+};
+
+export const getStandardizedAdvice = (w: WeatherCondition): string => {
+  if (w.iceRisk) return "High ice risk detected. Surfaces may be treacherous. Consider public transport or extreme caution.";
+  if (w.precipitation > 2) return "Heavy rain active. Expect low visibility and significantly reduced traction.";
+  if (w.precipitation > 0) return "Light rain present. Road surfaces are wet and slippery.";
+  if (w.windSpeed > 40) return "Dangerous wind speeds. High risk of debris and lateral instability.";
+  if (w.headwindImpact > 30) return "Significant headwind detected. Expect increased physical exertion.";
+  if (w.temp < 0) return "Freezing temperatures. Ensure adequate thermal protection.";
+  return "Standard atmospheric conditions. Maintain normal safety protocols.";
+};
+
 const extractJson = (text?: string): any => {
   if (!text) return {};
   const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -99,22 +132,45 @@ const resolveCondition = (code: number, windSpeed: number, precip: number): Weat
   return 'Cloudy';
 };
 
-export const calculateSegmentScore = (w: WeatherCondition): number => {
-  let score = 100;
-  if (w.iceRisk) score -= 70; 
-  if (w.precipitation > 0) {
-    score -= 20;
-    score -= Math.min(20, w.precipitation * 4);
-  } else if (w.wetSurfaceChance > 50) {
-    score -= 10;
+export const getScoreBreakdown = (w: Partial<WeatherCondition>): ScoreDeduction[] => {
+  const items: ScoreDeduction[] = [];
+  
+  if (w.iceRisk) {
+    items.push({ label: "Critical Ice Risk", val: -70 });
   }
-  if (w.windSpeed > 15) score -= (w.windSpeed - 15) * 1.5;
-  if (w.headwindImpact > 20) score -= (w.headwindImpact / 4); 
-  else if (w.headwindImpact < -20) score += 5;
-  if (w.temp < 5) score -= (5 - w.temp) * 2;
-  else if (w.temp > 28) score -= (w.temp - 28) * 2;
-  if (w.isDark) score -= 5;
-  return Math.max(0, Math.min(100, Math.round(score)));
+  
+  if ((w.precipitation || 0) > 0) {
+    const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 4);
+    items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
+  } else if ((w.wetSurfaceChance || 0) > 50) {
+    items.push({ label: "Wet Roads", val: -10 });
+  }
+  
+  if ((w.windSpeed || 0) > 15) {
+    const windDeduction = ((w.windSpeed || 0) - 15) * 1.5;
+    items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
+  }
+  
+  if ((w.headwindImpact || 0) > 20) {
+    const headwindDeduction = (w.headwindImpact || 0) / 4;
+    items.push({ label: "Headwind Drag", val: -Math.round(headwindDeduction) });
+  } else if ((w.headwindImpact || 0) < -20) {
+    items.push({ label: "Tailwind Boost", val: 5 });
+  }
+  
+  if ((w.temp || 0) < 5) {
+    const coldDeduction = (5 - (w.temp || 0)) * 2;
+    items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
+  } else if ((w.temp || 0) > 28) {
+    const heatDeduction = ((w.temp || 0) - 28) * 2;
+    items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
+  }
+  
+  if (w.isDark) {
+    items.push({ label: "Darkness / Visibility", val: -5 });
+  }
+  
+  return items;
 };
 
 export const aggregateRawWeather = (
@@ -161,7 +217,6 @@ export const aggregateRawWeather = (
     isDark = startHour < 6 || startHour >= 21; 
   }
 
-  // Last precipitation tracking (look back 12h) - User requested specific format
   let lastPrecipTime = "none";
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
     for (let i = 1; i <= 12; i++) {
@@ -176,13 +231,12 @@ export const aggregateRawWeather = (
     }
   }
 
-  // ENHANCED ICE RISK LOGIC
   const hasMoisture = totalPrecip > 0 || avgHum > 80 || lastPrecipTime !== "none";
   const activeFreezing = minTemp <= 0.5;
   const overnightFreeze = minPastTemp <= 0;
   const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && minTemp <= 4));
 
-  return {
+  const baseWeather: any = {
     temp: parseFloat(avgTemp.toFixed(1)),
     minTemp: parseFloat(minTemp.toFixed(1)),
     maxTemp: parseFloat(maxTemp.toFixed(1)),
@@ -199,49 +253,24 @@ export const aggregateRawWeather = (
     activeFreezing,
     overnightFreeze,
     minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
-    surfaceReason: undefined,
     lastPrecipitationTime: lastPrecipTime,
     precipDuringSession: parseFloat(totalPrecip.toFixed(1))
   };
+
+  const breakdown = getScoreBreakdown(baseWeather);
+  baseWeather.scoreBreakdown = breakdown;
+  const totalDeductions = breakdown.reduce((acc: number, curr: ScoreDeduction) => acc + curr.val, 0);
+  baseWeather.score = Math.max(0, Math.min(100, 100 + totalDeductions));
+  
+  return baseWeather as WeatherCondition;
 };
 
-export const getStandardizedAdvice = (w: WeatherCondition): string => {
-  if (w.iceRisk) return "Ice Style: Stay strictly upright in corners and avoid leaning; use 90% rear braking bias to prevent front-wheel slides.";
-  if (w.precipitation > 4) return "Survival Style: Brake early to clear water film from pads; avoid painted road lines and metal utility covers which act as ice.";
-  if (w.precipitation > 0) return "Cornering Style: Moderate your speed before entering turns; take a wider line with less lean to maximize the tire contact patch.";
-  if (w.windSpeed > 35) return "Gust Style: Maintain a relaxed but firm grip to absorb frame movement; stay tucked and watch for cross-gusts behind buildings.";
-  if (w.headwindImpact > 35) return "Aero Style: Tuck your elbows in and lower your torso; shift to a lower gear to maintain 85+ RPM and preserve leg muscle.";
-  if (w.temp < 2) return "Tactical Style: Test road surface grip in safe straightaways; stay alert for micro-frost in shaded or bridge sections.";
-  if (w.temp > 30) return "Efficiency Style: Moderate your power output to prevent overheating; stick to shaded paths where possible and prioritize hydration.";
-  if (w.isDark) return "Visibility Style: Ride wider in the lane to be seen; assume total motorist invisibility and watch for road debris hidden by shadows.";
-  return "Optimal Style: Maintain a steady, predictable tempo and keep a high visual horizon for smooth integration into traffic flow.";
-};
-
-export const fetchRawWeatherData = async (coords: Coordinates) => {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m&daily=sunrise,sunset&timezone=auto&forecast_days=10`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Weather telemetry offline.");
-  return res.json();
-};
-
-export const sliceWeatherData = (raw: any, window: [string, string], dateOffset: number) => {
-  if (!raw || !raw.time) return {};
-  const startHour = parseInt(window[0].split(':')[0]);
-  const endHour = parseInt(window[1].split(':')[0]);
-  const baseIdx = dateOffset * 24;
-  const startIndex = Math.max(0, baseIdx + startHour);
-  const endIndex = Math.min(raw.time.length - 1, baseIdx + endHour);
-  const sliced: any = {};
-  Object.keys(raw).forEach(key => { 
-    if (Array.isArray(raw[key])) { sliced[key] = raw[key].slice(startIndex, endIndex + 1); }
-  });
-  return sliced;
-};
-
-export const getPulseBatch = async (
+/**
+ * Stage 1: Fast Telemetry Fetching
+ */
+export const getTelemetryBatch = async (
   settings: CommuteSettings, 
-  offsets: number[], 
-  skipAI: boolean = false
+  offsets: number[]
 ): Promise<Record<number, any>> => {
   const home = settings.homeCoords || { lat: 0, lng: 0 };
   const work = settings.workCoords || { lat: 0, lng: 0 };
@@ -253,7 +282,9 @@ export const getPulseBatch = async (
     fetchRawWeatherData(work)
   ]);
 
-  const batchContext = offsets.map(offset => {
+  const batch: Record<number, any> = {};
+
+  offsets.forEach(offset => {
     const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
     const eSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
     
@@ -292,13 +323,14 @@ export const getPulseBatch = async (
       workRaw.hourly.precipitation,
       getAbsoluteIdx(settings.eveningWindow, offset)
     );
+
+    // Apply generic advice immediately so UI isn't empty
+    morning.surfaceReason = getStandardizedAdvice(morning);
+    evening.surfaceReason = getStandardizedAdvice(evening);
     
-    const mScore = calculateSegmentScore(morning);
-    const eScore = calculateSegmentScore(evening);
-    
-    return { 
+    batch[offset] = { 
       offset, 
-      score: Math.min(mScore, eScore), 
+      score: Math.min(morning.score, evening.score), 
       summary: { 
         isWet: (morning.precipitation > 0 || morning.wetSurfaceChance > 50) || (evening.precipitation > 0 || evening.wetSurfaceChance > 50),
         isIcy: morning.iceRisk || evening.iceRisk
@@ -307,48 +339,73 @@ export const getPulseBatch = async (
         morning: { ...morning }, 
         evening: { ...evening } 
       },
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
+      isEnhanced: false
     };
   });
 
-  const result: Record<number, any> = {};
-  batchContext.forEach(ctx => { result[ctx.offset] = ctx; });
+  return batch;
+};
 
-  if (settings.disableAI || skipAI) {
-    batchContext.forEach(ctx => {
-      ctx.weather.morning.surfaceReason = getStandardizedAdvice(ctx.weather.morning);
-      ctx.weather.evening.surfaceReason = getStandardizedAdvice(ctx.weather.evening);
-    });
-    return result;
-  }
+/**
+ * Stage 2: Slower AI Interpretation
+ */
+export const getAIInsights = async (
+  settings: CommuteSettings,
+  telemetryBatch: Record<number, any>
+): Promise<Record<number, { morning: string; evening: string }>> => {
+  const dataToProcess = Object.values(telemetryBatch).map(({offset, weather}) => ({
+    offset, 
+    morning: weather.morning, 
+    evening: weather.evening
+  }));
 
   try {
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
-        contents: `You are a Cycling Transit Intelligence Expert. Generate EXACTLY 1 concise sentence of advice about RIDING STYLE adjustments needed. Language: ${settings.language}. Data: ${JSON.stringify(batchContext.map(({offset, weather}) => ({offset, morning: weather.morning, evening: weather.evening})))}. Return JSON Array: [{ "offset": number, "weather": { "morning": { "surfaceReason": string }, "evening": { "surfaceReason": string } } }]`,
+        contents: `You are a Cycling Transit Intelligence Expert. Generate EXACTLY 1 concise sentence of advice about RIDING STYLE adjustments needed. Language: ${settings.language}. Data: ${JSON.stringify(dataToProcess)}. Return JSON Array: [{ "offset": number, "weather": { "morning": { "surfaceReason": string }, "evening": { "surfaceReason": string } } }]`,
         config: { temperature: 0.4, responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "[]");
     });
 
+    const result: Record<number, { morning: string; evening: string }> = {};
     parsedAIResults.forEach((aiRes: any) => {
-      if (result[aiRes.offset]) {
-        result[aiRes.offset].weather.morning.surfaceReason = aiRes.weather.morning.surfaceReason;
-        result[aiRes.offset].weather.evening.surfaceReason = aiRes.weather.evening.surfaceReason;
-        result[aiRes.offset].isEnhanced = true;
-      }
+      result[aiRes.offset] = {
+        morning: aiRes.weather.morning.surfaceReason,
+        evening: aiRes.weather.evening.surfaceReason
+      };
     });
+    return result;
   } catch (error) {
-    batchContext.forEach(ctx => {
-      if (!ctx.weather.morning.surfaceReason) {
-        ctx.weather.morning.surfaceReason = getStandardizedAdvice(ctx.weather.morning);
-        ctx.weather.evening.surfaceReason = getStandardizedAdvice(ctx.weather.evening);
+    console.error("AI Insight generation failed", error);
+    throw error;
+  }
+};
+
+// Kept for backward compatibility if any components use it directly, 
+// but App.tsx should now call getTelemetryBatch and then getAIInsights separately.
+export const getPulseBatch = async (
+  settings: CommuteSettings, 
+  offsets: number[], 
+  skipAI: boolean = false
+): Promise<Record<number, any>> => {
+  const telemetry = await getTelemetryBatch(settings, offsets);
+  if (settings.disableAI || skipAI) return telemetry;
+
+  try {
+    const insights = await getAIInsights(settings, telemetry);
+    Object.keys(insights).forEach(o => {
+      const offset = Number(o);
+      if (telemetry[offset]) {
+        telemetry[offset].weather.morning.surfaceReason = insights[offset].morning;
+        telemetry[offset].weather.evening.surfaceReason = insights[offset].evening;
+        telemetry[offset].isEnhanced = true;
       }
     });
-  }
-
-  return result;
+  } catch (e) {}
+  return telemetry;
 };
 
 export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {

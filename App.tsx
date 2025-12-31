@@ -1,16 +1,18 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { CommuteSettings, Coordinates, Language, TrainingState, LocationSuggestion } from './types'; 
+import { CommuteSettings, Coordinates, Language, TrainingState, LocationSuggestion, WeatherCondition } from './types'; 
 import { BelgianLocation } from './locations';
 import { DEFAULT_SETTINGS, TRANSLATIONS, BELGIAN_CITIES } from './constants';
 import { BELGIAN_LOCATIONS } from './locations';
 import { WeatherCard } from './components/WeatherCard';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { 
-  getPulseBatch, 
+  getTelemetryBatch,
+  getAIInsights,
   getCommuteRoadDistance, 
   fetchRawWeatherData, 
   aggregateRawWeather, 
-  calculateSegmentScore,
+  // calculateSegmentScore is not exported from geminiService and not used in this file
   getStandardizedAdvice,
   calculateBearing,
   calculateDistance
@@ -35,7 +37,7 @@ import {
   Bike,
   Trophy,
   ArrowLeft,
-  Home, // Import Home icon
+  Home, 
   Navigation,
   MapPin,
   MoveUp
@@ -51,35 +53,28 @@ const getLocality = (address: string): string => {
   return (parts.length > 1 ? (parts.length >= 3 ? parts[1] : parts[0]) : address).replace(/^\d+\s+/, '').toUpperCase();
 };
 
-// Utility function to shuffle an array
-// FIX: Changed from arrow function with generics to regular function with generics to avoid potential parser issues.
 function shuffleArray<T>(array: T[]): T[] {
   let currentIndex: number = array.length; 
   let randomIndex: number;
-  const newArray = [...array]; // Create a shallow copy to avoid mutating original
-  // While there remain elements to shuffle.
+  const newArray = [...array]; 
   while (currentIndex !== 0) {
-    // Pick a remaining element.
     randomIndex = Math.floor(Math.random() * currentIndex);
     currentIndex--;
-    // And swap it with the current element.
     [newArray[currentIndex], newArray[randomIndex]] = [
       newArray[randomIndex], newArray[currentIndex]];
   }
   return newArray;
 };
 
-// FIX: Changed App to a default export and explicitly typed state initializers.
 const App: React.FC = () => {
   const [settings, setSettings] = useState<CommuteSettings>(() => {
     const saved = localStorage.getItem('velo_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-    // FIX: Ensure DEFAULT_SETTINGS type is spread correctly, and handle potential missing coords
     return { 
       ...DEFAULT_SETTINGS, 
       ...parsed,
-      homeCoords: parsed.homeCoords || DEFAULT_SETTINGS.homeCoords, // Ensure coords are present
-      workCoords: parsed.workCoords || DEFAULT_SETTINGS.workCoords, // Ensure coords are present
+      homeCoords: parsed.homeCoords || DEFAULT_SETTINGS.homeCoords,
+      workCoords: parsed.workCoords || DEFAULT_SETTINGS.workCoords,
     };
   });
 
@@ -87,17 +82,17 @@ const App: React.FC = () => {
     const cached = localStorage.getItem(CACHE_KEY);
     if (!cached) return {};
     try {
-      const parsed: Record<number, any> = JSON.parse(cached); // FIX: Explicitly type parsed
+      const parsed: Record<number, any> = JSON.parse(cached);
       const now = Date.now();
-      const filtered: Record<number, any> = {}; // FIX: Explicitly type filtered
+      const filtered: Record<number, any> = {};
       Object.keys(parsed).forEach((k) => {
         const key = Number(k);
-        if (now - (parsed[key]?.lastUpdated || 0) < 24 * 60 * 60 * 1000) { // FIX: Optional chaining for lastUpdated
+        if (now - (parsed[key]?.lastUpdated || 0) < 24 * 60 * 60 * 1000) {
           filtered[key] = parsed[key];
         }
       });
       return filtered;
-    } catch (e: any) { // FIX: Explicitly type 'e' in catch block
+    } catch (e: any) {
       console.error("Failed to parse cached pulse data:", e);
       return {}; 
     }
@@ -109,12 +104,11 @@ const App: React.FC = () => {
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [expandedInfoItem, setExpandedInfoItem] = useState<string | null>(null);
 
-  // Training State
   const [training, setTraining] = useState<TrainingState>(() => {
     const initialSettings: CommuteSettings = localStorage.getItem('velo_settings') ? JSON.parse(localStorage.getItem('velo_settings')!) : DEFAULT_SETTINGS;
     return {
-      location: initialSettings.homeLocation || "Gent", // Default to Gent if homeLocation is not set
-      coords: initialSettings.homeCoords || { lat: 51.0543, lng: 3.7174 }, // Default to Gent coords
+      location: initialSettings.homeLocation || "Gent", 
+      coords: initialSettings.homeCoords || { lat: 51.0543, lng: 3.7174 }, 
       distance: 40,
       dateOffset: 0,
       preferredDirection: 0
@@ -125,17 +119,15 @@ const App: React.FC = () => {
     return initialSettings.homeLocation || "Gent";
   });
   const [showTrainingSuggestions, setShowTrainingSuggestions] = useState(false);
-  const [trainingData, setTrainingData] = useState<any>(null); // FIX: Explicitly typed as any
+  const [trainingData, setTrainingData] = useState<any>(null); 
   const [trainingLoading, setTrainingLoading] = useState(false);
   const [manualStartHour, setManualStartHour] = useState<number | null>(null);
 
-  // Autocomplete state for settings
-  const [homeSearch, setHomeSearch] = useState(settings.homeLocation); // FIX: Initialize with settings value
-  const [workSearch, setWorkSearch] = useState(settings.workLocation); // FIX: Initialize with settings value
+  const [homeSearch, setHomeSearch] = useState(settings.homeLocation);
+  const [workSearch, setWorkSearch] = useState(settings.workLocation);
   const [showHomeSuggestions, setShowHomeSuggestions] = useState(false);
   const [showWorkSuggestions, setShowWorkSuggestions] = useState(false);
 
-  // FIX: Moved getTarget outside useMemo
   const getTarget = useCallback((timeStr: string, addDays = 0) => {
     const [h, m] = timeStr.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + addDays); return d;
@@ -143,24 +135,21 @@ const App: React.FC = () => {
 
   const nextCommuteInfo = useMemo(() => {
     const now = new Date();
-    // FIX: Use the new useCallback getTarget
     if (now < getTarget(settings.morningWindow[1])) return { type: 'morning' as const, offset: 0 };
     if (now < getTarget(settings.eveningWindow[1])) return { type: 'evening' as const, offset: 0 };
     return { type: 'morning' as const, offset: 1 };
-  }, [settings.morningWindow, settings.eveningWindow, getTarget]); // FIX: Add getTarget to dependencies
+  }, [settings.morningWindow, settings.eveningWindow, getTarget]);
 
   const [selectedDateOffset, setSelectedDateOffset] = useState<number>(nextCommuteInfo.offset);
   const [loading, setLoading] = useState(false);
   const [loadingOffsets, setLoadingOffsets] = useState<number[]>([]);
 
-  // Calculate the displayed distance based on settings or crow-fly distance
   const displayedDistance = useMemo(() => {
     if (settings.roadDistance) return settings.roadDistance;
     const crowFly = calculateDistance(settings.homeCoords, settings.workCoords);
     return crowFly * ROAD_DETOUR_FACTOR;
   }, [settings.roadDistance, settings.homeCoords, settings.workCoords]);
 
-  // Determine the sequence of commutes to show (Morning vs Evening)
   const commuteSequence = useMemo(() => {
     const primaryType = nextCommuteInfo.type;
     const primaryOffset = nextCommuteInfo.offset;
@@ -183,57 +172,90 @@ const App: React.FC = () => {
   const t = TRANSLATIONS[settings.language || 'en'];
   const isDark = settings.theme === 'dark';
 
-  const [editSettings, setEditSettings] = useState<CommuteSettings>(settings); // FIX: Initialize with settings state
+  const [editSettings, setEditSettings] = useState<CommuteSettings>(settings); 
   const initialSyncStarted = useRef(false);
 
   useEffect(() => {
-    // FIX: Corrected state setter usage
-    setEditSettings((prevEditSettings: CommuteSettings) => ({ ...prevEditSettings, theme: settings.theme }));
+    setEditSettings((prev: CommuteSettings) => ({ ...prev, theme: settings.theme }));
   }, [settings.theme]);
 
   useEffect(() => {
-    // FIX: Corrected state setter usage
     setHomeSearch(settings.homeLocation);
     setWorkSearch(settings.workLocation);
   }, [settings.homeLocation, settings.workLocation]);
 
-  // Update training location when home location changes in settings
   useEffect(() => {
     if (settings.homeLocation && settings.homeCoords) {
-      // FIX: Corrected state setter usage and type casting for coords
-      setTraining((prevTraining: TrainingState) => ({ // FIX: Type prevTraining
-        ...prevTraining,
+      setTraining((prev: TrainingState) => ({
+        ...prev,
         location: settings.homeLocation,
-        coords: settings.homeCoords as Coordinates, // Cast to Coordinates
+        coords: settings.homeCoords as Coordinates,
       }));
       setTrainingSearch(settings.homeLocation);
-      setManualStartHour(null); // Reset manual hour when base location changes
+      setManualStartHour(null); 
     }
   }, [settings.homeLocation, settings.homeCoords]);
 
-
+  /**
+   * Optimized Sync:
+   * 1. Fetch raw telemetry (Fast)
+   * 2. Populate UI immediately
+   * 3. Fetch AI Interpretation (Slower)
+   * 4. Enhance UI
+   */
   const syncData = useCallback(async (currentSettings: CommuteSettings, offsets: number[], isSilent = false) => {
     if (!offsets.length) return;
     if (!isSilent) setLoading(true);
-    setLoadingOffsets((prevOffsets: number[]) => [...new Set([...prevOffsets, ...offsets])]); // FIX: Type prevOffsets
+    setLoadingOffsets((prev: number[]) => [...new Set([...prev, ...offsets])]);
+    
     try {
-      const results = await getPulseBatch(currentSettings, offsets, false);
-      // FIX: Corrected state setter usage
+      // STAGE 1: TELEMETRY (FAST)
+      const telemetryBatch = await getTelemetryBatch(currentSettings, offsets);
+      
       setPulseDataMap(prev => {
-        const next = { ...prev, ...results };
+        const next = { ...prev, ...telemetryBatch };
         localStorage.setItem(CACHE_KEY, JSON.stringify(next));
         return next;
       });
-    } catch (err: any) { // FIX: Explicitly type 'err' as any
-      console.error("Sync data failed:", err);
+
+      // If this was a manual refresh or priority sync, we stop "hard loading" after telemetry
+      if (!isSilent) setLoading(false);
+
+      // STAGE 2: AI INSIGHTS (Slower)
+      if (!currentSettings.disableAI) {
+        try {
+          const aiInsights = await getAIInsights(currentSettings, telemetryBatch);
+          setPulseDataMap(prev => {
+            const next = { ...prev };
+            Object.keys(aiInsights).forEach(o => {
+              const offset = Number(o);
+              if (next[offset]) {
+                next[offset] = {
+                  ...next[offset],
+                  isEnhanced: true,
+                  weather: {
+                    ...next[offset].weather,
+                    morning: { ...next[offset].weather.morning, surfaceReason: aiInsights[offset].morning },
+                    evening: { ...next[offset].weather.evening, surfaceReason: aiInsights[offset].evening }
+                  }
+                };
+              }
+            });
+            localStorage.setItem(CACHE_KEY, JSON.stringify(next));
+            return next;
+          });
+        } catch (aiErr) {
+          console.error("Background AI sync failed", aiErr);
+        }
+      }
+    } catch (err: any) {
+      console.error("Telemetry sync data failed:", err);
     } finally {
-      // FIX: Corrected state setter usage
-      setLoadingOffsets((prevOffsets: number[]) => prevOffsets.filter(o => !offsets.includes(o))); // FIX: Type prevOffsets
+      setLoadingOffsets((prev: number[]) => prev.filter(o => !offsets.includes(o)));
       if (!isSilent) setLoading(false);
     }
-  }, [settings]); // FIX: Add settings to syncData dependencies
+  }, []);
 
-  // Optimized initial sync: do not execute previous prompts again if valid cached data exists
   useEffect(() => {
     if (!initialSyncStarted.current) {
       initialSyncStarted.current = true;
@@ -242,8 +264,10 @@ const App: React.FC = () => {
       const offsetsToSync = allOffsets.filter(offset => {
         const cached = pulseDataMap[offset];
         if (!cached) return true;
-        // Data considered stale after 6 hours
-        return Date.now() - (cached.lastUpdated || 0) > 6 * 60 * 60 * 1000;
+        // If it's more than 2 hours old, or not enhanced and AI is enabled
+        const ageHours = (Date.now() - (cached.lastUpdated || 0)) / (1000 * 60 * 60);
+        const needsAI = !settings.disableAI && !cached.isEnhanced;
+        return ageHours > 2 || needsAI;
       });
 
       if (offsetsToSync.length > 0) {
@@ -251,26 +275,19 @@ const App: React.FC = () => {
         const background = offsetsToSync.filter(o => o > 1);
         
         if (priority.length > 0) {
-          // FIX: Corrected function call parameters
           syncData(settings, priority).then(() => {
-            if (background.length > 0) {
-              // FIX: Corrected function call parameters
-              syncData(settings, background, true);
-            }
+            if (background.length > 0) syncData(settings, background, true);
           });
         } else if (background.length > 0) {
-          // FIX: Corrected function call parameters
           syncData(settings, background, true);
         }
       }
     }
-  }, [syncData, settings, pulseDataMap]); // FIX: Added pulseDataMap as a dependency
+  }, [syncData, settings, pulseDataMap]);
 
-  // Training Data Fetcher
   const syncTraining = useCallback(async () => {
     setTrainingLoading(true);
     try {
-      // First, get the raw weather data for the currently selected training location
       const rawCurrentLocation = await fetchRawWeatherData(training.coords);
       const dayIdx = training.dateOffset * 24;
       const durationHours = training.distance / AVG_TRAINING_SPEED;
@@ -294,7 +311,6 @@ const App: React.FC = () => {
         const slice: any = {};
         if (rawCurrentLocation.hourly) {
           Object.keys(rawCurrentLocation.hourly).forEach((k) => { 
-            // FIX: Corrected slice method arguments and property access
             if (Array.isArray(rawCurrentLocation.hourly[k]) && startIndex <= endIndex && endIndex < rawCurrentLocation.hourly[k].length) {
               slice[k] = (rawCurrentLocation.hourly[k] as number[]).slice(startIndex, endIndex + 1);
             } else if (Array.isArray(rawCurrentLocation.hourly[k]) && startIndex > endIndex) {
@@ -307,11 +323,10 @@ const App: React.FC = () => {
         const minPastTemp = pastTemps.length ? Math.min(...pastTemps) : 10;
 
         const condition = aggregateRawWeather(slice, 0, true, settings, sunTimesCurrent, minPastTemp, window);
-        const score = calculateSegmentScore(condition);
-        scanWindowsCurrent.push({ startHour: hour, condition, window, score });
+        scanWindowsCurrent.push({ startHour: hour, condition, window, score: condition.score });
       }
 
-      let finalSlot: any = null; // FIX: Declared `finalSlot` with `let` and type `any`
+      let finalSlot: any = null;
       if (manualStartHour !== null) {
         finalSlot = scanWindowsCurrent.find(w => w.startHour === manualStartHour) || scanWindowsCurrent[0];
       } else if (scanWindowsCurrent.length > 0) {
@@ -321,11 +336,8 @@ const App: React.FC = () => {
 
       if (finalSlot) {
         finalSlot.condition.surfaceReason = getStandardizedAdvice(finalSlot.condition);
-        
-        // Spatial Optimization Advice Logic
         const windDirFrom = finalSlot.condition.windDirection; 
         const targetBearing = windDirFrom;
-        
         const routeTargetDist = training.distance * 0.4;
         const routeSuggestions = BELGIAN_LOCATIONS
           .map(loc => {
@@ -345,29 +357,22 @@ const App: React.FC = () => {
           }, [])
           .slice(0, 3);
 
-        // --- Location Advice: Find alternative START locations with *strictly better* scores ---
         const currentLocationBestScore = scanWindowsCurrent.reduce((maxScore, window) => Math.max(maxScore, window.score), 0); 
         const userHomeOrTrainingCoords = settings.homeCoords || training.coords;
 
         const nearbyCandidateLocations = BELGIAN_LOCATIONS.filter(loc => {
           const dist = calculateDistance(userHomeOrTrainingCoords, { lat: loc.lat, lng: loc.lng });
-          // Filter for locations at least 40km away and within 80km
           return dist >= 40 && dist <= 80 && loc.name !== training.location;
         });
 
-        // Shuffle and limit to 50 candidates for performance and randomness
         const candidatesToProcess = shuffleArray(nearbyCandidateLocations).slice(0, 50); 
-
         const betterLocationSuggestions: LocationSuggestion[] = [];
 
         for (const candidateLoc of candidatesToProcess) {
-          let candidateRaw: any; // FIX: Declared `candidateRaw` with `let` and type `any`
+          let candidateRaw: any;
           try {
             candidateRaw = await fetchRawWeatherData({ lat: candidateLoc.lat, lng: candidateLoc.lng });
-          } catch (e: any) { // FIX: Type 'e' as any
-            console.warn(`Failed to fetch weather for candidate ${candidateLoc.name}:`, e);
-            continue; 
-          }
+          } catch (e: any) { continue; }
 
           const candidateSunTimes = {
             sunrise: candidateRaw.daily?.sunrise?.[training.dateOffset] || "07:00",
@@ -376,36 +381,24 @@ const App: React.FC = () => {
 
           const candidateScanWindows = [];
           for (let hour = 3; hour <= 21; hour++) {
-            const startTimeStr = `${hour.toString().padStart(2, '0')}:00`;
-            const endHourVal = hour + durationInt;
-            const endTimeStr = `${endHourVal.toString().padStart(2, '0')}:00`;
-            const window: [string, string] = [startTimeStr, endTimeStr];
-            
             const startIndex = dayIdx + hour;
-            const endIndex = dayIdx + endHourVal;
-            
+            const endIndex = dayIdx + hour + durationInt;
             const slice: any = {};
             if (candidateRaw.hourly) {
               Object.keys(candidateRaw.hourly).forEach((k) => {
-                // FIX: Corrected slice method arguments and property access
-                if (Array.isArray(candidateRaw.hourly[k]) && startIndex <= endIndex && endIndex < rawCurrentLocation.hourly[k].length) {
+                if (Array.isArray(candidateRaw.hourly[k]) && startIndex <= endIndex && endIndex < candidateRaw.hourly[k].length) {
                   slice[k] = (candidateRaw.hourly[k] as number[]).slice(startIndex, endIndex + 1);
-                } else if (Array.isArray(candidateRaw.hourly[k]) && startIndex > endIndex) {
-                  slice[k] = [];
                 }
               });
             }
-
             const pastTemps = (candidateRaw.hourly?.temperature_2m || []).slice(Math.max(0, startIndex - 6), startIndex);
             const minPastTemp = pastTemps.length ? Math.min(...pastTemps) : 10;
-
-            const condition = aggregateRawWeather(slice, training.preferredDirection, true, settings, candidateSunTimes, minPastTemp, window);
-            candidateScanWindows.push({ startHour: hour, condition, window, score: calculateSegmentScore(condition) });
+            const cond = aggregateRawWeather(slice, training.preferredDirection, true, settings, candidateSunTimes, minPastTemp, [`${hour}:00`, `${hour+durationInt}:00`]);
+            candidateScanWindows.push({ score: cond.score });
           }
 
           if (candidateScanWindows.length > 0) {
-            const bestCandidateScore = candidateScanWindows.reduce((prev, current) => (prev.score > current.score) ? prev : current).score;
-
+            const bestCandidateScore = Math.max(...candidateScanWindows.map(w => w.score));
             if (bestCandidateScore > currentLocationBestScore) { 
               betterLocationSuggestions.push({ 
                 name: candidateLoc.name, 
@@ -418,19 +411,14 @@ const App: React.FC = () => {
           }
         }
 
-        // FIX: Added dummy lat/lng for optimizationAdvice to match LocationSuggestion interface
         finalSlot.optimizationAdvice = routeSuggestions.map(s => ({ name: s.name, distanceFromTrainingCenter: s.distFromCenter, lat: training.coords.lat, lng: training.coords.lng }));
         finalSlot.locationAdvice = betterLocationSuggestions
           .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
           .slice(0, 3);
         setTrainingData(finalSlot);
       }
-    } catch (e: any) { // FIX: Type 'e' as any
-      console.error(e);
-    } finally {
-      setTrainingLoading(false);
-    }
-  }, [training, settings, manualStartHour, shuffleArray]); // FIX: Add shuffleArray to dependencies, as it's a utility used here
+    } catch (e: any) { console.error(e); } finally { setTrainingLoading(false); }
+  }, [training, settings, manualStartHour]);
 
   useEffect(() => {
     if (viewMode === 'training') syncTraining();
@@ -444,9 +432,8 @@ const App: React.FC = () => {
       try {
         const dist = await getCommuteRoadDistance(editSettings.homeLocation, editSettings.workLocation);
         if (dist) roadDistance = dist;
-      } catch (e: any) { } // FIX: Type 'e' as any
+      } catch (e: any) { }
     }
-    // FIX: Corrected updated object construction for settings
     const updated: CommuteSettings = { ...editSettings, roadDistance }; 
     setSettings(updated);
     localStorage.setItem('velo_settings', JSON.stringify(updated));
@@ -454,7 +441,6 @@ const App: React.FC = () => {
     if (locationChanged || editSettings.disableAI !== settings.disableAI) { 
       setPulseDataMap({});
       localStorage.removeItem(CACHE_KEY);
-      // FIX: Corrected function calls for syncData
       syncData(updated, [0]).then(() => {
         syncData(updated, [1, 2, 3, 4, 5, 6], true);
       });
@@ -464,9 +450,8 @@ const App: React.FC = () => {
   };
 
   const handleImmediateThemeChange = (newTheme: 'dark' | 'light') => {
-    // FIX: Corrected state setter usage
-    setSettings((prevSettings: CommuteSettings) => ({ ...prevSettings, theme: newTheme }));
-    setEditSettings((prevEditSettings: CommuteSettings) => ({ ...prevEditSettings, theme: newTheme }));
+    setSettings((prev: CommuteSettings) => ({ ...prev, theme: newTheme }));
+    setEditSettings((prev: CommuteSettings) => ({ ...prev, theme: newTheme }));
   };
 
   const getDayLabel = (offset: number) => {
@@ -484,41 +469,40 @@ const App: React.FC = () => {
     const config = commuteSequence.primary;
     const isMorning = config.type === 'morning';
     const dayPulse = pulseDataMap[config.offset];
-    const timeRange = isMorning ? settings.morningWindow.join(' - ') : settings.eveningWindow.join(' - ');
+    const condition = dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null;
     const labels = getDayLabel(config.offset);
 
     return {
       label: isMorning ? t.morning : t.evening,
-      timeRange,
+      timeRange: isMorning ? settings.morningWindow.join(' - ') : settings.eveningWindow.join(' - '),
       startLocation: getLocality(isMorning ? settings.homeLocation : settings.workLocation),
       endLocation: getLocality(isMorning ? settings.workLocation : settings.homeLocation),
-      condition: dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null,
-      score: dayPulse?.score,
+      condition,
+      score: condition?.score,
       dateLabel: `${labels.name} ${labels.num} ${labels.month}`,
-      // FIX: explicitly set optimizationAdvice and locationAdvice to undefined for daily mode
       optimizationAdvice: undefined,
       locationAdvice: undefined,
     };
-  }, [commuteSequence.primary, pulseDataMap, settings.morningWindow, settings.eveningWindow, settings.homeLocation, settings.workLocation, t, getDayLabel]); // FIX: Add dependencies
+  }, [commuteSequence.primary, pulseDataMap, settings, t]);
 
   const secondaryData = useMemo(() => {
     const config = commuteSequence.secondary;
     const isMorning = config.type === 'morning';
     const dayPulse = pulseDataMap[config.offset];
+    const condition = dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null;
     const labels = getDayLabel(config.offset);
     return {
       label: isMorning ? t.morning : t.evening,
       timeRange: isMorning ? settings.morningWindow.join(' - ') : settings.eveningWindow.join(' - '),
       startLocation: getLocality(isMorning ? settings.homeLocation : settings.workLocation),
       endLocation: getLocality(isMorning ? settings.workLocation : settings.homeLocation),
-      condition: dayPulse?.weather?.[isMorning ? 'morning' : 'evening'] ?? null,
-      score: dayPulse?.score,
+      condition,
+      score: condition?.score,
       dateLabel: `${labels.name} ${labels.num} ${labels.month}`,
-      // FIX: explicitly set optimizationAdvice and locationAdvice to undefined for daily mode
       optimizationAdvice: undefined,
       locationAdvice: undefined,
     };
-  }, [commuteSequence.secondary, pulseDataMap, settings.morningWindow, settings.eveningWindow, settings.homeLocation, settings.workLocation, t, getDayLabel]); // FIX: Add dependencies
+  }, [commuteSequence.secondary, pulseDataMap, settings, t]);
 
   const AccordionItem = ({ id, title, content }: { id: string, title: string, content: string }) => (
     <div className={`border rounded-xl transition-all overflow-hidden ${isDark ? 'border-white/5' : 'border-slate-200'} ${expandedInfoItem === id ? 'bg-blue-500/5 ring-1 ring-blue-500/20' : isDark ? 'bg-slate-900/30' : 'bg-slate-50'}`}>
@@ -540,56 +524,52 @@ const App: React.FC = () => {
   const filterLocations = (query: string) => {
     if (query.length < 2) return [];
     const filtered = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase()));
-    
-    // Deduplicate by city name to ensure unique proposals
     const unique = filtered.filter((loc, index, self) =>
       index === self.findIndex((t) => t.name === loc.name)
     );
-    
     return unique.slice(0, 5);
   };
 
   const handleSelectSuggestion = (type: 'home' | 'work' | 'training', loc: BelgianLocation) => {
     if (type === 'home') {
-      // FIX: Corrected object spread and property access
       setEditSettings((prev: CommuteSettings) => ({ ...prev, homeLocation: loc.name, homeCoords: { lat: loc.lat, lng: loc.lng } }));
       setHomeSearch(loc.name);
       setShowHomeSuggestions(false);
     } else if (type === 'work') {
-      // FIX: Corrected object spread and property access
       setEditSettings((prev: CommuteSettings) => ({ ...prev, workLocation: loc.name, workCoords: { lat: loc.lat, lng: loc.lng } }));
       setWorkSearch(loc.name);
       setShowWorkSuggestions(false);
     } else if (type === 'training') {
-      const newCoords: Coordinates = { lat: loc.lat, lng: loc.lng };
-      // FIX: Corrected object spread for prevTraining
-      setTraining((prevTraining: TrainingState) => ({ ...prevTraining, location: loc.name, coords: newCoords }));
+      setTraining((prev: TrainingState) => ({ ...prev, location: loc.name, coords: { lat: loc.lat, lng: loc.lng } }));
       setTrainingSearch(loc.name);
       setShowTrainingSuggestions(false);
-      setManualStartHour(null); // Reset manual hour when location changes
+      setManualStartHour(null); 
     }
   };
 
   const handleSetTrainingToHome = useCallback(() => {
     if (settings.homeLocation && settings.homeCoords) {
-      setTraining((prevTraining: TrainingState) => ({
-        ...prevTraining,
+      setTraining((prev: TrainingState) => ({
+        ...prev,
         location: settings.homeLocation,
         coords: settings.homeCoords as Coordinates,
       }));
       setTrainingSearch(settings.homeLocation);
-      setManualStartHour(null); // Reset manual hour when location changes
-      setShowTrainingSuggestions(false); // Hide suggestions after selection
+      setManualStartHour(null); 
+      setShowTrainingSuggestions(false);
     }
-  }, [settings.homeLocation, settings.homeCoords]); // FIX: Add dependencies
+  }, [settings.homeLocation, settings.homeCoords]);
 
   const handleSelectLocationAdvice = useCallback((loc: BelgianLocation) => {
-    const newCoords: Coordinates = { lat: loc.lat, lng: loc.lng };
-    setTraining((prevTraining: TrainingState) => ({ ...prevTraining, location: loc.name, coords: newCoords }));
+    setTraining((prev: TrainingState) => ({ ...prev, location: loc.name, coords: { lat: loc.lat, lng: loc.lng } }));
     setTrainingSearch(loc.name);
-    setManualStartHour(null); // Reset manual hour when location changes
-    // WeatherCard now calls closeAllPopups internally after this callback.
-  }, []); // FIX: Add dependencies
+    setManualStartHour(null);
+  }, []);
+
+  const isCurrentDayEnhanced = useMemo(() => {
+    const pulse = pulseDataMap[selectedDateOffset];
+    return pulse?.isEnhanced ?? false;
+  }, [pulseDataMap, selectedDateOffset]);
 
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
@@ -654,7 +634,7 @@ const App: React.FC = () => {
           
           <div className={`flex items-center gap-1.5 p-1.5 rounded-xl border ${isDark ? 'bg-slate-900/30 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
             <button onClick={() => viewMode === 'training' ? syncTraining() : syncData(settings, [selectedDateOffset])} className="h-9 w-9 flex items-center justify-center hover:bg-white/10 rounded-lg">
-              <RefreshCw className={`w-4.5 h-4.5 text-slate-400 ${(loading || trainingLoading) ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4.5 h-4.5 text-slate-400 ${(loading || (loadingOffsets.includes(selectedDateOffset) && !pulseDataMap[selectedDateOffset])) ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={() => setIsSettingsOpen(true)} className="h-9 w-9 flex items-center justify-center hover:bg-white/10 rounded-lg">
               <SettingsIcon className="w-4.5 h-4.5 text-slate-400" />
@@ -665,8 +645,8 @@ const App: React.FC = () => {
 
       <main className="flex-1 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3 max-w-md mx-auto w-full min-h-0 overflow-y-auto relative">
         {viewMode === 'daily' && (
-          <div className="flex flex-col gap-4 flex-1"> {/* Added flex-1 here */}
-            <div className="flex-[3] min-h-0"> {/* Primary WeatherCard now takes more space */}
+          <div className="flex flex-col gap-4 flex-1">
+            <div className="flex-[3] min-h-0">
               <WeatherCard 
                 {...primaryData} 
                 distance={displayedDistance} 
@@ -679,16 +659,26 @@ const App: React.FC = () => {
               onClick={() => setIsInfoOpen(true)}
               className={`flex-none border rounded-[1.25rem] p-4 flex flex-col gap-1.5 active:scale-[0.98] transition-all ${isDark ? 'bg-blue-500/5 border-blue-500/20 shadow-lg shadow-blue-500/5' : 'bg-white border-blue-100 shadow-sm'}`}
             >
-              <div className="flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-blue-500" />
-                <span className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em]">Commute Intelligence</span>
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  <Zap className={`w-3.5 h-3.5 ${isCurrentDayEnhanced ? 'text-blue-500' : 'text-slate-500'}`} />
+                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isCurrentDayEnhanced ? 'text-blue-500' : 'text-slate-500'}`}>
+                    {isCurrentDayEnhanced ? 'Commute Intelligence' : 'Basic Telemetry'}
+                  </span>
+                </div>
+                {!isCurrentDayEnhanced && !settings.disableAI && (
+                  <div className="flex items-center gap-1.5">
+                    <RefreshCw className="w-2.5 h-2.5 text-blue-400 animate-spin" />
+                    <span className="text-[7px] font-black text-blue-400 uppercase">Interpretation Active</span>
+                  </div>
+                )}
               </div>
               <p className={`text-[13px] font-medium leading-[1.4] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                {primaryData.condition?.surfaceReason || "Processing telemetry for tactical riding advice..."}
+                {primaryData.condition?.surfaceReason || (loadingOffsets.includes(selectedDateOffset) ? "Connecting to weather satellite..." : "Processing telemetry for tactical riding advice...")}
               </p>
             </button>
 
-            <div className="flex-[1] min-h-0"> {/* Secondary WeatherCard takes less relative space */}
+            <div className="flex-[1] min-h-0">
               <WeatherCard compact {...secondaryData} safetyScore={secondaryData.score} theme={settings.theme} />
             </div>
           </div>
@@ -719,19 +709,19 @@ const App: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1 relative">
                   <label className="text-[8px] font-bold uppercase text-slate-500 tracking-widest">Training Area</label>
-                  <div className="relative flex items-center"> {/* Added flex container */}
+                  <div className="relative flex items-center">
                     <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-blue-500" />
                     <input 
                       type="text" 
                       value={trainingSearch} 
                       onFocus={() => setShowTrainingSuggestions(true)}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTrainingSearch(e.target.value); setShowTrainingSuggestions(true); }} // FIX: Type e
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTrainingSearch(e.target.value); setShowTrainingSuggestions(true); }}
                       className={`w-full rounded-lg pl-6 pr-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} 
                     />
-                    {trainingSearch && ( // Only show clear button if there's text
+                    {trainingSearch && ( 
                       <button 
                         onClick={() => { setTrainingSearch(""); setTraining(prev => ({...prev, location: "", coords: { lat: 0, lng: 0 }})); }}
-                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors z-20" // Adjusted right position to not overlap with Home button
+                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors z-20"
                         aria-label="Clear training area"
                       >
                         <X className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100'}`} />
@@ -758,7 +748,7 @@ const App: React.FC = () => {
                   <label className="text-[8px] font-bold uppercase text-slate-500 tracking-widest">Select Day</label>
                   <select 
                     value={training.dateOffset}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setTraining({...training, dateOffset: parseInt(e.target.value)}); setManualStartHour(null); }} // FIX: Type e
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setTraining({...training, dateOffset: parseInt(e.target.value)}); setManualStartHour(null); }}
                     className={`w-full rounded-lg px-2 py-1 text-[11px] font-bold outline-none border ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-slate-50 border-slate-200'}`}
                   >
                     {[0, 1, 2, 3, 4, 5, 6].map(o => {
@@ -783,7 +773,7 @@ const App: React.FC = () => {
                   max="150" 
                   step="5"
                   value={training.distance} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTraining({...training, distance: parseInt(e.target.value)}); setManualStartHour(null); }} // FIX: Type e
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTraining({...training, distance: parseInt(e.target.value)}); setManualStartHour(null); }}
                   className="w-full h-1 bg-blue-500/20 rounded-full appearance-none cursor-pointer accent-blue-500"
                 />
               </div>
@@ -805,7 +795,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Adjust Start Hour Slider */}
                 <div className={`px-3 py-2 rounded-2xl border flex flex-col gap-1.5 ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                    <div className="flex items-center justify-between">
                       <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Adjust Start Time</span>
@@ -817,7 +806,7 @@ const App: React.FC = () => {
                     max="21" 
                     step="1"
                     value={manualStartHour ?? 0} 
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setManualStartHour(parseInt(e.target.value))} // FIX: Type e
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setManualStartHour(parseInt(e.target.value))}
                     className="w-full h-1 bg-slate-700 rounded-full appearance-none cursor-pointer accent-blue-500"
                   />
                 </div>
@@ -849,7 +838,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Settings Modal */}
       {isSettingsOpen && (
         <div className={`fixed inset-0 z-[200] flex flex-col animate-in fade-in duration-300 ${isDark ? 'bg-[#05070a]' : 'bg-white'}`}>
           <div className="flex-1 max-w-md mx-auto w-full flex flex-col px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
@@ -889,9 +877,9 @@ const App: React.FC = () => {
                       placeholder="Start typing Belgian city..."
                       value={homeSearch} 
                       onFocus={() => setShowHomeSuggestions(true)}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { // FIX: Type e
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         setHomeSearch(e.target.value);
-                        setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, homeLocation: e.target.value})); // FIX: Type prevEditSettings
+                        setEditSettings((prev: CommuteSettings) => ({...prev, homeLocation: e.target.value}));
                         setShowHomeSuggestions(true);
                       }} 
                       className={`w-full rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
@@ -922,7 +910,7 @@ const App: React.FC = () => {
                  </div>
 
                  <div className="flex flex-col gap-1.5 relative">
-                   <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Transit Destination</label>
+                   <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Work Location</label>
                    <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                     <input 
@@ -930,9 +918,9 @@ const App: React.FC = () => {
                       placeholder="Start typing Belgian city..."
                       value={workSearch} 
                       onFocus={() => setShowWorkSuggestions(true)}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { // FIX: Type e
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         setWorkSearch(e.target.value);
-                        setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, workLocation: e.target.value})); // FIX: Type prevEditSettings
+                        setEditSettings((prev: CommuteSettings) => ({...prev, workLocation: e.target.value}));
                         setShowWorkSuggestions(true);
                       }} 
                       className={`w-full rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
@@ -967,7 +955,7 @@ const App: React.FC = () => {
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Language</label>
                  <div className={`flex rounded-xl border p-0.5 ${isDark ? 'bg-slate-900/50 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
                    {['en', 'fr', 'nl'].map(lang => (
-                     <button key={lang} onClick={(e: React.MouseEvent<HTMLButtonElement>) => setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, language: lang as Language}))} className={`flex-1 py-1.5 rounded-lg font-black text-[9px] transition-all ${editSettings.language === lang ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>{lang.toUpperCase()}</button> // FIX: Type e and prevEditSettings
+                     <button key={lang} onClick={() => setEditSettings((prev: CommuteSettings) => ({...prev, language: lang as Language}))} className={`flex-1 py-1.5 rounded-lg font-black text-[9px] transition-all ${editSettings.language === lang ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>{lang.toUpperCase()}</button>
                    ))}
                  </div>
                </div>
@@ -981,9 +969,9 @@ const App: React.FC = () => {
                          <Clock className="w-2.5 h-2.5 text-blue-500 opacity-50" />
                       </div>
                       <div className="flex items-center gap-1">
-                        <input type="time" value={editSettings.morningWindow[0]} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, morningWindow: [e.target.value, prevEditSettings.morningWindow[1]]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" /> {/* FIX: Type e and prevEditSettings */}
+                        <input type="time" value={editSettings.morningWindow[0]} onChange={(e) => setEditSettings((prev: CommuteSettings) => ({...prev, morningWindow: [e.target.value, prev.morningWindow[1]]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" />
                         <span className="text-slate-600 text-[10px]">→</span>
-                        <input type="time" value={editSettings.morningWindow[1]} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, morningWindow: [prevEditSettings.morningWindow[0], e.target.value]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" /> {/* FIX: Type e and prevEditSettings */}
+                        <input type="time" value={editSettings.morningWindow[1]} onChange={(e) => setEditSettings((prev: CommuteSettings) => ({...prev, morningWindow: [prev.morningWindow[0], e.target.value]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" />
                       </div>
                     </div>
                     <div className={`border rounded-xl p-2.5 flex flex-col gap-1.5 ${isDark ? 'bg-slate-900/30 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
@@ -992,9 +980,9 @@ const App: React.FC = () => {
                          <Clock className="w-2.5 h-2.5 text-orange-400 opacity-50" />
                       </div>
                       <div className="flex items-center gap-1">
-                        <input type="time" value={editSettings.eveningWindow[0]} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, eveningWindow: [e.target.value, prevEditSettings.eveningWindow[1]]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" /> {/* FIX: Type e and prevEditSettings */}
+                        <input type="time" value={editSettings.eveningWindow[0]} onChange={(e) => setEditSettings((prev: CommuteSettings) => ({...prev, eveningWindow: [e.target.value, prev.eveningWindow[1]]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" />
                         <span className="text-slate-600 text-[10px]">→</span>
-                        <input type="time" value={editSettings.eveningWindow[1]} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, eveningWindow: [prevEditSettings.eveningWindow[0], e.target.value]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" /> {/* FIX: Type e and prevEditSettings */}
+                        <input type="time" value={editSettings.eveningWindow[1]} onChange={(e) => setEditSettings((prev: CommuteSettings) => ({...prev, eveningWindow: [prev.eveningWindow[0], e.target.value]}))} className="bg-transparent text-[11px] font-bold text-slate-400 outline-none w-full" />
                       </div>
                     </div>
                   </div>
@@ -1003,7 +991,7 @@ const App: React.FC = () => {
                <div className="flex flex-col gap-1.5 pt-1">
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Intelligence Engine</label>
                  <button 
-                   onClick={(e: React.MouseEvent<HTMLButtonElement>) => setEditSettings((prevEditSettings: CommuteSettings) => ({...prevEditSettings, disableAI: !prevEditSettings.disableAI}))} // FIX: Type e and prevEditSettings
+                   onClick={() => setEditSettings((prev: CommuteSettings) => ({...prev, disableAI: !prev.disableAI}))}
                    className={`w-full py-3 rounded-xl border flex items-center justify-between px-3.5 transition-all ${!editSettings.disableAI ? 'bg-blue-600/10 border-blue-500/30' : isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}
                  >
                    <div className="flex items-center gap-2.5">
@@ -1019,10 +1007,9 @@ const App: React.FC = () => {
                  </button>
                </div>
 
-               {/* TRAINING MODE BUTTON */}
                <div className="flex flex-col gap-1.5 pt-1">
                  <button 
-                   onClick={(e: React.MouseEvent<HTMLButtonElement>) => { setViewMode('training'); setIsSettingsOpen(false); setManualStartHour(null); }} // FIX: Type e
+                   onClick={() => { setViewMode('training'); setIsSettingsOpen(false); setManualStartHour(null); }}
                    className={`w-full py-3 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' : 'bg-orange-50 border-orange-200 text-orange-600'}`}
                  >
                    <Trophy className="w-4 h-4" />
@@ -1039,7 +1026,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Information Modal */}
       {isInfoOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={() => setIsInfoOpen(false)} />
@@ -1057,51 +1043,15 @@ const App: React.FC = () => {
             </div>
 
             <div className="space-y-2 mb-6 max-h-[60vh] overflow-y-auto hide-scrollbar px-1">
-              <AccordionItem 
-                id="purpose" 
-                title="WHAT IS COMMUTE IQ?" 
-                content={t.purposeContent} 
-              />
-              <AccordionItem 
-                id="score" 
-                title="HOW THE SCORE WORKS" 
-                content={t.commuteScoreContent} 
-              />
-              <AccordionItem
-                id="training-mode"
-                title="TRAINING MODE"
-                content="Enter training mode to plan and optimize your cycling workouts. This feature allows you to select a training area, set your desired distance, and choose a specific day. The app then scans various time windows to suggest the optimal start time based on weather conditions, providing tactical advice for your session and even suggesting route turning points or alternative starting locations."
-              />
-              <AccordionItem 
-                id="retrieval" 
-                title="DATA VS. INTELLIGENCE" 
-                content={t.generalSourcesContent} 
-              />
-              <AccordionItem 
-                id="ice" 
-                title="ICE RISK" 
-                content={TRANSLATIONS[settings.language].iceRiskContent} 
-              />
-              <AccordionItem 
-                id="surface" 
-                title="SURFACE" 
-                content={TRANSLATIONS[settings.language].surfaceConditionContent} 
-              />
-              <AccordionItem 
-                id="wind" 
-                title="WIND" 
-                content="Calculated by comparing the wind's forecast direction to the exact mathematical path between your home and work. We identify if it's a helpful tailwind or a punishing headwind." 
-              />
-              <AccordionItem 
-                id="lighting" 
-                title="LIGHTING" 
-                content="Determined using astronomical sunrise and sunset data for your specific coordinates. If your commute window overlaps with twilight or night, we flag that lights are required." 
-              />
-              <AccordionItem 
-                id="distance" 
-                title="ROUTE DISTANCE" 
-                content="Estimated by taking the direct line distance and adding a 32% detour factor to account for real-world twists and turns of bike paths and streets." 
-              />
+              <AccordionItem id="purpose" title="WHAT IS COMMUTE IQ?" content={t.purposeContent} />
+              <AccordionItem id="score" title="HOW THE SCORE WORKS" content={t.commuteScoreContent} />
+              <AccordionItem id="training-mode" title="TRAINING MODE" content="Plan and optimize sessions by scanning time windows and location metadata for atmospheric superiority." />
+              <AccordionItem id="retrieval" title="DATA VS. INTELLIGENCE" content={t.generalSourcesContent} />
+              <AccordionItem id="ice" title="ICE RISK" content={TRANSLATIONS[settings.language].iceRiskContent} />
+              <AccordionItem id="surface" title="SURFACE" content={TRANSLATIONS[settings.language].surfaceConditionContent} />
+              <AccordionItem id="wind" title="WIND" content="Vector mapping against transit headings to detect drag or boost." />
+              <AccordionItem id="lighting" title="LIGHTING" content="Solar window overlap analysis for required visibility gear." />
+              <AccordionItem id="distance" title="ROUTE DISTANCE" content="Loxodromic distance adjusted by terrestrial detour coefficients." />
             </div>
 
             <button 

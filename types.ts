@@ -1,11 +1,11 @@
 
-import { BelgianLocation } from './locations'; // FIX: Import BelgianLocation
+import { BelgianLocation } from './locations'; 
 
 export type Language = 'en' | 'fr' | 'nl';
 
 export interface Coordinates {
   lat: number;
-  lng: number; // FIX: Added lng property
+  lng: number;
 }
 
 export interface CommuteSettings {
@@ -13,20 +13,22 @@ export interface CommuteSettings {
   homeCoords?: Coordinates;
   workLocation: string;
   workCoords?: Coordinates;
-  morningWindow: [string, string]; // [start, end] e.g. ["07:30", "09:00"]
-  eveningWindow: [string, string]; // [start, end]
+  morningWindow: [string, string];
+  eveningWindow: [string, string];
   roadDistance?: number;
   language: Language;
   theme: 'dark' | 'light';
   disableAI: boolean;
 }
 
-// FIX: LocationSuggestion should extend BelgianLocation and use lat/lng directly
+export interface ScoreDeduction {
+  label: string;
+  val: number;
+}
+
 export interface LocationSuggestion extends BelgianLocation {
-  // name, lat, lng are inherited from BelgianLocation
-  distanceFromHome?: number; // Made optional, as not always present
-  distanceFromTrainingCenter?: number; // Added for training specific advice
-  // Removed coords as lat and lng are now directly available from BelgianLocation
+  distanceFromHome?: number;
+  distanceFromTrainingCenter?: number;
   score?: number;
 }
 
@@ -42,23 +44,24 @@ export interface WeatherCondition {
   temp: number;
   minTemp?: number;
   maxTemp?: number;
+  score: number;
   condition: 'Sunny' | 'Rainy' | 'Cloudy' | 'Windy' | 'Stormy';
   precipitation: number;
   windSpeed: number;
-  windDirection: number; // Degrees
+  windDirection: number;
   humidity: number;
   isDark: boolean;
   slipperyChance: number; 
   wetSurfaceChance: number; 
-  headwindImpact: number; // -100 to 100
+  headwindImpact: number;
   iceRisk: boolean; 
   overnightFreeze?: boolean;
   activeFreezing?: boolean;
-  // FIX: Added minPastTemp to WeatherCondition interface to match return values in geminiService.ts
   minPastTemp?: number; 
   surfaceReason?: string;
-  lastPrecipitationTime?: string; // New: e.g. "2h ago"
-  precipDuringSession: number;    // New: total mm during window
+  lastPrecipitationTime?: string;
+  precipDuringSession: number;
+  scoreBreakdown?: ScoreDeduction[];
 }
 
 export interface CommuteInsight {

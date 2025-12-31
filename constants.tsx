@@ -75,10 +75,10 @@ export const BELGIAN_CITIES: Record<string, Coordinates> = {
 };
 
 export const DEFAULT_SETTINGS: CommuteSettings = {
-  homeLocation: "Merelbeke",
-  homeCoords: { lat: 50.9934, lng: 3.7441 },
-  workLocation: "Nazareth",
-  workCoords: { lat: 50.9592, lng: 3.5962 },
+  homeLocation: "Gent",
+  homeCoords: { lat: 51.0543, lng: 3.7174 },
+  workLocation: "Deinze",
+  workCoords: { lat: 50.9833, lng: 3.5167 },
   morningWindow: ["07:30", "09:00"],
   eveningWindow: ["17:00", "18:30"],
   language: 'en',
