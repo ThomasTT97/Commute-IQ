@@ -196,19 +196,12 @@ const App: React.FC = () => {
     }
   }, [settings.homeLocation, settings.homeCoords]);
 
-  /**
-   * High-Efficiency Sync:
-   * Fetches all 7 days of telemetry in ONE operation.
-   * Updates state immediately so UI (7-day overview) is populated instantly.
-   * AI Interpretation is backgrounded as a separate pass.
-   */
   const syncFullWeek = useCallback(async (currentSettings: CommuteSettings, isSilent = false) => {
     const allOffsets = [0, 1, 2, 3, 4, 5, 6];
     if (!isSilent) setLoading(true);
     setLoadingOffsets(allOffsets);
     
     try {
-      // ONE call for the entire week (Open-Meteo returns 7 days of forecast)
       const telemetryBatch = await getTelemetryBatch(currentSettings, allOffsets);
       
       setPulseDataMap(prev => {
@@ -218,9 +211,8 @@ const App: React.FC = () => {
       });
 
       if (!isSilent) setLoading(false);
-      setLoadingOffsets([]); // Telemetry is done, UI is active
+      setLoadingOffsets([]);
 
-      // PASS 2: AI INSIGHTS (Parallel to UI usage)
       if (!currentSettings.disableAI) {
         try {
           const aiInsights = await getAIInsights(currentSettings, telemetryBatch);
@@ -266,7 +258,7 @@ const App: React.FC = () => {
           const cached = pulseDataMap[offset];
           if (!cached) return true;
           const ageHours = (now - (cached.lastUpdated || 0)) / (1000 * 60 * 60);
-          return ageHours > 1; // Sync if older than 1 hour
+          return ageHours > 1; 
         });
       };
 
@@ -311,7 +303,8 @@ const App: React.FC = () => {
         const pastTemps = (rawCurrentLocation.hourly?.temperature_2m || []).slice(Math.max(0, startIndex - 6), startIndex);
         const minPastTemp = pastTemps.length ? Math.min(...pastTemps) : 10;
 
-        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimesCurrent, minPastTemp, window);
+        // Passing true for isTraining
+        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimesCurrent, minPastTemp, window, undefined, undefined, true);
         scanWindowsCurrent.push({ startHour: hour, condition, window, score: condition.score });
       }
 
@@ -382,7 +375,8 @@ const App: React.FC = () => {
             }
             const pastTemps = (candidateRaw.hourly?.temperature_2m || []).slice(Math.max(0, startIndex - 6), startIndex);
             const minPastTemp = pastTemps.length ? Math.min(...pastTemps) : 10;
-            const cond = aggregateRawWeather(slice, training.preferredDirection, true, settings, candidateSunTimes, minPastTemp, [`${hour}:00`, `${hour+durationInt}:00`]);
+            // Passing true for isTraining
+            const cond = aggregateRawWeather(slice, training.preferredDirection, true, settings, candidateSunTimes, minPastTemp, [`${hour}:00`, `${hour+durationInt}:00`], undefined, undefined, true);
             candidateScanWindows.push({ score: cond.score });
           }
 

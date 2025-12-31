@@ -132,13 +132,15 @@ const resolveCondition = (code: number, windSpeed: number, precip: number): Weat
   return 'Cloudy';
 };
 
-export const getScoreBreakdown = (w: Partial<WeatherCondition>): ScoreDeduction[] => {
+export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: boolean = false): ScoreDeduction[] => {
   const items: ScoreDeduction[] = [];
   
+  // 1. Ice Risk (Safety - Critical)
   if (w.iceRisk) {
     items.push({ label: "Critical Ice Risk", val: -70 });
   }
   
+  // 2. Precipitation / Surface
   if ((w.precipitation || 0) > 0) {
     const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 4);
     items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
@@ -146,26 +148,52 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>): ScoreDeduction[
     items.push({ label: "Wet Roads", val: -10 });
   }
   
+  // 3. Wind Intensity (General safety/difficulty)
   if ((w.windSpeed || 0) > 15) {
     const windDeduction = ((w.windSpeed || 0) - 15) * 1.5;
     items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
   }
   
-  if ((w.headwindImpact || 0) > 20) {
-    const headwindDeduction = (w.headwindImpact || 0) / 4;
-    items.push({ label: "Headwind Drag", val: -Math.round(headwindDeduction) });
-  } else if ((w.headwindImpact || 0) < -20) {
-    items.push({ label: "Tailwind Boost", val: 5 });
+  // 4. Directional Wind 
+  if (!isTraining) {
+    // Only apply headwind/tailwind logic for commutes
+    if ((w.headwindImpact || 0) > 20) {
+      const headwindDeduction = (w.headwindImpact || 0) / 4;
+      items.push({ label: "Headwind Drag", val: -Math.round(headwindDeduction) });
+    } else if ((w.headwindImpact || 0) < -20) {
+      items.push({ label: "Tailwind Boost", val: 5 });
+    }
   }
   
-  if ((w.temp || 0) < 5) {
-    const coldDeduction = (5 - (w.temp || 0)) * 2;
-    items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
-  } else if ((w.temp || 0) > 28) {
-    const heatDeduction = ((w.temp || 0) - 28) * 2;
-    items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
+  // 5. Temperature
+  const temp = w.temp || 0;
+
+  if (isTraining) {
+    // Training Specific: Cold penalty below 10°C, Surplus above 15°C
+    if (temp < 10) {
+      const coldDeduction = (10 - temp) * 2;
+      items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
+    } else if (temp > 15) {
+      if (temp > 28) {
+         const heatDeduction = (temp - 28) * 2;
+         items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
+      } else {
+         const surplus = (temp - 15);
+         items.push({ label: "Weather Surplus", val: Math.round(surplus) });
+      }
+    }
+  } else {
+    // Commute Specific: Cold penalty below 5°C, Heat stress above 28°C
+    if (temp < 5) {
+      const coldDeduction = (5 - temp) * 2;
+      items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
+    } else if (temp > 28) {
+      const heatDeduction = (temp - 28) * 2;
+      items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
+    }
   }
   
+  // 6. Darkness
   if (w.isDark) {
     items.push({ label: "Darkness / Visibility", val: -5 });
   }
@@ -182,7 +210,8 @@ export const aggregateRawWeather = (
   minPastTemp: number = 99,
   customWindow?: [string, string],
   fullRawHourlyPrecip?: number[],
-  sessionStartAbsoluteIdx?: number
+  sessionStartAbsoluteIdx?: number,
+  isTraining: boolean = false
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
   const precips = (rawSlice.precipitation || []) as number[];
@@ -257,7 +286,7 @@ export const aggregateRawWeather = (
     precipDuringSession: parseFloat(totalPrecip.toFixed(1))
   };
 
-  const breakdown = getScoreBreakdown(baseWeather);
+  const breakdown = getScoreBreakdown(baseWeather, isTraining);
   baseWeather.scoreBreakdown = breakdown;
   const totalDeductions = breakdown.reduce((acc: number, curr: ScoreDeduction) => acc + curr.val, 0);
   baseWeather.score = Math.max(0, Math.min(100, 100 + totalDeductions));
@@ -286,7 +315,6 @@ export const getTelemetryBatch = async (
   const batch: Record<number, any> = {};
 
   offsets.forEach(offset => {
-    // Ensure we don't try to access out of bounds for the forecast (usually 7 days)
     if (offset >= homeRaw.daily?.sunrise?.length) return;
 
     const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
@@ -314,7 +342,8 @@ export const getTelemetryBatch = async (
       getMinPastTemp(homeRaw, offset, settings.morningWindow),
       undefined,
       homeRaw.hourly.precipitation,
-      getAbsoluteIdx(settings.morningWindow, offset)
+      getAbsoluteIdx(settings.morningWindow, offset),
+      false // Commute mode
     );
     const evening = aggregateRawWeather(
       eSlice, 
@@ -325,7 +354,8 @@ export const getTelemetryBatch = async (
       getMinPastTemp(workRaw, offset, settings.eveningWindow),
       undefined,
       workRaw.hourly.precipitation,
-      getAbsoluteIdx(settings.eveningWindow, offset)
+      getAbsoluteIdx(settings.eveningWindow, offset),
+      false // Commute mode
     );
 
     morning.surfaceReason = getStandardizedAdvice(morning);
@@ -358,7 +388,6 @@ export const getAIInsights = async (
   settings: CommuteSettings,
   telemetryBatch: Record<number, any>
 ): Promise<Record<number, { morning: string; evening: string }>> => {
-  // Minimize the data sent to AI to reduce latency and token usage
   const dataToProcess = Object.values(telemetryBatch).map(({offset, weather}) => ({
     o: offset, 
     m: { temp: weather.morning.temp, cond: weather.morning.condition, prec: weather.morning.precipitation, ice: weather.morning.iceRisk }, 

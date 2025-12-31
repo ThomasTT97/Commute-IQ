@@ -123,6 +123,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       case "Wind Intensity": return <Wind className="w-3 h-3 text-slate-400" />;
       case "Headwind Drag": return <ArrowDownToLine className="w-3 h-3 text-orange-500" />;
       case "Tailwind Boost": return <MoveUp className="w-3 h-3 text-emerald-500" />;
+      case "Weather Surplus": return <Sparkles className="w-3 h-3 text-emerald-500" />;
       case "Cold Exposure": return <Thermometer className="w-3 h-3 text-blue-300" />;
       case "Heat Stress": return <Thermometer className="w-3 h-3 text-red-400" />;
       case "Darkness / Visibility": return <Moon className="w-3 h-3 text-indigo-400" />;
@@ -269,7 +270,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </div>
           )}
         </div>
-        <div className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] ${isDark ? 'bg-slate-900/50 border border-white/5' : 'bg-slate-50 border border-slate-200'}`}>
+        <div className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] ${isDark ? 'bg-slate-900/50 border border-white/5' : 'bg-slate-50 border-slate-200'}`}>
           <Lightbulb className={`w-6 h-6 ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
           <div className="flex flex-col">
             <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span>

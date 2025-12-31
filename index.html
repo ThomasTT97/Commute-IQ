@@ -13,12 +13,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commute IQ">
     
-    <!-- iOS Icon - Must be absolute path -->
-    <link rel="apple-touch-icon" href="/logo.png">
+    <!-- iOS Icon - Added query param v=3 to bust iOS cache -->
+    <link rel="apple-touch-icon" href="/logo.png?v=3">
     
-    <!-- Favicons - Must be absolute path -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/logo.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/logo.png">
+    <!-- Favicons - Added query param v=3 to bust cache -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/logo.png?v=3">
+    <link rel="icon" type="image/png" sizes="512x512" href="/logo.png?v=3">
     
     <meta name="theme-color" content="#05070a">
 
@@ -68,7 +68,8 @@
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "vite": "https://esm.sh/vite@^7.3.0",
     "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0",
-    "fs": "https://esm.sh/fs@^0.0.1-security"
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "path": "https://esm.sh/path-browserify@^1.0.1"
   }
 }
 </script>

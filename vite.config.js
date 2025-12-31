@@ -1,15 +1,24 @@
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
+import path from 'path';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   const copyLogoPlugin = () => ({
     name: 'copy-logo',
-    closeBundle: () => {
-      if (fs.existsSync('logo.png')) {
-        fs.copyFileSync('logo.png', 'dist/logo.png');
+    generateBundle() {
+      // Robustly read the logo.png from the project root
+      const logoPath = path.resolve(__dirname, 'logo.png');
+      if (fs.existsSync(logoPath)) {
+        const source = fs.readFileSync(logoPath);
+        // Emit the file explicitly into the build output
+        this.emitFile({
+          type: 'asset',
+          fileName: 'logo.png',
+          source: source
+        });
       }
     }
   });
@@ -30,7 +39,9 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          globPatterns: ['**/*.{js,css,html,ico,svg,png}'] 
+          globPatterns: ['**/*.{js,css,html,ico,svg,png}'],
+          // Critical fix: Ignore the 'v' query param so SW matches logo.png?v=3 to cached logo.png
+          ignoreURLParametersMatching: [/^v$/]
         },
         manifest: {
           name: "Commute IQ",
@@ -41,21 +52,22 @@ export default defineConfig(({ mode }) => {
           display: "standalone",
           scope: "/",
           start_url: "/",
+          id: "/",
           icons: [
             {
-              "src": "/logo.png",
+              "src": "/logo.png?v=3",
               "sizes": "192x192",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/logo.png",
+              "src": "/logo.png?v=3",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/logo.png",
+              "src": "/logo.png?v=3",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "maskable"
