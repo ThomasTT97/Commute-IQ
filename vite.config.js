@@ -9,16 +9,18 @@ export default defineConfig(({ mode }) => {
   const copyLogoPlugin = () => ({
     name: 'copy-logo',
     generateBundle() {
-      // Robustly read the logo.png from the project root
-      const logoPath = path.resolve(__dirname, 'logo.png');
+      // Fixed: Use process.cwd() because __dirname is not available in ESM modules
+      const logoPath = path.resolve(process.cwd(), 'logo.png');
+      
       if (fs.existsSync(logoPath)) {
         const source = fs.readFileSync(logoPath);
-        // Emit the file explicitly into the build output
         this.emitFile({
           type: 'asset',
-          fileName: 'logo.png',
+          fileName: 'icon-v4.png',
           source: source
         });
+      } else {
+        console.warn('Warning: logo.png not found in project root. PWA icon will be missing.');
       }
     }
   });
@@ -33,14 +35,13 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['logo.png'],
+        includeAssets: ['icon-v4.png'],
         manifestFilename: 'manifest.json',
         workbox: {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
           globPatterns: ['**/*.{js,css,html,ico,svg,png}'],
-          // Critical fix: Ignore the 'v' query param so SW matches logo.png?v=3 to cached logo.png
           ignoreURLParametersMatching: [/^v$/]
         },
         manifest: {
@@ -55,19 +56,19 @@ export default defineConfig(({ mode }) => {
           id: "/",
           icons: [
             {
-              "src": "/logo.png?v=3",
+              "src": "/icon-v4.png",
               "sizes": "192x192",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/logo.png?v=3",
+              "src": "/icon-v4.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/logo.png?v=3",
+              "src": "/icon-v4.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "maskable"
