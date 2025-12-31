@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
-    base: '/',
+    base: './',
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
     },
@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          globPatterns: ['**/*.{js,css,html,ico,svg}'] 
+          globPatterns: ['**/*.{js,css,html,ico,svg,png}'] 
         },
         manifest: {
           name: "Commute IQ",
@@ -27,20 +27,26 @@ export default defineConfig(({ mode }) => {
           theme_color: "#05070a",
           background_color: "#05070a",
           display: "standalone",
-          scope: "/",
-          start_url: "/",
+          scope: "./",
+          start_url: "./index.html",
           icons: [
             {
-              "src": "/logo.png",
+              "src": "logo.png",
               "sizes": "192x192",
               "type": "image/png",
-              "purpose": "any maskable"
+              "purpose": "any"
             },
             {
-              "src": "/logo.png",
+              "src": "logo.png",
               "sizes": "512x512",
               "type": "image/png",
-              "purpose": "any maskable"
+              "purpose": "any"
+            },
+            {
+              "src": "logo.png",
+              "sizes": "512x512",
+              "type": "image/png",
+              "purpose": "maskable"
             }
           ]
         }
