@@ -217,7 +217,7 @@ export const aggregateRawWeather = (
     isDark = startHour < 6 || startHour >= 21; 
   }
 
-  let lastPrecipTime = "none";
+  let lastPrecipTime = "None";
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
     for (let i = 1; i <= 12; i++) {
       const idx = sessionStartAbsoluteIdx - i;
@@ -225,13 +225,13 @@ export const aggregateRawWeather = (
         const hour = idx % 24;
         const ampm = hour >= 12 ? 'PM' : 'AM';
         const h12 = hour % 12 || 12;
-        lastPrecipTime = `rain at ${h12}${ampm}`;
+        lastPrecipTime = `Rain at ${h12}${ampm}`;
         break;
       }
     }
   }
 
-  const hasMoisture = totalPrecip > 0 || avgHum > 80 || lastPrecipTime !== "none";
+  const hasMoisture = totalPrecip > 0 || avgHum > 80 || lastPrecipTime !== "None";
   const activeFreezing = minTemp <= 0.5;
   const overnightFreeze = minPastTemp <= 0;
   const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && minTemp <= 4));
@@ -247,7 +247,7 @@ export const aggregateRawWeather = (
     humidity: Math.round(avgHum),
     isDark,
     slipperyChance: totalPrecip > 0 ? 60 : (avgTemp < 3 ? 40 : 10),
-    wetSurfaceChance: (totalPrecip > 0 || lastPrecipTime !== "none") ? 90 : 10,
+    wetSurfaceChance: (totalPrecip > 0 || lastPrecipTime !== "None") ? 90 : 10,
     headwindImpact,
     iceRisk, 
     activeFreezing,
@@ -267,6 +267,7 @@ export const aggregateRawWeather = (
 
 /**
  * Stage 1: Fast Telemetry Fetching
+ * Optimized to fetch the entire week in one go.
  */
 export const getTelemetryBatch = async (
   settings: CommuteSettings, 
@@ -285,6 +286,9 @@ export const getTelemetryBatch = async (
   const batch: Record<number, any> = {};
 
   offsets.forEach(offset => {
+    // Ensure we don't try to access out of bounds for the forecast (usually 7 days)
+    if (offset >= homeRaw.daily?.sunrise?.length) return;
+
     const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
     const eSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
     
@@ -324,7 +328,6 @@ export const getTelemetryBatch = async (
       getAbsoluteIdx(settings.eveningWindow, offset)
     );
 
-    // Apply generic advice immediately so UI isn't empty
     morning.surfaceReason = getStandardizedAdvice(morning);
     evening.surfaceReason = getStandardizedAdvice(evening);
     
@@ -349,32 +352,34 @@ export const getTelemetryBatch = async (
 
 /**
  * Stage 2: Slower AI Interpretation
+ * Reduced JSON payload and optimized prompt to speed up Gemini processing.
  */
 export const getAIInsights = async (
   settings: CommuteSettings,
   telemetryBatch: Record<number, any>
 ): Promise<Record<number, { morning: string; evening: string }>> => {
+  // Minimize the data sent to AI to reduce latency and token usage
   const dataToProcess = Object.values(telemetryBatch).map(({offset, weather}) => ({
-    offset, 
-    morning: weather.morning, 
-    evening: weather.evening
+    o: offset, 
+    m: { temp: weather.morning.temp, cond: weather.morning.condition, prec: weather.morning.precipitation, ice: weather.morning.iceRisk }, 
+    e: { temp: weather.evening.temp, cond: weather.evening.condition, prec: weather.evening.precipitation, ice: weather.evening.iceRisk }
   }));
 
   try {
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
-        contents: `You are a Cycling Transit Intelligence Expert. Generate EXACTLY 1 concise sentence of advice about RIDING STYLE adjustments needed. Language: ${settings.language}. Data: ${JSON.stringify(dataToProcess)}. Return JSON Array: [{ "offset": number, "weather": { "morning": { "surfaceReason": string }, "evening": { "surfaceReason": string } } }]`,
-        config: { temperature: 0.4, responseMimeType: "application/json" }
+        contents: `Cycling Expert: Provide 1 ultra-concise sentence of riding advice per shift. Lang: ${settings.language}. Data: ${JSON.stringify(dataToProcess)}. Return JSON: [{ "o": number, "mw": string, "ew": string }] where mw/ew are morning/evening advice strings.`,
+        config: { temperature: 0.3, responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "[]");
     });
 
     const result: Record<number, { morning: string; evening: string }> = {};
     parsedAIResults.forEach((aiRes: any) => {
-      result[aiRes.offset] = {
-        morning: aiRes.weather.morning.surfaceReason,
-        evening: aiRes.weather.evening.surfaceReason
+      result[aiRes.o] = {
+        morning: aiRes.mw,
+        evening: aiRes.ew
       };
     });
     return result;
@@ -382,30 +387,6 @@ export const getAIInsights = async (
     console.error("AI Insight generation failed", error);
     throw error;
   }
-};
-
-// Kept for backward compatibility if any components use it directly, 
-// but App.tsx should now call getTelemetryBatch and then getAIInsights separately.
-export const getPulseBatch = async (
-  settings: CommuteSettings, 
-  offsets: number[], 
-  skipAI: boolean = false
-): Promise<Record<number, any>> => {
-  const telemetry = await getTelemetryBatch(settings, offsets);
-  if (settings.disableAI || skipAI) return telemetry;
-
-  try {
-    const insights = await getAIInsights(settings, telemetry);
-    Object.keys(insights).forEach(o => {
-      const offset = Number(o);
-      if (telemetry[offset]) {
-        telemetry[offset].weather.morning.surfaceReason = insights[offset].morning;
-        telemetry[offset].weather.evening.surfaceReason = insights[offset].evening;
-        telemetry[offset].isEnhanced = true;
-      }
-    });
-  } catch (e) {}
-  return telemetry;
 };
 
 export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {

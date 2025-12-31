@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, Language, TrainingState, LocationSuggestion, WeatherCondition } from './types'; 
 import { BelgianLocation } from './locations';
 import { DEFAULT_SETTINGS, TRANSLATIONS, BELGIAN_CITIES } from './constants';
@@ -12,7 +12,6 @@ import {
   getCommuteRoadDistance, 
   fetchRawWeatherData, 
   aggregateRawWeather, 
-  // calculateSegmentScore is not exported from geminiService and not used in this file
   getStandardizedAdvice,
   calculateBearing,
   calculateDistance
@@ -87,6 +86,7 @@ const App: React.FC = () => {
       const filtered: Record<number, any> = {};
       Object.keys(parsed).forEach((k) => {
         const key = Number(k);
+        // Keep cache for 24h
         if (now - (parsed[key]?.lastUpdated || 0) < 24 * 60 * 60 * 1000) {
           filtered[key] = parsed[key];
         }
@@ -197,20 +197,19 @@ const App: React.FC = () => {
   }, [settings.homeLocation, settings.homeCoords]);
 
   /**
-   * Optimized Sync:
-   * 1. Fetch raw telemetry (Fast)
-   * 2. Populate UI immediately
-   * 3. Fetch AI Interpretation (Slower)
-   * 4. Enhance UI
+   * High-Efficiency Sync:
+   * Fetches all 7 days of telemetry in ONE operation.
+   * Updates state immediately so UI (7-day overview) is populated instantly.
+   * AI Interpretation is backgrounded as a separate pass.
    */
-  const syncData = useCallback(async (currentSettings: CommuteSettings, offsets: number[], isSilent = false) => {
-    if (!offsets.length) return;
+  const syncFullWeek = useCallback(async (currentSettings: CommuteSettings, isSilent = false) => {
+    const allOffsets = [0, 1, 2, 3, 4, 5, 6];
     if (!isSilent) setLoading(true);
-    setLoadingOffsets((prev: number[]) => [...new Set([...prev, ...offsets])]);
+    setLoadingOffsets(allOffsets);
     
     try {
-      // STAGE 1: TELEMETRY (FAST)
-      const telemetryBatch = await getTelemetryBatch(currentSettings, offsets);
+      // ONE call for the entire week (Open-Meteo returns 7 days of forecast)
+      const telemetryBatch = await getTelemetryBatch(currentSettings, allOffsets);
       
       setPulseDataMap(prev => {
         const next = { ...prev, ...telemetryBatch };
@@ -218,10 +217,10 @@ const App: React.FC = () => {
         return next;
       });
 
-      // If this was a manual refresh or priority sync, we stop "hard loading" after telemetry
       if (!isSilent) setLoading(false);
+      setLoadingOffsets([]); // Telemetry is done, UI is active
 
-      // STAGE 2: AI INSIGHTS (Slower)
+      // PASS 2: AI INSIGHTS (Parallel to UI usage)
       if (!currentSettings.disableAI) {
         try {
           const aiInsights = await getAIInsights(currentSettings, telemetryBatch);
@@ -249,9 +248,9 @@ const App: React.FC = () => {
         }
       }
     } catch (err: any) {
-      console.error("Telemetry sync data failed:", err);
+      console.error("Full week sync failed:", err);
     } finally {
-      setLoadingOffsets((prev: number[]) => prev.filter(o => !offsets.includes(o)));
+      setLoadingOffsets([]);
       if (!isSilent) setLoading(false);
     }
   }, []);
@@ -260,30 +259,22 @@ const App: React.FC = () => {
     if (!initialSyncStarted.current) {
       initialSyncStarted.current = true;
       
-      const allOffsets = [0, 1, 2, 3, 4, 5, 6];
-      const offsetsToSync = allOffsets.filter(offset => {
-        const cached = pulseDataMap[offset];
-        if (!cached) return true;
-        // If it's more than 2 hours old, or not enhanced and AI is enabled
-        const ageHours = (Date.now() - (cached.lastUpdated || 0)) / (1000 * 60 * 60);
-        const needsAI = !settings.disableAI && !cached.isEnhanced;
-        return ageHours > 2 || needsAI;
-      });
+      const checkNeedsSync = () => {
+        const allOffsets = [0, 1, 2, 3, 4, 5, 6];
+        const now = Date.now();
+        return allOffsets.some(offset => {
+          const cached = pulseDataMap[offset];
+          if (!cached) return true;
+          const ageHours = (now - (cached.lastUpdated || 0)) / (1000 * 60 * 60);
+          return ageHours > 1; // Sync if older than 1 hour
+        });
+      };
 
-      if (offsetsToSync.length > 0) {
-        const priority = offsetsToSync.filter(o => o === 0 || o === 1);
-        const background = offsetsToSync.filter(o => o > 1);
-        
-        if (priority.length > 0) {
-          syncData(settings, priority).then(() => {
-            if (background.length > 0) syncData(settings, background, true);
-          });
-        } else if (background.length > 0) {
-          syncData(settings, background, true);
-        }
+      if (checkNeedsSync()) {
+        syncFullWeek(settings, true);
       }
     }
-  }, [syncData, settings, pulseDataMap]);
+  }, [syncFullWeek, settings, pulseDataMap]);
 
   const syncTraining = useCallback(async () => {
     setTrainingLoading(true);
@@ -313,8 +304,6 @@ const App: React.FC = () => {
           Object.keys(rawCurrentLocation.hourly).forEach((k) => { 
             if (Array.isArray(rawCurrentLocation.hourly[k]) && startIndex <= endIndex && endIndex < rawCurrentLocation.hourly[k].length) {
               slice[k] = (rawCurrentLocation.hourly[k] as number[]).slice(startIndex, endIndex + 1);
-            } else if (Array.isArray(rawCurrentLocation.hourly[k]) && startIndex > endIndex) {
-              slice[k] = []; 
             }
           });
         }
@@ -441,9 +430,7 @@ const App: React.FC = () => {
     if (locationChanged || editSettings.disableAI !== settings.disableAI) { 
       setPulseDataMap({});
       localStorage.removeItem(CACHE_KEY);
-      syncData(updated, [0]).then(() => {
-        syncData(updated, [1, 2, 3, 4, 5, 6], true);
-      });
+      syncFullWeek(updated);
     } else {
       setLoading(false);
     }
@@ -480,8 +467,6 @@ const App: React.FC = () => {
       condition,
       score: condition?.score,
       dateLabel: `${labels.name} ${labels.num} ${labels.month}`,
-      optimizationAdvice: undefined,
-      locationAdvice: undefined,
     };
   }, [commuteSequence.primary, pulseDataMap, settings, t]);
 
@@ -499,8 +484,6 @@ const App: React.FC = () => {
       condition,
       score: condition?.score,
       dateLabel: `${labels.name} ${labels.num} ${labels.month}`,
-      optimizationAdvice: undefined,
-      locationAdvice: undefined,
     };
   }, [commuteSequence.secondary, pulseDataMap, settings, t]);
 
@@ -633,8 +616,8 @@ const App: React.FC = () => {
           )}
           
           <div className={`flex items-center gap-1.5 p-1.5 rounded-xl border ${isDark ? 'bg-slate-900/30 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
-            <button onClick={() => viewMode === 'training' ? syncTraining() : syncData(settings, [selectedDateOffset])} className="h-9 w-9 flex items-center justify-center hover:bg-white/10 rounded-lg">
-              <RefreshCw className={`w-4.5 h-4.5 text-slate-400 ${(loading || (loadingOffsets.includes(selectedDateOffset) && !pulseDataMap[selectedDateOffset])) ? 'animate-spin' : ''}`} />
+            <button onClick={() => viewMode === 'training' ? syncTraining() : syncFullWeek(settings)} className="h-9 w-9 flex items-center justify-center hover:bg-white/10 rounded-lg">
+              <RefreshCw className={`w-4.5 h-4.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={() => setIsSettingsOpen(true)} className="h-9 w-9 flex items-center justify-center hover:bg-white/10 rounded-lg">
               <SettingsIcon className="w-4.5 h-4.5 text-slate-400" />
@@ -674,7 +657,7 @@ const App: React.FC = () => {
                 )}
               </div>
               <p className={`text-[13px] font-medium leading-[1.4] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                {primaryData.condition?.surfaceReason || (loadingOffsets.includes(selectedDateOffset) ? "Connecting to weather satellite..." : "Processing telemetry for tactical riding advice...")}
+                {primaryData.condition?.surfaceReason || (loadingOffsets.length > 0 ? "Connecting to weather satellite..." : "Processing telemetry for tactical riding advice...")}
               </p>
             </button>
 

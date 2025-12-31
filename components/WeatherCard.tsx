@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { LocationSuggestion } from '../types';
 import { BelgianLocation } from '../locations';
@@ -108,7 +109,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     const rainDuring = condition.precipDuringSession ?? condition.precipitation ?? 0;
     return [
       { label: "Rain During", value: rainDuring > 0 ? `${rainDuring} mm` : "None", icon: <CloudRain className="w-3 h-3 text-blue-500" /> },
-      { label: "History", value: condition.lastPrecipitationTime || "none", icon: <Clock className="w-3 h-3 text-slate-400" /> },
+      { label: "History", value: condition.lastPrecipitationTime || "None", icon: <Clock className="w-3 h-3 text-slate-400" /> },
       { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3 h-3 text-blue-300" /> },
       { label: "Traction", value: (condition.wetSurfaceChance > 50) ? "Wet" : "Dry", icon: <ShieldCheck className={`w-3 h-3 ${condition.wetSurfaceChance > 50 ? 'text-blue-500' : 'text-emerald-500'}`} /> }
     ];
