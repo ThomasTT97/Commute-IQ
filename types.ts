@@ -1,3 +1,4 @@
+
 import { BelgianLocation } from './locations'; // FIX: Import BelgianLocation
 
 export type Language = 'en' | 'fr' | 'nl';
@@ -53,7 +54,11 @@ export interface WeatherCondition {
   iceRisk: boolean; 
   overnightFreeze?: boolean;
   activeFreezing?: boolean;
+  // FIX: Added minPastTemp to WeatherCondition interface to match return values in geminiService.ts
+  minPastTemp?: number; 
   surfaceReason?: string;
+  lastPrecipitationTime?: string; // New: e.g. "2h ago"
+  precipDuringSession: number;    // New: total mm during window
 }
 
 export interface CommuteInsight {

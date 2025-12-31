@@ -60,7 +60,7 @@ export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number =>
   if (!c1 || !c2) return 0;
   const R = 6371; 
   const dLat = (c2.lat - c1.lat) * Math.PI / 180;
-  const dLon = (c2.lng - c1.lng) * Math.PI / 180; // FIX: Use c2.lng and c1.lng
+  const dLon = (c2.lng - c1.lng) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 };
@@ -124,7 +124,9 @@ export const aggregateRawWeather = (
   settings: CommuteSettings,
   sunTimes?: { sunrise: string, sunset: string },
   minPastTemp: number = 99,
-  customWindow?: [string, string]
+  customWindow?: [string, string],
+  fullRawHourlyPrecip?: number[],
+  sessionStartAbsoluteIdx?: number
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
   const precips = (rawSlice.precipitation || []) as number[];
@@ -133,28 +135,18 @@ export const aggregateRawWeather = (
   const codes = (rawSlice.weather_code || []) as number[];
   const humidities = (rawSlice.relative_humidity_2m || []) as number[];
 
-  if (temps.length === 0) {
-    return {
-      temp: 15, condition: 'Cloudy', precipitation: 0, windSpeed: 10, windDirection: 0,
-      humidity: 50, isDark: false, slipperyChance: 0, wetSurfaceChance: 0, headwindImpact: 0,
-      iceRisk: false, surfaceReason: undefined
-    };
-  }
-
-  const avgTemp = temps.reduce((a, b) => a + b, 0) / temps.length;
-  const minTemp = Math.min(...temps);
-  const maxTemp = Math.max(...temps);
+  const avgTemp = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : 15;
+  const minTemp = temps.length ? Math.min(...temps) : 15;
+  const maxTemp = temps.length ? Math.max(...temps) : 15;
   const totalPrecip = precips.reduce((a, b) => a + b, 0);
-  const maxWind = Math.max(...winds);
-  const avgDir = dirs.reduce((a, b) => a + b, 0) / dirs.length;
-  const avgDirRounded = Math.round(avgDir);
-  const avgHum = humidities.reduce((a, b) => a + b, 0) / humidities.length;
-  const maxCode = Math.max(...codes);
+  const maxWind = winds.length ? Math.max(...winds) : 10;
+  const avgDir = dirs.length ? dirs.reduce((a, b) => a + b, 0) / dirs.length : 0;
+  const avgHum = humidities.length ? humidities.reduce((a, b) => a + b, 0) / humidities.length : 50;
+  const maxCode = codes.length ? Math.max(...codes) : 0;
 
   const condition = resolveCondition(maxCode, maxWind, totalPrecip);
   const headwindImpact = Math.round(calculateAverageWindImpact(heading, dirs));
   
-  // Use custom window if provided (for training), otherwise fallback to commute windows
   const timeWindow = customWindow || (isMorning ? settings.morningWindow : settings.eveningWindow);
   
   let isDark = false;
@@ -163,15 +155,30 @@ export const aggregateRawWeather = (
     const sessionEnd = getMinutes(timeWindow[1]);
     const sunrise = getMinutes(sunTimes.sunrise);
     const sunset = getMinutes(sunTimes.sunset);
-    // Dark if any part of the window is outside daylight hours
     isDark = sessionStart < sunrise || sessionEnd > sunset;
   } else {
     const startHour = parseInt(timeWindow[0].split(':')[0]);
     isDark = startHour < 6 || startHour >= 21; 
   }
 
-  const hasMoisture = totalPrecip > 0 || avgHum > 80;
-  const activeFreezing = minTemp <= 0;
+  // Last precipitation tracking (look back 12h) - User requested specific format
+  let lastPrecipTime = "none";
+  if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
+    for (let i = 1; i <= 12; i++) {
+      const idx = sessionStartAbsoluteIdx - i;
+      if (idx >= 0 && fullRawHourlyPrecip[idx] > 0) {
+        const hour = idx % 24;
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const h12 = hour % 12 || 12;
+        lastPrecipTime = `rain at ${h12}${ampm}`;
+        break;
+      }
+    }
+  }
+
+  // ENHANCED ICE RISK LOGIC
+  const hasMoisture = totalPrecip > 0 || avgHum > 80 || lastPrecipTime !== "none";
+  const activeFreezing = minTemp <= 0.5;
   const overnightFreeze = minPastTemp <= 0;
   const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && minTemp <= 4));
 
@@ -182,16 +189,19 @@ export const aggregateRawWeather = (
     condition,
     precipitation: parseFloat(totalPrecip.toFixed(1)),
     windSpeed: parseFloat(maxWind.toFixed(1)),
-    windDirection: avgDirRounded,
+    windDirection: Math.round(avgDir),
     humidity: Math.round(avgHum),
     isDark,
     slipperyChance: totalPrecip > 0 ? 60 : (avgTemp < 3 ? 40 : 10),
-    wetSurfaceChance: totalPrecip > 0 ? 90 : 10,
+    wetSurfaceChance: (totalPrecip > 0 || lastPrecipTime !== "none") ? 90 : 10,
     headwindImpact,
     iceRisk, 
     activeFreezing,
     overnightFreeze,
-    surfaceReason: undefined
+    minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
+    surfaceReason: undefined,
+    lastPrecipitationTime: lastPrecipTime,
+    precipDuringSession: parseFloat(totalPrecip.toFixed(1))
   };
 };
 
@@ -252,15 +262,36 @@ export const getPulseBatch = async (
       sunset: homeRaw.daily?.sunset?.[offset] || "20:00"
     };
 
+    const getAbsoluteIdx = (window: [string, string], offset: number) => offset * 24 + parseInt(window[0].split(':')[0]);
+
     const getMinPastTemp = (raw: any, offset: number, window: [string, string]) => {
-      const startHour = parseInt(window[0].split(':')[0]);
-      const idx = offset * 24 + startHour;
+      const idx = getAbsoluteIdx(window, offset);
       const pastTemps = (raw.hourly.temperature_2m || []).slice(Math.max(0, idx - 6), idx);
       return pastTemps.length ? Math.min(...pastTemps) : 10;
     };
 
-    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, getMinPastTemp(homeRaw, offset, settings.morningWindow));
-    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, getMinPastTemp(workRaw, offset, settings.eveningWindow));
+    const morning = aggregateRawWeather(
+      mSlice, 
+      morningHeading, 
+      true, 
+      settings, 
+      sunTimes, 
+      getMinPastTemp(homeRaw, offset, settings.morningWindow),
+      undefined,
+      homeRaw.hourly.precipitation,
+      getAbsoluteIdx(settings.morningWindow, offset)
+    );
+    const evening = aggregateRawWeather(
+      eSlice, 
+      eveningHeading, 
+      false, 
+      settings, 
+      sunTimes, 
+      getMinPastTemp(workRaw, offset, settings.eveningWindow),
+      undefined,
+      workRaw.hourly.precipitation,
+      getAbsoluteIdx(settings.eveningWindow, offset)
+    );
     
     const mScore = calculateSegmentScore(morning);
     const eScore = calculateSegmentScore(evening);
@@ -295,13 +326,7 @@ export const getPulseBatch = async (
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
-        contents: `You are a Cycling Transit Intelligence Expert.
-        For each commute, generate EXACTLY 1 concise sentence of advice about RIDING STYLE adjustments needed for the weather conditions.
-        Focus on specific tactics like cornering speed, braking distance, or effort management against wind.
-        
-        Language: ${settings.language}
-        Data: ${JSON.stringify(batchContext.map(({offset, weather}) => ({offset, morning: weather.morning, evening: weather.evening})))}
-        Return JSON Array: [{ "offset": number, "weather": { "morning": { "surfaceReason": string }, "evening": { "surfaceReason": string } } }]`,
+        contents: `You are a Cycling Transit Intelligence Expert. Generate EXACTLY 1 concise sentence of advice about RIDING STYLE adjustments needed. Language: ${settings.language}. Data: ${JSON.stringify(batchContext.map(({offset, weather}) => ({offset, morning: weather.morning, evening: weather.evening})))}. Return JSON Array: [{ "offset": number, "weather": { "morning": { "surfaceReason": string }, "evening": { "surfaceReason": string } } }]`,
         config: { temperature: 0.4, responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "[]");
@@ -328,7 +353,6 @@ export const getPulseBatch = async (
 
 export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {
   const normalizedQuery = query.trim();
-  // Instruction to skip local city lookup review and use AI directly for resolving non-trivial queries
   for (const [name, coords] of Object.entries(BELGIAN_CITIES)) {
     if (name.toLowerCase() === normalizedQuery.toLowerCase()) return { address: name, coords };
   }
@@ -339,7 +363,6 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
       contents: `Full address and coords for: "${query}". Return JSON: { "address": string, "lat": number, "lng": number }`,
       config: { 
         temperature: 0, 
-        // responseMimeType is NOT permitted when googleMaps tool is active.
         tools: [{ googleMaps: {} }] 
       },
     });
@@ -364,7 +387,6 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
       contents: `Cycling distance KM between ${origin} and ${destination}. Only JSON: { "distance": number }`,
       config: { 
         temperature: 0, 
-        // responseMimeType is NOT permitted when googleMaps tool is active.
         tools: [{ googleMaps: {} }] 
       }
     });
