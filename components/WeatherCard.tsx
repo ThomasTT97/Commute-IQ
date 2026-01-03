@@ -16,14 +16,15 @@ import {
   Navigation, 
   Lightbulb, 
   Bike, 
-  CircleHelp, 
   X,
   Thermometer,
   CloudRain,
   Moon,
   Sparkles,
   Map as MapIcon,
-  Droplets
+  Droplets,
+  Sunrise,
+  Sunset
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -47,6 +48,12 @@ const getCardinal = (angle: number): string => {
   return directions[Math.round(angle / 45) % 8];
 };
 
+const formatTime = (isoString?: string): string => {
+  if (!isoString) return "--:--";
+  const timePart = isoString.includes('T') ? isoString.split('T')[1] : isoString;
+  return timePart.substring(0, 5);
+};
+
 export const WeatherCard: React.FC<WeatherCardProps> = ({ 
   condition, 
   timeRange, 
@@ -68,30 +75,32 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const [showSurfaceDetails, setShowSurfaceDetails] = useState(false);
   const [showScoreDetails, setShowScoreDetails] = useState(false);
   const [showTempDetails, setShowTempDetails] = useState(false);
+  const [showLightsDetails, setShowLightsDetails] = useState(false);
   const [showRoutePopup, setShowRoutePopup] = useState(false);
   const [showLocationPopup, setShowLocationPopup] = useState(false);
 
   const wind = useMemo(() => {
     const impact = condition?.headwindImpact ?? 0;
     const speed = condition?.windSpeed ?? 0;
-    if (speed < 7) return { label: 'CALM', color: 'text-slate-500', icon: <Wind className="w-3.5 h-3.5" /> };
-    if (impact > 20) return { label: 'HEADWIND', color: 'text-orange-500', icon: <ArrowDownToLine className="w-3.5 h-3.5" /> };
-    if (impact < -20) return { label: 'TAILWIND', color: 'text-emerald-500', icon: <MoveUp className="w-3.5 h-3.5" /> };
-    return { label: 'SIDEWIND', color: 'text-blue-500', icon: <ArrowLeftRight className="w-3.5 h-3.5" /> };
+    // Increased icon sizes for better visual weight
+    if (speed < 7) return { label: 'CALM', color: 'text-slate-500', icon: <Wind className="w-5.5 h-5.5" /> };
+    if (impact > 20) return { label: 'HEADWIND', color: 'text-orange-500', icon: <ArrowDownToLine className="w-5.5 h-5.5" /> };
+    if (impact < -20) return { label: 'TAILWIND', color: 'text-emerald-500', icon: <MoveUp className="w-5.5 h-5.5" /> };
+    return { label: 'SIDEWIND', color: 'text-blue-500', icon: <ArrowLeftRight className="w-5.5 h-5.5" /> };
   }, [condition?.headwindImpact, condition?.windSpeed]);
 
   const surface = useMemo(() => {
     const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
     return isWet 
-      ? { label: 'WET', color: 'text-blue-500', icon: <AlertTriangle className="w-3.5 h-3.5" /> }
-      : { label: 'DRY', color: 'text-emerald-500', icon: <ShieldCheck className="w-3.5 h-3.5" /> };
+      ? { label: 'WET', color: 'text-blue-500', icon: <AlertTriangle className="w-5.5 h-5.5" /> }
+      : { label: 'DRY', color: 'text-emerald-500', icon: <ShieldCheck className="w-5.5 h-5.5" /> };
   }, [condition?.wetSurfaceChance]);
 
   const iceInfo = useMemo(() => {
     const isIcy = !!condition?.iceRisk;
     return isIcy
-      ? { label: 'ICE', color: 'text-red-500', icon: <AlertTriangle className="w-3.5 h-3.5" /> }
-      : { label: 'NO ICE', color: 'text-emerald-500', icon: <ShieldCheck className="w-3.5 h-3.5" /> };
+      ? { label: 'ICE', color: 'text-red-500', icon: <AlertTriangle className="w-5.5 h-5.5" /> }
+      : { label: 'NO ICE', color: 'text-emerald-500', icon: <ShieldCheck className="w-5.5 h-5.5" /> };
   }, [condition?.iceRisk]);
 
   const iceVitals = useMemo(() => {
@@ -127,7 +136,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       case "Cold Exposure": return <Thermometer className="w-3 h-3 text-blue-300" />;
       case "Heat Stress": return <Thermometer className="w-3 h-3 text-red-400" />;
       case "Darkness / Visibility": return <Moon className="w-3 h-3 text-indigo-400" />;
-      default: return <CircleHelp className="w-3 h-3 text-slate-400" />;
+      default: return <Droplets className="w-3 h-3 text-slate-400" />;
     }
   };
 
@@ -137,21 +146,23 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     setShowSurfaceDetails(false);
     setShowScoreDetails(false);
     setShowTempDetails(false);
+    setShowLightsDetails(false);
     setShowRoutePopup(false);
     setShowLocationPopup(false);
   };
 
-  const toggleWind = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showWindDetails) setShowWindDetails(false); else { closeAllPopups(); setShowWindDetails(true); } };
-  const toggleIce = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showIceDetails) setShowIceDetails(false); else { closeAllPopups(); setShowIceDetails(true); } };
-  const toggleSurface = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showSurfaceDetails) setShowSurfaceDetails(false); else { closeAllPopups(); setShowSurfaceDetails(true); } };
-  const toggleScore = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showScoreDetails) setShowScoreDetails(false); else { closeAllPopups(); setShowScoreDetails(true); } };
-  const toggleTemp = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showTempDetails) setShowTempDetails(false); else { closeAllPopups(); setShowTempDetails(true); } };
-  const toggleRoute = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
-  const toggleLocation = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
+  const toggleWind = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showWindDetails) setShowWindDetails(false); else { closeAllPopups(); setShowWindDetails(true); } };
+  const toggleIce = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showIceDetails) setShowIceDetails(false); else { closeAllPopups(); setShowIceDetails(true); } };
+  const toggleSurface = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showSurfaceDetails) setShowSurfaceDetails(false); else { closeAllPopups(); setShowSurfaceDetails(true); } };
+  const toggleScore = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showScoreDetails) setShowScoreDetails(false); else { closeAllPopups(); setShowScoreDetails(true); } };
+  const toggleTemp = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showTempDetails) setShowTempDetails(false); else { closeAllPopups(); setShowTempDetails(true); } };
+  const toggleLights = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLightsDetails) setShowLightsDetails(false); else { closeAllPopups(); setShowLightsDetails(true); } };
+  const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
+  const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
   const popupBgClass = isDark 
-    ? 'bg-[#1a1d24] border-white/20 shadow-2xl opacity-100' 
-    : 'bg-white border-slate-300 shadow-2xl opacity-100';
+    ? 'bg-[#1a1d24] border-white/20 shadow-2xl' 
+    : 'bg-white border-slate-300 shadow-2xl';
 
   const scoreColor = useMemo(() => {
     const s = Math.round(safetyScore ?? 0);
@@ -254,10 +265,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
       <div className="flex-none flex items-center justify-between mb-4 sm:mb-6">
         <div className="flex flex-col relative">
-          <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-opacity active:opacity-70 text-left">
+          <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-all active:opacity-70 text-left">
             <span className={`text-5xl sm:text-6xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{Math.round(condition?.temp ?? 0)}°</span>
             <span className="text-xl font-bold text-slate-500 tracking-tighter ml-1">C</span>
-            <CircleHelp className={`w-4 h-4 ml-1.5 transition-colors ${showTempDetails ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'}`} />
           </button>
           
           {showTempDetails && (
@@ -270,49 +280,77 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </div>
           )}
         </div>
-        <div className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] ${isDark ? 'bg-slate-900/50 border border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-          <Lightbulb className={`w-6 h-6 ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
-          <div className="flex flex-col">
-            <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span>
-            <span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span>
-          </div>
+        <div className="relative">
+          <button 
+            onClick={toggleLights}
+            className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] transition-all active:scale-[0.98] ${isDark ? 'bg-slate-900/50 border border-white/5 hover:bg-slate-900/80' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
+          >
+            <Lightbulb className={`w-6 h-6 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
+            <div className="flex flex-col text-left">
+              <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span>
+              <span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span>
+            </div>
+          </button>
+          
+          {showLightsDetails && (
+            <div className={`absolute top-full mt-2 right-0 p-4 rounded-2xl border z-[170] min-w-[160px] animate-in fade-in slide-in-from-top-2 duration-200 ${popupBgClass}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Visibility Solar Analysis</span>
+                <button onClick={() => setShowLightsDetails(false)} className="p-1 -mr-1"><X className="w-3.5 h-3.5 text-slate-500" /></button>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Sunrise className="w-3 h-3 text-orange-400" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">Sunrise</span>
+                  </div>
+                  <span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunrise)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Sunset className="w-3 h-3 text-indigo-400" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">Sunset</span>
+                  </div>
+                  <span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunset)}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 flex-grow min-h-0">
-        <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <button onClick={toggleWind} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showWindDetails ? 'ring-1 ring-blue-500/50' : ''} ${isDark ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span>
-            <button onClick={toggleWind} className={`p-1 rounded-lg transition-colors -mr-1 z-30 ${showWindDetails ? 'bg-blue-500/20 text-blue-500' : 'text-slate-600 hover:text-blue-500'}`}><CircleHelp className="w-4 h-4" /></button>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span>
           </div>
           <div className="flex items-center justify-between">
             {showRawWind ? (
-              <span className={`text-sm sm:text-lg font-black tracking-tight ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-[10px] opacity-60">KM/H</span> {getCardinal(condition?.windDirection ?? 0)}</span>
+              <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-[10px] opacity-60">KM/H</span> {getCardinal(condition?.windDirection ?? 0)}</span>
             ) : (
-              <span className={`text-base sm:text-xl font-black tracking-tight ${wind.color}`}>{wind.label}</span>
+              <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${wind.color}`}>{wind.label}</span>
             )}
-            <div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{showRawWind ? <Wind className="w-3.5 h-3.5" /> : wind.icon}</div>
+            <div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div>
           </div>
           {showWindDetails && (
             <div className={`absolute bottom-full mb-3 left-0 right-0 p-3 rounded-2xl border shadow-2xl z-[150] flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-200 ${popupBgClass}`}>
               <div className="flex flex-col gap-1.5 flex-1"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Wind Details</span><p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>Speed: {Math.round(condition?.windSpeed ?? 0)} km/h<br/>Direction: {getCardinal(condition?.windDirection ?? 0)}</p></div>
-              <button onClick={() => setShowWindDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button>
+              <button onClick={toggleWind} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button>
             </div>
           )}
-        </div>
+        </button>
 
-        <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${isDark ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span>
-            <button onClick={toggleSurface} className={`p-1 rounded-lg transition-colors -mr-1 z-30 ${showSurfaceDetails ? 'bg-blue-500/20 text-blue-500' : 'text-slate-600 hover:text-blue-500'}`}><CircleHelp className="w-4 h-4" /></button>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className={`text-base sm:text-xl font-black tracking-tight ${surface.color}`}>{surface.label}</span>
+            <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span>
             <div className={surface.color}>{surface.icon}</div>
           </div>
           {showSurfaceDetails && (
             <div className={`absolute ${showRawWind ? 'bottom-full mb-3' : 'top-full mt-3'} left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in ${showRawWind ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2'} duration-200 ${popupBgClass}`}>
-              <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Precipitation History</span><button onClick={() => setShowSurfaceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
+              <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Precipitation History</span><button onClick={toggleSurface} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {surfaceVitals.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
@@ -327,20 +365,19 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </button>
 
-        <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <button onClick={toggleIce} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showIceDetails ? 'ring-1 ring-red-500/50' : ''} ${isDark ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span>
-            <button onClick={toggleIce} className={`p-1 rounded-lg transition-colors -mr-1 z-30 ${showIceDetails ? 'bg-red-500/20 text-red-500' : 'text-slate-600 hover:text-red-500'}`}><CircleHelp className="w-4 h-4" /></button>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className={`text-base sm:text-xl font-black tracking-tight ${iceInfo.color}`}>{iceInfo.label}</span>
+            <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${iceInfo.color}`}>{iceInfo.label}</span>
             <div className={iceInfo.color}>{iceInfo.icon}</div>
           </div>
           {showIceDetails && (
             <div className={`absolute bottom-full mb-3 left-0 right-[-100%] p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${popupBgClass}`}>
-              <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk assessment</span><button onClick={() => setShowIceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
+              <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk assessment</span><button onClick={toggleIce} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {iceVitals.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
@@ -355,16 +392,15 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </button>
 
-        <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <button onClick={toggleScore} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showScoreDetails ? 'ring-1 ring-blue-500/50' : ''} ${isDark ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span>
-            <button onClick={toggleScore} className={`p-1 rounded-lg transition-colors -mr-1 z-30 ${showScoreDetails ? 'bg-blue-500/20 text-blue-500' : 'text-slate-600 hover:text-blue-500'}`}><CircleHelp className="w-4 h-4" /></button>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className={`text-base sm:text-xl font-black tracking-tight ${scoreColor}`}>{Math.round(safetyScore ?? 0)}%</span>
-            <div className={scoreColor}><Bike className="w-3.5 h-3.5" /></div>
+            <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${scoreColor}`}>{Math.round(safetyScore ?? 0)}%</span>
+            <div className={scoreColor}><Bike className="w-5.5 h-5.5" /></div>
           </div>
           {showScoreDetails && (
             <div className={`absolute bottom-full mb-3 left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${popupBgClass}`}>
@@ -379,7 +415,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </button>
       </div>
     </div>
   );

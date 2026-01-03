@@ -62,6 +62,8 @@ export interface WeatherCondition {
   lastPrecipitationTime?: string;
   precipDuringSession: number;
   scoreBreakdown?: ScoreDeduction[];
+  sunrise?: string;
+  sunset?: string;
 }
 
 export interface CommuteInsight {

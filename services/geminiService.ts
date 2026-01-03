@@ -283,7 +283,9 @@ export const aggregateRawWeather = (
     overnightFreeze,
     minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime,
-    precipDuringSession: parseFloat(totalPrecip.toFixed(1))
+    precipDuringSession: parseFloat(totalPrecip.toFixed(1)),
+    sunrise: sunTimes?.sunrise,
+    sunset: sunTimes?.sunset
   };
 
   const breakdown = getScoreBreakdown(baseWeather, isTraining);
