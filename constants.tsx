@@ -10,6 +10,10 @@ import {
 } from 'lucide-react';
 import { Language, CommuteSettings, Coordinates } from './types';
 
+export const ROAD_DETOUR_FACTOR = 1.32;
+export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
+export const AVG_TRAINING_SPEED = 28.5; // km/h
+
 export const WEATHER_ICONS: Record<string, React.ReactNode> = {
   Sunny: <Sun className="text-yellow-400" />,
   Cloudy: <Cloud className="text-gray-400" />,

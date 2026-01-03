@@ -16,6 +16,7 @@ import {
   Navigation, 
   Lightbulb, 
   Bike, 
+  CircleHelp, 
   X,
   Thermometer,
   CloudRain,
@@ -25,8 +26,7 @@ import {
   Droplets,
   Sunrise,
   Sunset,
-  Zap,
-  CircleHelp
+  Zap
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -119,6 +119,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       }
       return "Surface Alert: High moisture combined with near-freezing temperatures detected. Roads are likely to be slippery with frost or black ice.";
     } else {
+      // Improved Safety Messaging: Don't falsely claim "consistently above freezing" if it was freezing recently.
+      if (condition.minPastTemp !== undefined && condition.minPastTemp <= 0) {
+         return "Safe: Sub-zero temperatures were recorded recently, but current humidity levels are sufficiently low to prevent ice formation.";
+      }
       if (condition.temp < 5 && (condition.humidity || 0) < 50) {
         return "Safe: Although cold, the atmosphere is dry enough to prevent frost formation. Roads are clear.";
       }
@@ -148,10 +152,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const iceVitals = useMemo(() => {
     if (!condition) return [];
     return [
-      { label: "Air Temp", value: `${Math.round(condition.temp)}°C`, icon: <Thermometer className="w-3 h-3 text-blue-400" /> },
-      { label: "Min Past (6h)", value: `${Math.round(condition.minPastTemp ?? condition.temp)}°C`, icon: <Clock className="w-3 h-3 text-slate-400" /> },
-      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3 h-3 text-blue-300" /> },
-      { label: "Status", value: condition.iceRisk ? "High Risk" : "Safe", icon: <AlertTriangle className={`w-3 h-3 ${condition.iceRisk ? 'text-red-500' : 'text-emerald-500'}`} /> }
+      { label: "Air Temp", value: `${Math.round(condition.temp)}°C`, icon: <Thermometer className="w-3.5 h-3.5 text-blue-400" /> },
+      { label: "Min Past (6h)", value: `${Math.round(condition.minPastTemp ?? condition.temp)}°C`, icon: <Clock className="w-3.5 h-3.5 text-slate-400" /> },
+      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3.5 h-3.5 text-blue-300" /> },
+      { label: "Status", value: condition.iceRisk ? "High Risk" : "Safe", icon: <AlertTriangle className={`w-3.5 h-3.5 ${condition.iceRisk ? 'text-red-500' : 'text-emerald-500'}`} /> }
     ];
   }, [condition]);
 
@@ -159,26 +163,26 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (!condition) return [];
     const rainDuring = condition.precipDuringSession ?? condition.precipitation ?? 0;
     return [
-      { label: "Rain During", value: rainDuring > 0 ? `${rainDuring} mm` : "None", icon: <CloudRain className="w-3 h-3 text-blue-500" /> },
-      { label: "Last rain", value: condition.lastPrecipitationTime || "None", icon: <Clock className="w-3 h-3 text-slate-400" /> },
-      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3 h-3 text-blue-300" /> },
-      { label: "Traction", value: (condition.wetSurfaceChance > 50) ? "Wet" : "Dry", icon: <ShieldCheck className={`w-3 h-3 ${condition.wetSurfaceChance > 50 ? 'text-blue-500' : 'text-emerald-500'}`} /> }
+      { label: "Rain During", value: rainDuring > 0 ? `${rainDuring} mm` : "None", icon: <CloudRain className="w-3.5 h-3.5 text-blue-500" /> },
+      { label: "Last rain", value: condition.lastPrecipitationTime || "None", icon: <Clock className="w-3.5 h-3.5 text-slate-400" /> },
+      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3.5 h-3.5 text-blue-300" /> },
+      { label: "Traction", value: (condition.wetSurfaceChance > 50) ? "Wet" : "Dry", icon: <ShieldCheck className={`w-3.5 h-3.5 ${condition.wetSurfaceChance > 50 ? 'text-blue-500' : 'text-emerald-500'}`} /> }
     ];
   }, [condition]);
 
   const getBreakdownIcon = (label: string) => {
     switch (label) {
-      case "Critical Ice Risk": return <AlertTriangle className="w-3 h-3 text-red-500" />;
-      case "Active Precipitation": return <CloudRain className="w-3 h-3 text-blue-500" />;
-      case "Wet Roads": return <AlertTriangle className="w-3 h-3 text-blue-400" />;
-      case "Wind Intensity": return <Wind className="w-3 h-3 text-slate-400" />;
-      case "Headwind Drag": return <ArrowDownToLine className="w-3 h-3 text-orange-500" />;
-      case "Tailwind Boost": return <MoveUp className="w-3 h-3 text-emerald-500" />;
-      case "Weather Surplus": return <Sparkles className="w-3 h-3 text-emerald-500" />;
-      case "Cold Exposure": return <Thermometer className="w-3 h-3 text-blue-300" />;
-      case "Heat Stress": return <Thermometer className="w-3 h-3 text-red-400" />;
-      case "Darkness / Visibility": return <Moon className="w-3 h-3 text-indigo-400" />;
-      default: return <Droplets className="w-3 h-3 text-slate-400" />;
+      case "Critical Ice Risk": return <AlertTriangle className="w-3.5 h-3.5 text-red-500" />;
+      case "Active Precipitation": return <CloudRain className="w-3.5 h-3.5 text-blue-500" />;
+      case "Wet Roads": return <AlertTriangle className="w-3.5 h-3.5 text-blue-400" />;
+      case "Wind Intensity": return <Wind className="w-3.5 h-3.5 text-slate-400" />;
+      case "Headwind Drag": return <ArrowDownToLine className="w-3.5 h-3.5 text-orange-500" />;
+      case "Tailwind Boost": return <MoveUp className="w-3.5 h-3.5 text-emerald-500" />;
+      case "Weather Surplus": return <Sparkles className="w-3.5 h-3.5 text-emerald-500" />;
+      case "Cold Exposure": return <Thermometer className="w-3.5 h-3.5 text-blue-300" />;
+      case "Heat Stress": return <Thermometer className="w-3.5 h-3.5 text-red-400" />;
+      case "Darkness / Visibility": return <Moon className="w-3.5 h-3.5 text-indigo-400" />;
+      default: return <Droplets className="w-3.5 h-3.5 text-slate-400" />;
     }
   };
 
@@ -347,17 +351,17 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
+                    <Sunrise className="w-3.5 h-3.5 text-orange-400" />
                     <span className="text-[10px] font-black text-slate-500 uppercase">Sunrise</span>
-                    <span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunrise)}</span>
                   </div>
-                  <Sunrise className="w-3.5 h-3.5 text-orange-400" />
+                  <span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunrise)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
+                    <Sunset className="w-3.5 h-3.5 text-indigo-400" />
                     <span className="text-[10px] font-black text-slate-500 uppercase">Sunset</span>
-                    <span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunset)}</span>
                   </div>
-                  <Sunset className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunset)}</span>
                 </div>
               </div>
             </div>
@@ -400,8 +404,11 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {surfaceVitals.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
-                    <div className="flex items-center gap-2"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>
-                    <div className="flex-none">{item.icon}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-none w-5 flex justify-center">{item.icon}</div>
+                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span>
+                    </div>
+                    <span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -429,8 +436,11 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {iceVitals.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
-                    <div className="flex items-center gap-2"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>
-                    <div className="flex-none">{item.icon}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-none w-5 flex justify-center">{item.icon}</div>
+                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span>
+                    </div>
+                    <span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -459,10 +469,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                 {condition?.scoreBreakdown && condition.scoreBreakdown.length > 0 ? condition.scoreBreakdown.map((item: any, i: number) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">
                     <div className="flex items-center gap-2">
+                      <div className="flex-none w-5 flex justify-center">{getBreakdownIcon(item.label)}</div>
                       <span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span>
-                      <span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span>
                     </div>
-                    <div className="flex-none">{getBreakdownIcon(item.label)}</div>
+                    <span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span>
                   </div>
                 )) : <p className="text-[10px] font-bold text-emerald-500">Perfect conditions: No deductions applied.</p>}
               </div>

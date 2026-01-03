@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { 
   ArrowLeft, 
@@ -15,7 +16,8 @@ import {
   Globe,
   Activity,
   X,
-  Loader2
+  Loader2,
+  MapPin
 } from 'lucide-react';
 import { TrainingState } from '../types';
 import { BelgianLocation } from '../locations';
@@ -27,6 +29,7 @@ interface TrainingViewProps {
   training: TrainingState;
   trainingSearch: string;
   showTrainingSuggestions: boolean;
+  isSearching: boolean;
   trainingData: any;
   trainingLoading: boolean;
   manualStartHour: number | null;
@@ -39,9 +42,8 @@ interface TrainingViewProps {
   onDistanceChange: (dist: number) => void;
   onManualHourChange: (hour: number) => void;
   onSelectSuggestion: (loc: BelgianLocation) => void;
-  // Fix: Update filterLocations prop to accept globalResults and add globalTrainingResults prop
   filterLocations: (query: string, globalResults: BelgianLocation[]) => BelgianLocation[];
-  globalTrainingResults: BelgianLocation[]; // New prop
+  globalTrainingResults: BelgianLocation[];
   getDayLabel: (offset: number) => { name: string; num: number; month: string };
 }
 
@@ -50,6 +52,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   training,
   trainingSearch,
   showTrainingSuggestions,
+  isSearching,
   trainingData,
   trainingLoading,
   manualStartHour,
@@ -63,7 +66,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   onManualHourChange,
   onSelectSuggestion,
   filterLocations,
-  globalTrainingResults, // Destructure new prop
+  globalTrainingResults,
   getDayLabel
 }) => {
   const verticalPickerRef = useRef<HTMLDivElement>(null);
@@ -129,7 +132,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
     return () => clearTimeout(timer);
   }, [training.dateOffset]);
 
-  // Fix: Pass globalTrainingResults to filterLocations
   const suggestions = useMemo(() => filterLocations(trainingSearch, globalTrainingResults), [filterLocations, trainingSearch, globalTrainingResults]);
 
   const isAIActive = trainingData?.isAIEnhanced;
@@ -204,17 +206,28 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                 >
                   <Home className="w-4 h-4" />
                 </button>
-                {showTrainingSuggestions && suggestions.length > 0 && (
+                {showTrainingSuggestions && (isSearching || suggestions.length > 0) && (
                   <div className={`absolute top-full left-0 right-0 mt-2 z-[210] border rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-top-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/10' : 'bg-white border-slate-300'}`}>
                     {suggestions.map(loc => {
                       const isGlobal = !BELGIAN_LOCATIONS.some(bl => bl.name === loc.name);
                       return (
                         <button key={loc.name} onClick={() => onSelectSuggestion(loc)} className={`w-full px-4 py-3 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wide border-b last:border-0 transition-colors ${isDark ? 'hover:bg-white/5 text-slate-300 border-white/5' : 'hover:bg-slate-50 text-slate-900 border-slate-100'}`}>
                           <span>{loc.name}</span>
-                          {isGlobal && <Globe className="w-3 h-3 text-blue-600/50" />}
+                          {isGlobal && (
+                            <div className="flex items-center gap-1 text-[8px] font-bold text-blue-500/80">
+                              <MapPin className="w-3 h-3" />
+                              <span>MAPS</span>
+                            </div>
+                          )}
                         </button>
                       );
                     })}
+                    {isSearching && (
+                      <div className={`px-4 py-2.5 flex items-center gap-2 text-xs font-medium border-t ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
+                        <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
+                        <span className="text-blue-500/80">Searching via Google Maps...</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -311,7 +324,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
             </div>
           </div>
         ) : trainingData ? (
-          <div className="flex flex-col gap-4 flex-1 overflow-hidden">
+          <div className="flex flex-col gap-4 flex-1 min-h-0 relative z-10">
             <div 
               onClick={() => isIntelligenceExpanded && setIsIntelligenceExpanded(false)}
               className={`transition-all duration-500 ease-in-out ${isIntelligenceExpanded ? 'flex-none cursor-pointer' : 'flex-1 min-h-0'}`}
@@ -346,7 +359,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                     <div className={`p-1.5 rounded-lg transition-colors ${isAIActive ? 'bg-blue-600 text-white' : 'bg-slate-500 text-white animate-pulse'}`}>
                       <Zap className="w-4 h-4" />
                     </div>
-                    <span className={`text-[11px] font-black uppercase tracking-[0.25em] ${isAIActive ? 'text-blue-600' : 'text-slate-600'}`}>
+                    <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${isAIActive ? 'text-blue-600' : 'text-slate-600'}`}>
                       {isAIActive ? 'Training Intelligence' : 'Deep Analysis...'}
                     </span>
                   </div>

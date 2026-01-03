@@ -10,12 +10,15 @@ export interface Coordinates {
 
 export type EquipmentType = 'Road Bike' | 'Gravel Bike' | 'Mountainbike' | 'Speedpedelec';
 
+export type TireSetup = 'Tubeless' | 'Tubular' | 'Clincher (Butyl)' | 'Clincher (TPU)' | 'Clincher (Latex)';
+
 export interface Equipment {
   id: string;
   name: string;
   type: EquipmentType;
   tireWidth: number; // mm
   riderWeight: number; // kg
+  tireSetup?: TireSetup; // Optional for backward compatibility
   isSelected: boolean;
 }
 
@@ -108,4 +111,11 @@ export interface ClothingAdvice {
   outerLayer: string;
   accessories: string[];
   reasoning: string;
+}
+
+export interface ConnectionStatusState {
+  'Open-Meteo': 'checking' | 'ok' | 'fail' | 'fallback';
+  'Gemini LLM': 'checking' | 'ok' | 'fail' | 'fallback';
+  'Google Maps': 'checking' | 'ok' | 'fail' | 'fallback';
+  llmDetails: { model: string | null; priority: string | null; alternatives: number | null };
 }

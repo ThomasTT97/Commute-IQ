@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -17,12 +18,11 @@ const MODEL_CHAIN = [
   "gemini-3-flash-preview",
   "gemini-2.5-flash-lite-preview",
   "gemini-2.0-flash",
-  "gemini-2.0-flash-lite-preview-02-05",
-  "gemini-flash-lite-latest"
+  "gemini-2.0-flash-lite-preview-02-05"
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
-  // Request 14 days of forecast to cover future projections
+  // Request 14 days of forecast + 1 past day for trend analysis
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather telemetry failed");
@@ -32,7 +32,12 @@ export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => 
 export const sliceWeatherData = (hourly: any, window: [string, string], offset: number): any => {
   const startHour = parseInt(window[0].split(':')[0]);
   const endHour = parseInt(window[1].split(':')[0]);
-  const dayStartIdx = offset * 24;
+  
+  // CRITICAL FIX: The API returns 1 past day (24 hours).
+  // Index 0 to 23 = Yesterday
+  // Index 24 to 47 = Today (Offset 0)
+  // Index 48 to 71 = Tomorrow (Offset 1)
+  const dayStartIdx = (offset + 1) * 24; 
   
   const startIndex = dayStartIdx + startHour;
   const endIndex = dayStartIdx + endHour;
@@ -188,7 +193,7 @@ const callWithRetry = async <T>(
   }
   // If all models in the chain failed
   isAIFallingBack = true;
-  currentLLMModel = null;
+  currentLLMModel = modelsToTry[modelsToTry.length - 1]; // Last attempted
   currentLLMModelPriorityLabel = `All failed (initial: ${modelsToTry[0]})`;
   remainingLLMAlternativesCount = 0;
   throw lastFnError;
@@ -356,10 +361,23 @@ export const aggregateRawWeather = (
     }
   }
 
-  const hasMoisture = totalPrecip > 0 || avgHum > 80 || lastPrecipTime !== "None";
-  const activeFreezing = minTemp <= 0.5;
+  // Refined Ice Risk Logic
+  const activeFreezing = minTemp <= 0.5; // Keeping buffer for sensor accuracy
+  // If ground was freezing recently (overnight), it will stay frozen if air is <= 3.5C
+  const nearFreezing = minTemp <= 3.5; 
   const overnightFreeze = minPastTemp <= 0;
-  const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && minTemp <= 4));
+  
+  // Adjusted Humidity Threshold:
+  // If the ground has been frozen (overnightFreeze), moisture condenses/freezes at lower humidity levels (frost).
+  // Standard threshold is 75%, but we lower it to 60% if thermal inertia is in play.
+  const humidityThreshold = overnightFreeze ? 60 : 75;
+
+  const hasMoisture = totalPrecip > 0 || avgHum > humidityThreshold || lastPrecipTime !== "None";
+  
+  // Ice risk exists if:
+  // 1. It is currently freezing and moisture is present.
+  // 2. It was freezing recently (thermal inertia) AND it's still cold enough AND moisture is present.
+  const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && nearFreezing));
 
   const baseWeather: any = {
     temp: parseFloat(avgTemp.toFixed(1)),
@@ -430,10 +448,15 @@ export const getTelemetryBatch = async (
       sunset: homeRaw.daily?.sunset?.[offset] || "20:00"
     };
 
-    const getAbsoluteIdx = (window: [string, string], offset: number) => offset * 24 + parseInt(window[0].split(':')[0]);
+    // FIX: getAbsoluteIdx must also account for the 24h past buffer.
+    const getAbsoluteIdx = (window: [string, string], offset: number) => {
+      // (offset + 1) to skip yesterday (0-23)
+      return (offset + 1) * 24 + parseInt(window[0].split(':')[0]);
+    };
 
     const getMinPastTemp = (raw: any, offset: number, window: [string, string]) => {
       const idx = getAbsoluteIdx(window, offset);
+      // Grab 6 hours BEFORE the window start
       const pastTemps = (raw.hourly.temperature_2m || []).slice(Math.max(0, idx - 6), idx);
       return pastTemps.length ? Math.min(...pastTemps) : 10;
     };
@@ -534,9 +557,8 @@ export const getTrainingSessionAIAdvice = async (
     });
     return data;
   } catch (e) {
-    isAIFallingBack = true;
-    const selectedEquipment = settings.equipment?.find(e => e.isSelected);
-    return getStandardizedAdvice(weather, selectedEquipment);
+    console.warn("AI Training Advice failed:", e);
+    throw e; // Throw so the UI knows AI failed and doesn't claim "Training Intelligence" with hardcoded data
   }
 };
 
@@ -588,17 +610,23 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
 export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
   if (query.length < 3) return [];
   try {
+    // Use callWithRetry to utilize the full model chain, ensuring robustness.
+    // We use the googleMaps tool to ensure the data is grounded in reality, not hallucinated.
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
-        contents: `Search for real geographic locations matching "${query}". Return a JSON array of up to 5 objects: { "name": string, "lat": number, "lng": number }. Ensure names are descriptive including country or region.`,
+        // Prompt asks for a JSON list derived from Google Maps data.
+        // We cannot use responseMimeType: "application/json" with tools, so we parse the text manually.
+        contents: `Find up to 5 real geographic locations matching "${query}" using Google Maps. Return a raw JSON array (no markdown code blocks) of objects with properties: name (string), lat (number), lng (number).`,
         config: { 
-          temperature: 0.1, 
-          responseMimeType: "application/json" 
+          temperature: 0, 
+          tools: [{ googleMaps: {} }] 
         }
       });
-      return JSON.parse(response.text || "[]");
-    }, "gemini-3-flash-preview");
+      
+      const cleanText = response.text?.replace(/```json/g, "").replace(/```/g, "").trim() || "[]";
+      return JSON.parse(cleanText);
+    });
     return data;
   } catch (e) {
     return [];
