@@ -8,6 +8,17 @@ export interface Coordinates {
   lng: number;
 }
 
+export type EquipmentType = 'Road Bike' | 'Gravel Bike' | 'Mountainbike' | 'Speedpedelec';
+
+export interface Equipment {
+  id: string;
+  name: string;
+  type: EquipmentType;
+  tireWidth: number; // mm
+  riderWeight: number; // kg
+  isSelected: boolean;
+}
+
 export interface CommuteSettings {
   homeLocation: string;
   homeCoords?: Coordinates;
@@ -19,6 +30,7 @@ export interface CommuteSettings {
   language: Language;
   theme: 'dark' | 'light';
   disableAI: boolean;
+  equipment: Equipment[];
 }
 
 export interface ScoreDeduction {
@@ -59,11 +71,16 @@ export interface WeatherCondition {
   activeFreezing?: boolean;
   minPastTemp?: number; 
   surfaceReason?: string;
+  ridingStyleAdvice?: string;
+  bikeSetupAdvice?: string;
+  clothingAdvice?: string;
+  performanceAdvice?: string;
   lastPrecipitationTime?: string;
   precipDuringSession: number;
   scoreBreakdown?: ScoreDeduction[];
   sunrise?: string;
   sunset?: string;
+  optimalPressure?: string;
 }
 
 export interface CommuteInsight {

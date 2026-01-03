@@ -1,18 +1,29 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction } from "../types";
+import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment } from "../types";
 import { BELGIAN_CITIES } from "../constants";
+import { BelgianLocation } from "../locations";
 
 export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
+export let isAIFallingBack = false;
+
+// New globals to track active LLM model information
+export let currentLLMModel: string | null = null;
+export let currentLLMModelPriorityLabel: string | null = null;
+export let remainingLLMAlternativesCount: number | null = null;
+
 
 const MODEL_CHAIN = [
-  "gemini-3-flash-preview",       
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash-lite-preview",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite-preview-02-05",
   "gemini-flash-lite-latest"
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1`;
+  // Request 14 days of forecast to cover future projections
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather telemetry failed");
   return res.json();
@@ -35,14 +46,92 @@ export const sliceWeatherData = (hourly: any, window: [string, string], offset: 
   return slice;
 };
 
-export const getStandardizedAdvice = (w: WeatherCondition): string => {
-  if (w.iceRisk) return "High ice risk detected. Surfaces may be treacherous. Consider public transport or extreme caution.";
-  if (w.precipitation > 2) return "Heavy rain active. Expect low visibility and significantly reduced traction.";
-  if (w.precipitation > 0) return "Light rain present. Road surfaces are wet and slippery.";
-  if (w.windSpeed > 40) return "Dangerous wind speeds. High risk of debris and lateral instability.";
-  if (w.headwindImpact > 30) return "Significant headwind detected. Expect increased physical exertion.";
-  if (w.temp < 0) return "Freezing temperatures. Ensure adequate thermal protection.";
-  return "Standard atmospheric conditions. Maintain normal safety protocols.";
+const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): string => {
+  const { riderWeight, tireWidth, type } = equipment;
+  // Simplified calculation based on weight, width and type
+  // Output in Bar
+  let pressure = 0;
+
+  if (type === 'Road Bike' || type === 'Speedpedelec') {
+    // Heuristic: Base 2.0 + (Weight * 0.05) - (Width - 25) * 0.1
+    pressure = 2.0 + (riderWeight * 0.05) - ((tireWidth - 25) * 0.1);
+    // Clamp reasonable bounds for road
+    pressure = Math.max(3.5, Math.min(8.5, pressure));
+  } else if (type === 'Gravel Bike') {
+    // Heuristic: Base 1.0 + (Weight * 0.03) - (Width - 35) * 0.05
+    pressure = 1.0 + (riderWeight * 0.03) - ((tireWidth - 35) * 0.05);
+    // Clamp reasonable bounds for gravel
+    pressure = Math.max(1.8, Math.min(4.5, pressure));
+  } else {
+    // Mountainbike
+    // Heuristic: Base 0.5 + (Weight * 0.02)
+    pressure = 0.5 + (riderWeight * 0.02);
+    // Clamp reasonable bounds for MTB
+    pressure = Math.max(1.4, Math.min(3.0, pressure));
+  }
+
+  // Weather adjustments
+  if (w.iceRisk) {
+    pressure -= 0.5; // Significant drop for contact patch
+  } else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) {
+    pressure -= 0.3; // Drop for traction
+  }
+
+  return `${pressure.toFixed(1)} Bar`;
+};
+
+export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment): { summary: string; style: string; setup: string; clothing: string; performance: string } => {
+  let summary = "Standard atmospheric conditions. Maintain normal safety protocols.";
+  let style = "Ride predictably and maintain visibility.";
+  let setup = "Standard tire pressure and check lights.";
+  let clothing = "Short bibs and short sleeves. Standard kit.";
+  let performance = "Optimal physiological conditions for threshold training and endurance improvement.";
+
+  // Clothing Logic based on Temperature
+  if (w.temp < 5) {
+    clothing = "Thermal long bibs, winter jacket, heavy gloves, and neoprene overshoes required.";
+  } else if (w.temp < 10) {
+    clothing = "Long bibs (or leg warmers), long sleeve jersey, base layer, and full-finger gloves.";
+  } else if (w.temp < 15) {
+    clothing = "Short bibs with knee warmers, arm warmers, and a wind gilet. Light gloves recommended.";
+  } else if (w.temp < 20) {
+    clothing = "Short bibs, short sleeves. Carry a gilet or arm warmers for descent/stops.";
+  }
+
+  if (w.iceRisk) {
+    summary = "High ice risk detected. Treacherous surfaces expected.";
+    style = "Avoid leaning into turns. Brake only when upright and very gently.";
+    setup = "Lowest safe tire pressure for maximum contact patch. Consider studded tires.";
+    clothing = "Full thermal layers. Focus on core warmth. Overshoes essential.";
+    performance = "Low potential for performance metrics. Focus on muscular maintenance.";
+  } else if (w.precipitation > 2) {
+    summary = "Heavy rain active. Expect low visibility and low traction.";
+    style = "Increase braking distance. Avoid painted lines and metal covers.";
+    setup = "Check brake pad wear. Use high-vis lights.";
+    clothing = `${clothing} Add hardshell rain jacket and waterproof overshoes.`;
+    performance = "Good for building mental resilience. Hydration needs remain high.";
+  } else if (w.windSpeed > 40) {
+    summary = "Dangerous wind speeds. High risk of lateral instability.";
+    style = "Firm grip, loose elbows. Anticipate gusts between buildings.";
+    setup = "Avoid deep-section rims. Remove large panniers.";
+    clothing = "Tight-fitting gear to prevent flapping. Gilet highly recommended.";
+    performance = "Extreme aerobic demand. Monitor heart rate recovery carefully.";
+  } else if (w.temp < 0) {
+    summary = "Freezing temperatures. Frost risk present.";
+    style = "Stay alert for micro-patches of frost in shaded areas.";
+    setup = "Ensure chain is well-lubricated against road salt.";
+    performance = "Cold-air inhalation risk. Caloric burn rate will increase.";
+  } else if (w.temp > 30) {
+    performance = "Heat stress risk. Focus on hydration and shorter, high-quality efforts.";
+    clothing = "Ultra-lightweight kit. Unzip jersey for airflow. No base layer.";
+  }
+
+  if (equipment) {
+    const pressure = calculateOptimalPressure(equipment, w);
+    setup = `Set ${equipment.name} tires to ${pressure}. ${setup}`;
+  }
+
+  return { summary, style, setup, clothing, performance };
 };
 
 const extractJson = (text?: string): any => {
@@ -64,28 +153,44 @@ const callWithRetry = async <T>(
   const apiKey = process.env.API_KEY;
   
   if (!apiKey || apiKey.length < 5) {
+    isAIFallingBack = true;
+    currentLLMModel = null;
+    currentLLMModelPriorityLabel = "N/A (API Key Missing)";
+    remainingLLMAlternativesCount = MODEL_CHAIN.length;
     throw new Error("API Key is missing.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
   const modelsToTry = specificModel ? [specificModel] : MODEL_CHAIN;
 
-  for (const modelName of modelsToTry) {
+  for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
+    const modelName = modelsToTry[modelIndex];
     for (let i = 0; i <= maxRetriesPerModel; i++) {
       try {
         const result = await fn(ai, modelName);
+        isAIFallingBack = false;
+        currentLLMModel = modelName;
+        currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback ${modelIndex}`;
+        remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
         return { data: result, model: modelName };
       } catch (error: any) {
         lastFnError = error;
         const status = error?.status || error?.statusCode;
         if (((status >= 500 && status <= 599) || status === 429) && i < maxRetriesPerModel) {
+          // Retry for server errors or rate limits
           await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
           continue;
         }
-        break;
+        // If not a retryable error or max retries reached for this model, try next model
+        break; 
       }
     }
   }
+  // If all models in the chain failed
+  isAIFallingBack = true;
+  currentLLMModel = null;
+  currentLLMModelPriorityLabel = `All failed (initial: ${modelsToTry[0]})`;
+  remainingLLMAlternativesCount = 0;
   throw lastFnError;
 };
 
@@ -135,12 +240,10 @@ const resolveCondition = (code: number, windSpeed: number, precip: number): Weat
 export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: boolean = false): ScoreDeduction[] => {
   const items: ScoreDeduction[] = [];
   
-  // 1. Ice Risk (Safety - Critical)
   if (w.iceRisk) {
     items.push({ label: "Critical Ice Risk", val: -70 });
   }
   
-  // 2. Precipitation / Surface
   if ((w.precipitation || 0) > 0) {
     const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 4);
     items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
@@ -148,15 +251,12 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
     items.push({ label: "Wet Roads", val: -10 });
   }
   
-  // 3. Wind Intensity (General safety/difficulty)
   if ((w.windSpeed || 0) > 15) {
     const windDeduction = ((w.windSpeed || 0) - 15) * 1.5;
     items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
   }
   
-  // 4. Directional Wind 
   if (!isTraining) {
-    // Only apply headwind/tailwind logic for commutes
     if ((w.headwindImpact || 0) > 20) {
       const headwindDeduction = (w.headwindImpact || 0) / 4;
       items.push({ label: "Headwind Drag", val: -Math.round(headwindDeduction) });
@@ -165,11 +265,9 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
     }
   }
   
-  // 5. Temperature
   const temp = w.temp || 0;
 
   if (isTraining) {
-    // Training Specific: Cold penalty below 10°C, Surplus above 15°C
     if (temp < 10) {
       const coldDeduction = (10 - temp) * 2;
       items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
@@ -183,7 +281,6 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
       }
     }
   } else {
-    // Commute Specific: Cold penalty below 5°C, Heat stress above 28°C
     if (temp < 5) {
       const coldDeduction = (5 - temp) * 2;
       items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
@@ -193,7 +290,6 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
     }
   }
   
-  // 6. Darkness
   if (w.isDark) {
     items.push({ label: "Darkness / Visibility", val: -5 });
   }
@@ -204,7 +300,7 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
 export const aggregateRawWeather = (
   rawSlice: any, 
   heading: number, 
-  isMorning: boolean,
+  isMorning: boolean, 
   settings: CommuteSettings,
   sunTimes?: { sunrise: string, sunset: string },
   minPastTemp: number = 99,
@@ -254,7 +350,7 @@ export const aggregateRawWeather = (
         const hour = idx % 24;
         const ampm = hour >= 12 ? 'PM' : 'AM';
         const h12 = hour % 12 || 12;
-        lastPrecipTime = `Rain at ${h12}${ampm}`;
+        lastPrecipTime = `${h12}${ampm}`;
         break;
       }
     }
@@ -292,14 +388,21 @@ export const aggregateRawWeather = (
   baseWeather.scoreBreakdown = breakdown;
   const totalDeductions = breakdown.reduce((acc: number, curr: ScoreDeduction) => acc + curr.val, 0);
   baseWeather.score = Math.max(0, Math.min(100, 100 + totalDeductions));
+
+  const selectedEquipment = settings.equipment?.find(e => e.isSelected);
+  const basicAdvice = getStandardizedAdvice(baseWeather as WeatherCondition, selectedEquipment);
+  baseWeather.surfaceReason = basicAdvice.summary;
+  baseWeather.ridingStyleAdvice = basicAdvice.style;
+  baseWeather.bikeSetupAdvice = basicAdvice.setup;
+  baseWeather.clothingAdvice = basicAdvice.clothing;
+  baseWeather.performanceAdvice = basicAdvice.performance;
+  if (selectedEquipment) {
+    baseWeather.optimalPressure = calculateOptimalPressure(selectedEquipment, baseWeather);
+  }
   
   return baseWeather as WeatherCondition;
 };
 
-/**
- * Stage 1: Fast Telemetry Fetching
- * Optimized to fetch the entire week in one go.
- */
 export const getTelemetryBatch = async (
   settings: CommuteSettings, 
   offsets: number[]
@@ -317,7 +420,7 @@ export const getTelemetryBatch = async (
   const batch: Record<number, any> = {};
 
   offsets.forEach(offset => {
-    if (offset >= homeRaw.daily?.sunrise?.length) return;
+    if (offset >= (homeRaw.daily?.sunrise?.length || 0)) return;
 
     const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
     const eSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
@@ -335,34 +438,9 @@ export const getTelemetryBatch = async (
       return pastTemps.length ? Math.min(...pastTemps) : 10;
     };
 
-    const morning = aggregateRawWeather(
-      mSlice, 
-      morningHeading, 
-      true, 
-      settings, 
-      sunTimes, 
-      getMinPastTemp(homeRaw, offset, settings.morningWindow),
-      undefined,
-      homeRaw.hourly.precipitation,
-      getAbsoluteIdx(settings.morningWindow, offset),
-      false // Commute mode
-    );
-    const evening = aggregateRawWeather(
-      eSlice, 
-      eveningHeading, 
-      false, 
-      settings, 
-      sunTimes, 
-      getMinPastTemp(workRaw, offset, settings.eveningWindow),
-      undefined,
-      workRaw.hourly.precipitation,
-      getAbsoluteIdx(settings.eveningWindow, offset),
-      false // Commute mode
-    );
+    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, getMinPastTemp(homeRaw, offset, settings.morningWindow), undefined, homeRaw.hourly.precipitation, getAbsoluteIdx(settings.morningWindow, offset), false);
+    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, getMinPastTemp(workRaw, offset, settings.eveningWindow), undefined, workRaw.hourly.precipitation, getAbsoluteIdx(settings.eveningWindow, offset), false);
 
-    morning.surfaceReason = getStandardizedAdvice(morning);
-    evening.surfaceReason = getStandardizedAdvice(evening);
-    
     batch[offset] = { 
       offset, 
       score: Math.min(morning.score, evening.score), 
@@ -382,41 +460,83 @@ export const getTelemetryBatch = async (
   return batch;
 };
 
-/**
- * Stage 2: Slower AI Interpretation
- * Reduced JSON payload and optimized prompt to speed up Gemini processing.
- */
 export const getAIInsights = async (
   settings: CommuteSettings,
   telemetryBatch: Record<number, any>
-): Promise<Record<number, { morning: string; evening: string }>> => {
+): Promise<Record<number, { morning: any; evening: any }>> => {
   const dataToProcess = Object.values(telemetryBatch).map(({offset, weather}) => ({
     o: offset, 
-    m: { temp: weather.morning.temp, cond: weather.morning.condition, prec: weather.morning.precipitation, ice: weather.morning.iceRisk }, 
-    e: { temp: weather.evening.temp, cond: weather.evening.condition, prec: weather.evening.precipitation, ice: weather.evening.iceRisk }
+    m: { temp: weather.morning.temp, cond: weather.morning.condition, prec: weather.morning.precipitation, ice: weather.morning.iceRisk, wind: weather.morning.windSpeed }, 
+    e: { temp: weather.evening.temp, cond: weather.evening.condition, prec: weather.evening.precipitation, ice: weather.evening.iceRisk, wind: weather.evening.windSpeed }
   }));
+
+  const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
 
   try {
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
-        contents: `Cycling Expert: Provide 1 ultra-concise sentence of riding advice per shift. Lang: ${settings.language}. Data: ${JSON.stringify(dataToProcess)}. Return JSON: [{ "o": number, "mw": string, "ew": string }] where mw/ew are morning/evening advice strings.`,
-        config: { temperature: 0.3, responseMimeType: "application/json" }
+        contents: `Cycling Expert: Provide detailed, highly technical, but EXTREMELY CONCISE (max 10 words per field) tactical advice.
+        Lang: ${settings.language}.
+        Available Bikes: ${equipmentContext}.
+        Context: For 'clothing' field, specifically mention: short vs long bibs/sleeves, gloves, and overshoes necessity.
+        Context: For 'setup' field, recommend the best bike from the list (if applicable) and tire pressure adjustments.
+        Data: ${JSON.stringify(dataToProcess)}. 
+        Return JSON array of objects: { "o": number, "mw": { "s": string, "st": string, "se": string, "c": string, "p": string }, "ew": { "s": string, "st": string, "se": string, "c": string, "p": string } } where s=summary, st=style, se=setup, c=clothing, p=performance.`,
+        config: { temperature: 0.8, responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "[]");
     });
 
-    const result: Record<number, { morning: string; evening: string }> = {};
+    const result: Record<number, { morning: any; evening: any }> = {};
     parsedAIResults.forEach((aiRes: any) => {
       result[aiRes.o] = {
-        morning: aiRes.mw,
-        evening: aiRes.ew
+        morning: { summary: aiRes.mw.s, style: aiRes.mw.st, setup: aiRes.mw.se, clothing: aiRes.mw.c, performance: aiRes.mw.p },
+        evening: { summary: aiRes.ew.s, style: aiRes.ew.st, setup: aiRes.ew.se, clothing: aiRes.ew.c, performance: aiRes.ew.p }
       };
     });
     return result;
   } catch (error) {
+    isAIFallingBack = true;
     console.error("AI Insight generation failed", error);
     throw error;
+  }
+};
+
+/**
+ * Specifically for Training View to avoid repetitive text.
+ * Prompt refined for extreme conciseness to avoid scrolling.
+ */
+export const getTrainingSessionAIAdvice = async (
+  settings: CommuteSettings,
+  weather: WeatherCondition,
+  distance: number
+): Promise<{ summary: string; style: string; setup: string; clothing: string; performance: string }> => {
+  
+  const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
+
+  try {
+    const { data } = await callWithRetry(async (aiInstance, modelName) => {
+      const prompt = `Cycling Coach: Provide highly technical, ultra-concise advice for a ${distance}km training session: ${JSON.stringify(weather)}. 
+      Lang: ${settings.language}. 
+      Available Bikes: ${equipmentContext}.
+      Mandatory for 'clothing': Specify short/long bibs, sleeve length, gloves, overshoes.
+      Mandatory for 'setup': Recommend best bike from list and tire pressure.
+      Each field MUST be max 15 words. Avoid fluff.
+      Return JSON: { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }.`;
+      
+      const response = await aiInstance.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: { temperature: 0.9, responseMimeType: "application/json" }
+      });
+      return JSON.parse(response.text || "{}");
+    });
+    return data;
+  } catch (e) {
+    isAIFallingBack = true;
+    const selectedEquipment = settings.equipment?.find(e => e.isSelected);
+    return getStandardizedAdvice(weather, selectedEquipment);
   }
 };
 
@@ -463,4 +583,24 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
   }, "gemini-2.5-flash");
   
   return data.distance || null;
+};
+
+export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
+  if (query.length < 3) return [];
+  try {
+    const { data } = await callWithRetry(async (aiInstance, modelName) => {
+      const response = await aiInstance.models.generateContent({
+        model: modelName,
+        contents: `Search for real geographic locations matching "${query}". Return a JSON array of up to 5 objects: { "name": string, "lat": number, "lng": number }. Ensure names are descriptive including country or region.`,
+        config: { 
+          temperature: 0.1, 
+          responseMimeType: "application/json" 
+        }
+      });
+      return JSON.parse(response.text || "[]");
+    }, "gemini-3-flash-preview");
+    return data;
+  } catch (e) {
+    return [];
+  }
 };

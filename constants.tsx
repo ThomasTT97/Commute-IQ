@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   Sun, 
@@ -83,7 +84,8 @@ export const DEFAULT_SETTINGS: CommuteSettings = {
   eveningWindow: ["17:00", "18:30"],
   language: 'en',
   theme: 'dark',
-  disableAI: false
+  disableAI: false,
+  equipment: []
 };
 
 export const LANGUAGES: { code: Language; label: string; flag: string }[] = [
