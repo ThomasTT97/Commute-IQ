@@ -25,6 +25,7 @@ import { BelgianLocation } from '../locations';
 import { WeatherCard } from './WeatherCard';
 import { BELGIAN_LOCATIONS } from '../locations';
 import { TrainingWeeklyForecast } from './TrainingWeeklyForecast';
+import { TypewriterText } from './TypewriterText';
 
 interface TrainingViewProps {
   isDark: boolean;
@@ -52,6 +53,7 @@ interface TrainingViewProps {
   weeklyData?: any[];
   weeklyLoading?: boolean;
   onSelectWeeklySlot?: (offset: number, startHour: number) => void;
+  aiEnabled: boolean;
 }
 
 export const TrainingView: React.FC<TrainingViewProps> = ({
@@ -79,16 +81,25 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   isWeeklyView = false,
   weeklyData = [],
   weeklyLoading = false,
-  onSelectWeeklySlot
+  onSelectWeeklySlot,
+  aiEnabled
 }) => {
   const verticalPickerRef = useRef<HTMLDivElement>(null);
   const timePickerRef = useRef<HTMLDivElement>(null);
   const dayScrollRef = useRef<HTMLDivElement>(null);
   const [isIntelligenceExpanded, setIsIntelligenceExpanded] = useState(false);
+  const [typingStep, setTypingStep] = useState(0);
   
   const distances = useMemo(() => Array.from({ length: 30 }, (_, i) => (i + 1) * 5), []); // 5 to 150km
   const hours = useMemo(() => Array.from({ length: 19 }, (_, i) => i + 3), []); // 03:00 to 21:00
   const dayOffsets = [0, 1, 2, 3, 4, 5, 6];
+
+  // Reset typing when intelligence opens
+  useEffect(() => {
+    if (isIntelligenceExpanded) {
+      setTypingStep(0);
+    }
+  }, [isIntelligenceExpanded, trainingData]);
 
   // Sync vertical distance picker scroll position
   useEffect(() => {
@@ -144,6 +155,32 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const suggestions = useMemo(() => filterLocations(trainingSearch, globalTrainingResults), [filterLocations, trainingSearch, globalTrainingResults]);
 
   const isAIActive = trainingData?.isAIEnhanced;
+
+  const shouldShowBlock = (index: number) => {
+    // If AI is disabled, show everything immediately
+    if (!aiEnabled) return true;
+    // If AI is enabled but not ready, show nothing (except loading)
+    if (!isAIActive) return false;
+    // If AI is ready, show based on sequence
+    return typingStep >= index;
+  };
+
+  const renderAdviceText = (text: string, fallback: string, stepIndex: number) => {
+    if (!aiEnabled) {
+      return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{text || fallback}</span>;
+    }
+    
+    if (isAIActive) {
+      return (
+        <TypewriterText 
+          text={text} 
+          className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
+          onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
+        />
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="h-full flex flex-col gap-3 overflow-hidden pb-1 animate-in fade-in duration-300">
@@ -273,7 +310,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       <div className={`absolute inset-x-0 top-0 h-3 bg-gradient-to-b ${isDark ? 'from-black/40' : 'from-slate-200/40'} to-transparent pointer-events-none z-10`} />
                       <div className={`absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t ${isDark ? 'from-black/40' : 'from-slate-200/40'} to-transparent pointer-events-none z-10`} />
                       
-                      {/* Adjusted distance picker highlight height */}
                       <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-9 bg-white border-y border-slate-200 z-20 pointer-events-none opacity-100 ${isDark ? 'hidden' : 'block'}`} />
 
                       <div ref={verticalPickerRef} className="h-full overflow-y-auto hide-scrollbar scroll-smooth snap-y snap-mandatory py-1">
@@ -390,11 +426,11 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                   >
                     <div className="flex items-center justify-between w-full flex-none">
                       <div className="flex items-center gap-2">
-                        <div className={`p-1.5 rounded-lg transition-colors ${isAIActive ? 'bg-blue-600 text-white' : 'bg-slate-500 text-white animate-pulse'}`}>
+                        <div className={`p-1.5 rounded-lg transition-colors ${aiEnabled && !isAIActive ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
                           <Zap className="w-4 h-4" />
                         </div>
-                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${isAIActive ? 'text-blue-600' : 'text-slate-600'}`}>
-                          {isAIActive ? 'Training Intelligence' : 'Deep Analysis...'}
+                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${aiEnabled && !isAIActive ? 'text-slate-600' : 'text-blue-600'}`}>
+                          {aiEnabled && !isAIActive ? 'Deep Analysis...' : 'Training Intelligence'}
                         </span>
                       </div>
                       <button 
@@ -408,52 +444,60 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                     </div>
 
                     <div className="flex flex-col gap-6 flex-1">
-                      {!isAIActive && (
+                      {aiEnabled && !isAIActive && (
                         <div className="flex items-center gap-2 py-1">
                           <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
                           <span className="text-[8px] font-black uppercase text-blue-600 tracking-widest">Generative Intelligence active...</span>
                         </div>
                       )}
 
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <Activity className="w-4 h-4 text-emerald-600" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
+                      {shouldShowBlock(0) && (
+                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-emerald-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
+                            {renderAdviceText(trainingData.condition.performanceAdvice, "Conditions are within standard operating parameters. Monitor heart rate response and hydration.", 0)}
+                          </div>
                         </div>
-                        <p className={`text-[13px] font-semibold leading-relaxed text-left transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'} ${isAIActive ? 'opacity-100' : 'opacity-40'}`}>
-                          {trainingData.condition.performanceAdvice || "Conditions are within standard operating parameters. Monitor heart rate response and hydration."}
-                        </p>
-                      </div>
+                      )}
 
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <Compass className="w-4 h-4 text-blue-600" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
+                      {shouldShowBlock(1) && (
+                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-2">
+                            <Compass className="w-4 h-4 text-blue-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
+                            {renderAdviceText(trainingData.condition.ridingStyleAdvice, "Maintain standard session protocols.", 1)}
+                          </div>
                         </div>
-                        <p className={`text-[13px] font-semibold leading-relaxed text-left transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'} ${isAIActive ? 'opacity-100' : 'opacity-40'}`}>
-                          {trainingData.condition.ridingStyleAdvice || "Maintain standard session protocols."}
-                        </p>
-                      </div>
+                      )}
 
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <Bike className="w-4 h-4 text-blue-600" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
+                      {shouldShowBlock(2) && (
+                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-2">
+                            <Bike className="w-4 h-4 text-blue-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
+                            {renderAdviceText(trainingData.condition.bikeSetupAdvice, "Check essential hardware and tire pressures.", 2)}
+                          </div>
                         </div>
-                        <p className={`text-[13px] font-semibold leading-relaxed text-left transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'} ${isAIActive ? 'opacity-100' : 'opacity-40'}`}>
-                          {trainingData.condition.bikeSetupAdvice || "Check essential hardware and tire pressures."}
-                        </p>
-                      </div>
+                      )}
 
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <Shirt className="w-4 h-4 text-blue-600" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Clothing Advice</span>
+                      {shouldShowBlock(3) && (
+                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-2">
+                            <Shirt className="w-4 h-4 text-blue-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Clothing Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
+                            {renderAdviceText(trainingData.condition.clothingAdvice, "Standard training kit recommendation.", 3)}
+                          </div>
                         </div>
-                        <p className={`text-[13px] font-semibold leading-relaxed text-left transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'} ${isAIActive ? 'opacity-100' : 'opacity-40'}`}>
-                          {trainingData.condition.clothingAdvice || "Standard training kit recommendation."}
-                        </p>
-                      </div>
+                      )}
                     </div>
                   </div>
                 )}

@@ -239,12 +239,12 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, lo
                       <div className="h-5 w-24 rounded-full bg-slate-500/10 animate-pulse" />
                     ) : (
                       <>
-                        <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
-                          {isWet ? <Droplets className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black border uppercase tracking-wide ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
+                          {isWet ? <Droplets className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                           {isWet ? 'WET' : 'DRY'}
                         </div>
-                        <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
-                          {hasIce ? <AlertTriangle className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3 opacity-20" />}
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black border uppercase tracking-wide ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
+                          {hasIce ? <AlertTriangle className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5 opacity-20" />}
                           {hasIce ? 'ICE' : 'NO ICE'}
                         </div>
                       </>

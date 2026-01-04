@@ -41,20 +41,21 @@ export const InfoModal: React.FC<InfoModalProps> = ({ isOpen, onClose, isDark, l
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
             <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center"><Info className="w-3.5 h-3.5 text-blue-500" /></div>
-            <h2 className={`text-sm font-black uppercase tracking-widest ${isDark ? 'text-white' : 'text-slate-900'}`}>Information</h2>
+            <h2 className={`text-sm font-black uppercase tracking-widest ${isDark ? 'text-white' : 'text-slate-900'}`}>System Logic</h2>
           </div>
           <button onClick={onClose} className={`transition-colors ${isDark ? 'text-slate-600 hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}><X className="w-4 h-4" /></button>
         </div>
         <div className="space-y-2 mb-6 max-h-[60vh] overflow-y-auto hide-scrollbar px-1">
-          <AccordionItem id="purpose" title="WHAT IS COMMUTE IQ?" content={t.purposeContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="score" title="HOW THE SCORE WORKS" content={t.commuteScoreContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="training-mode" title="TRAINING MODE" content="Plan and optimize sessions by scanning time windows and location metadata for atmospheric superiority." expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="retrieval" title="DATA VS. INTELLIGENCE" content={t.generalSourcesContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="ice" title="ICE RISK" content={TRANSLATIONS[language].iceRiskContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="surface" title="SURFACE" content={TRANSLATIONS[language].surfaceConditionContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="wind" title="WIND" content="Vector mapping against transit headings to detect drag or boost." expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="lighting" title="LIGHTING" content="Solar window overlap analysis for required visibility gear." expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
-          <AccordionItem id="distance" title="ROUTE DISTANCE" content="Loxodromic distance adjusted by terrestrial detour coefficients." expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="purpose" title={t.purposeTitle} content={t.purposeContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="score" title={t.commuteScore} content={t.commuteScoreContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="training-mode" title={t.trainingMode} content={t.trainingModeContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="retrieval" title={t.generalSources} content={t.generalSourcesContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="ice" title={t.iceRisk} content={t.iceRiskContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="surface" title={t.surfaceCondition} content={t.surfaceConditionContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="wind" title={t.windCondition} content={t.windContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="lighting" title={t.lightingCondition} content={t.lightingContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="equipment" title={t.equipmentLogic} content={t.equipmentContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
+          <AccordionItem id="distance" title={t.distanceCalculation} content={t.distanceContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
         </div>
         <button onClick={onClose} className={`w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] transition-all ${isDark ? 'bg-slate-900 border border-white/5 text-slate-500 hover:text-white' : 'bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200'}`}>Close</button>
       </div>

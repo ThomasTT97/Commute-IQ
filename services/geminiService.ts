@@ -14,7 +14,7 @@ export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
 
 
-const MODEL_CHAIN = [
+export const MODEL_CHAIN = [
   "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
@@ -203,6 +203,23 @@ const callWithRetry = async <T>(
   remainingLLMAlternativesCount = 0;
   lastApiErrorMessage = lastFnError?.message || "Unknown API Error";
   throw lastFnError;
+};
+
+// Checks the health of the generic LLM chain (Insights Engine)
+export const checkLLMConnectivity = async (): Promise<boolean> => {
+  try {
+    await callWithRetry(async (aiInstance, modelName) => {
+       await aiInstance.models.generateContent({
+        model: modelName,
+        contents: "Test connection",
+        config: { maxOutputTokens: 1 }
+      });
+      return true;
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
 };
 
 export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
@@ -593,7 +610,11 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
         const response = await aiInstance.models.generateContent({
         model: modelName, 
-        contents: `Full address and coords for: "${query}". Return JSON: { "address": string, "lat": number, "lng": number }`,
+        // Refined prompt to explicitly handle specific street addresses vs general queries
+        contents: `Find the precise geographic coordinates and full standardized address for: "${query}". 
+        If it's a specific street address, return that. If it's a city, return the city.
+        Include Country.
+        Return JSON: { "address": string, "lat": number, "lng": number }`,
         config: { 
             temperature: 0, 
             tools: [{ googleMaps: {} }] 
@@ -604,7 +625,7 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
         const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
         const parsed = extractJson(response.text);
         return { ...parsed, mapsUri };
-    }, "gemini-2.5-flash");
+    }, "gemini-2.5-flash", 2); // Explicitly use 2.5 for Maps grounding, increase retries to compensate for lack of fallback
     
     return { 
         address: data.address || query, 
@@ -613,8 +634,6 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
     };
   } catch (e) {
       console.warn("Address resolution failed:", e);
-      // Fallback to Brussels if everything fails to prevent app crash, 
-      // but strictly speaking should throw or handle in UI.
       return { address: query, coords: { lat: 50.8503, lng: 4.3517 } };
   }
 };
@@ -630,7 +649,7 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
       }
     });
     return extractJson(response.text);
-  }, "gemini-2.5-flash");
+  }, "gemini-2.5-flash", 2); // Explicitly use 2.5 for Maps grounding, increase retries
   
   return data.distance || null;
 };
@@ -654,7 +673,7 @@ export const getGlobalLocationSuggestions = async (query: string): Promise<Belgi
       const response = await aiInstance.models.generateContent({
         model: modelName,
         // Prompt asks for a JSON list derived from Google Maps data.
-        contents: `Find up to 5 real geographic locations matching "${query}" using Google Maps. Return a raw JSON array (no markdown code blocks) of objects with properties: name (string), lat (number), lng (number).`,
+        contents: `Find up to 5 real specific locations (cities, landmarks, or streets) matching "${query}" using Google Maps. Return a raw JSON array (no markdown code blocks) of objects with properties: name (string, format "Name, Country" or "Street, City, Country"), lat (number), lng (number).`,
         config: { 
           temperature: 0, 
           tools: [{ googleMaps: {} }] 

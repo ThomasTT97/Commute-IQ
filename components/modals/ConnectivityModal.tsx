@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Activity, X, Server, BrainCircuit, MapPin, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { ConnectionStatusState } from '../../types';
+import { MODEL_CHAIN } from '../../services/geminiService';
 
 interface ConnectivityModalProps {
   isOpen: boolean;
@@ -12,7 +13,13 @@ interface ConnectivityModalProps {
 }
 
 export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, onClose, status, onCheckConnection, isDark }) => {
+  const [showAlternatives, setShowAlternatives] = useState(false);
+
   if (!isOpen) return null;
+
+  // Calculate alternatives based on current model from the full chain
+  const activeModelIndex = status.llmDetails.model ? MODEL_CHAIN.indexOf(status.llmDetails.model) : -1;
+  const alternativesList = activeModelIndex !== -1 ? MODEL_CHAIN.slice(activeModelIndex + 1) : [];
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -80,10 +87,30 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                     {status.llmDetails.model ? status.llmDetails.priority : 'Failed'}
                   </span>
                 </div>
+                
                 <div className="flex items-center justify-between">
                   <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>Alternatives Left:</span>
-                  <span className={isDark ? 'text-white' : 'text-slate-900'}>{status.llmDetails.alternatives}</span>
+                  <button 
+                    onClick={() => setShowAlternatives(!showAlternatives)}
+                    disabled={!status.llmDetails.alternatives || status.llmDetails.alternatives === 0}
+                    className={`flex items-center gap-1 font-mono transition-colors ${isDark ? 'text-white' : 'text-slate-900'} ${(!status.llmDetails.alternatives || status.llmDetails.alternatives === 0) ? 'cursor-default opacity-70' : 'hover:text-blue-500 cursor-pointer underline decoration-dotted underline-offset-2'}`}
+                  >
+                    <span>{status.llmDetails.alternatives}</span>
+                  </button>
                 </div>
+
+                {showAlternatives && alternativesList.length > 0 && (
+                  <div className={`mt-2 p-2 rounded-lg border flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-200 ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Fallback Chain</span>
+                    {alternativesList.map((m, i) => (
+                      <div key={m} className="flex items-center gap-2 text-[9px] font-mono opacity-80">
+                        <span className="text-slate-500">{i + 1}.</span>
+                        <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>{m}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {status.errorMessage && (
                   <div className="mt-2 pt-2 border-t border-dashed border-red-500/20">
                      <span className="text-red-400 block mb-0.5">Error Diagnosis:</span>

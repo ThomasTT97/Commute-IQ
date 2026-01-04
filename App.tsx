@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAI
 import { BELGIAN_LOCATIONS } from './locations';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
+import { TrainingWeeklyForecast } from './components/TrainingWeeklyForecast';
 import { Header } from './components/layout/Header';
 import { InfoModal } from './components/modals/InfoModal';
 import { ConnectivityModal } from './components/modals/ConnectivityModal';
@@ -23,6 +24,7 @@ import {
   calculateDistance,
   getGlobalLocationSuggestions,
   resolveAddress,
+  checkLLMConnectivity,
   isAIFallingBack,
   currentLLMModel,           
   currentLLMModelPriorityLabel, 
@@ -85,6 +87,7 @@ const App: React.FC = () => {
       errorMessage: undefined
     });
     
+    // 1. Open-Meteo Check
     try {
       await fetchRawWeatherData({ lat: 51.0, lng: 3.7 });
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'ok' }));
@@ -92,12 +95,21 @@ const App: React.FC = () => {
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'fail' }));
     }
 
+    // 2. Maps Check (Specific Model)
     try {
       await resolveAddress("Test Connectivity Check");
+      setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'ok' }));
+    } catch (e) {
+      setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'fail' }));
+    }
+
+    // 3. Generic LLM Check (Robust Chain including Lite)
+    // Run this last to ensure global LLM state vars reflect the full chain capability
+    try {
+      await checkLLMConnectivity();
       setConnectionStatus(prev => ({ 
         ...prev, 
         'Gemini LLM': isAIFallingBack ? 'fallback' : 'ok', 
-        'Google Maps': 'ok',
         llmDetails: {
           model: currentLLMModel,
           priority: currentLLMModelPriorityLabel,
@@ -109,7 +121,6 @@ const App: React.FC = () => {
       setConnectionStatus(prev => ({ 
         ...prev, 
         'Gemini LLM': 'fail', 
-        'Google Maps': 'fail',
         llmDetails: {
           model: currentLLMModel,
           priority: currentLLMModelPriorityLabel,
@@ -704,6 +715,7 @@ const App: React.FC = () => {
                setManualStartHour(hour);
                setViewMode('training');
             }}
+            aiEnabled={!settings.disableAI}
           />
         )}
       </main>

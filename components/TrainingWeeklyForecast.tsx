@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Clock, AlertTriangle, Droplets, ShieldCheck, Wind } from 'lucide-react';
+import { Clock, AlertTriangle, Droplets, ShieldCheck, Wind, MonitorPlay } from 'lucide-react';
 
 interface TrainingWeeklyForecastProps {
   data: any[];
@@ -48,6 +48,8 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
            const score = bestSlot?.score || 0;
            const condition = bestSlot?.condition;
            
+           const isIndoorRecommended = score < 45 || condition?.iceRisk;
+
            return (
              <button 
                key={day.offset}
@@ -69,7 +71,12 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
                </div>
 
                <div className="flex flex-col items-end gap-2 z-10">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                     {isIndoorRecommended && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 text-[9px] font-black uppercase tracking-wide">
+                             <MonitorPlay className="w-3 h-3" /> INDOOR
+                         </div>
+                     )}
                      {condition?.iceRisk && (
                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-[9px] font-black uppercase tracking-wide">
                              <AlertTriangle className="w-3 h-3" /> ICE
