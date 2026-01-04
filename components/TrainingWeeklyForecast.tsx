@@ -64,22 +64,23 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
                       <span className="text-[11px] font-bold text-slate-500">{label.date}</span>
                   </div>
                   
-                  <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border mt-0.5 ${getScoreBg(score)}`}>
-                      <Clock className={`w-3 h-3 ${getScoreColor(score)}`} />
-                      <span className={`text-[11px] font-black tracking-wide ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                          {bestSlot.window[0]} - {bestSlot.window[1]}
-                      </span>
+                  <div className="flex items-center gap-2">
+                    <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border mt-0.5 ${getScoreBg(score)}`}>
+                        <Clock className={`w-3 h-3 ${getScoreColor(score)}`} />
+                        <span className={`text-[11px] font-black tracking-wide ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                            {bestSlot.window[0]} - {bestSlot.window[1]}
+                        </span>
+                    </div>
+                    {isIndoorRecommended && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 text-[9px] font-black uppercase tracking-wide mt-0.5">
+                             <MonitorPlay className="w-3 h-3" /> INDOOR
+                         </div>
+                     )}
                   </div>
                </div>
 
                <div className="flex flex-col items-end gap-2 z-10">
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                     {isIndoorRecommended && (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 text-[9px] font-black uppercase tracking-wide">
-                             <MonitorPlay className="w-3 h-3" /> INDOOR
-                         </div>
-                     )}
-                     
                      {/* Surface Indicator */}
                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wide ${isWet ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'}`}>
                          {isWet ? <Droplets className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}

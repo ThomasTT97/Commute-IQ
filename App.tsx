@@ -106,12 +106,12 @@ const App: React.FC = () => {
 
     // 3. Generic LLM Check (Robust Chain including Lite)
     try {
-      await checkLLMConnectivity();
+      const isConnected = await checkLLMConnectivity();
       
       let llmStatus: 'ok' | 'fallback' | 'fail' = 'ok';
       let errorMsg = undefined;
 
-      if (isAIFallingBack) {
+      if (!isConnected || isAIFallingBack) {
           llmStatus = 'fail';
           errorMsg = lastApiErrorMessage || "Connection check failed";
       } else if (isUsingFallbackModel) {
@@ -668,6 +668,10 @@ const App: React.FC = () => {
     return pulse?.isEnhanced ?? false;
   }, [pulseDataMap, selectedDateOffset]);
 
+  const isCurrentDayLoading = useMemo(() => {
+    return loadingOffsets.includes(selectedDateOffset);
+  }, [loadingOffsets, selectedDateOffset]);
+
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <Header 
@@ -697,7 +701,7 @@ const App: React.FC = () => {
             activeWeather={activeWeather}
             displayedDistance={displayedDistance}
             settings={settings}
-            loadingOffsets={loadingOffsets}
+            isCurrentDayLoading={isCurrentDayLoading}
             isCurrentDayEnhanced={isCurrentDayEnhanced}
             isDark={isDark}
           />

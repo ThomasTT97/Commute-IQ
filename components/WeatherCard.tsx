@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 interface WeatherCardProps {
-  condition?: WeatherCondition | null; 
+  condition?: any | null; 
   timeRange?: string;
   dateLabel?: string;
   startLocation?: string;
@@ -45,6 +45,7 @@ interface WeatherCardProps {
   onSelectLocationAdvice?: (loc: BelgianLocation) => void;
   onToggleIntelligence?: () => void;
   isIntelligenceExpanded?: boolean;
+  isActive?: boolean;
 }
 
 const getCardinal = (angle: number): string => {
@@ -73,7 +74,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   locationAdvice,     
   onSelectLocationAdvice,
   onToggleIntelligence,
-  isIntelligenceExpanded = false
+  isIntelligenceExpanded = false,
+  isActive = false
 }) => {
   const isDark = theme === 'dark';
   const [showWindDetails, setShowWindDetails] = useState(false);
@@ -218,7 +220,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   if (compact) {
     return (
-      <div className={`w-full rounded-[1.5rem] p-4 sm:p-5 border transition-all flex flex-col justify-between ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm'}`}>
+      <div className={`w-full rounded-[1.5rem] p-4 sm:p-5 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500/50 bg-[#0f1115]' : 'border-blue-300 bg-blue-50/30') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-[9px] font-black tracking-[0.15em] text-slate-500 uppercase">
             <div className="flex items-center gap-2">

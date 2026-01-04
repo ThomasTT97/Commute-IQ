@@ -14,12 +14,16 @@ export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
 export let isUsingFallbackModel = false; // Tracks if we have deviated from the primary model
 
-// Robust Model Chain: Performance -> Balance -> Stability -> Emergency Low-Cost
+// Robust Model Chain: 
+// 1. Gemini 3.0 Flash Preview: Latest reasoning engine.
+// 2. Gemini 2.5 Flash: Stable, high-performance workhorse.
+// 3. Gemini Flash Latest: Reliable alias fallback.
+// 4. Gemini Flash Lite: Cost-efficient, high-throughput fallback.
 export const MODEL_CHAIN = [
-  "gemini-3-flash-preview",          // Tier 1: Latest fast model
-  "gemini-2.5-flash",                // Tier 2: Stable, balanced
-  "gemini-1.5-flash",                // Tier 3: High-quota workhorse
-  "gemini-2.0-flash-lite-preview-02-05" // Tier 4: Emergency fallback (Lite)
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",          
+  "gemini-flash-latest",                
+  "gemini-flash-lite-latest" 
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
@@ -34,10 +38,8 @@ export const sliceWeatherData = (hourly: any, window: [string, string], offset: 
   const startHour = parseInt(window[0].split(':')[0]);
   const endHour = parseInt(window[1].split(':')[0]);
   
-  // CRITICAL FIX: The API returns 1 past day (24 hours).
-  // Index 0 to 23 = Yesterday
-  // Index 24 to 47 = Today (Offset 0)
-  // Index 48 to 71 = Tomorrow (Offset 1)
+  // API returns 1 past day (24 hours).
+  // Index 0-23 = Yesterday, 24-47 = Today (Offset 0), 48-71 = Tomorrow (Offset 1)
   const dayStartIdx = (offset + 1) * 24; 
   
   const startIndex = dayStartIdx + startHour;
@@ -131,7 +133,24 @@ export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment
 
 const extractJson = (text?: string): any => {
   if (!text) return {};
-  const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  // 1. Remove markdown code blocks
+  let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  
+  // 2. Locate first { and last } to isolate JSON object if there's extra text
+  const firstBrace = cleanText.indexOf('{');
+  const lastBrace = cleanText.lastIndexOf('}');
+  
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    cleanText = cleanText.substring(firstBrace, lastBrace + 1);
+  } else {
+     // Try array if object failed
+     const firstBracket = cleanText.indexOf('[');
+     const lastBracket = cleanText.lastIndexOf(']');
+     if (firstBracket >= 0 && lastBracket > firstBracket) {
+        cleanText = cleanText.substring(firstBracket, lastBracket + 1);
+     }
+  }
+
   try {
     return JSON.parse(cleanText);
   } catch (e) {
@@ -141,20 +160,34 @@ const extractJson = (text?: string): any => {
 
 const cleanErrorMessage = (error: any): string => {
   try {
-    let msg = error?.message || JSON.stringify(error);
-    // If message is a JSON string, try to parse it to get cleaner output
-    if (msg.startsWith('{') || msg.startsWith('[')) {
+    let msg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+    
+    // Parse nested JSON errors
+    if (typeof msg === 'string' && (msg.startsWith('{') || msg.startsWith('['))) {
       try {
         const parsed = JSON.parse(msg);
-        if (parsed.error?.message) return parsed.error.message;
-        if (parsed.message) return parsed.message;
+        if (parsed.error?.message) msg = parsed.error.message;
+        else if (parsed.message) msg = parsed.message;
       } catch { /* ignore */ }
     }
-    // Truncate if too long
-    if (msg.length > 150) return msg.substring(0, 150) + "...";
+
+    // Clean common SDK prefixes
+    msg = msg
+      .replace(/^Error: /, '')
+      .replace(/^\[GoogleGenAI Error\]: /, '')
+      .replace(/GoogleGenerativeAI/gi, 'AI Service');
+
+    // Detect common status codes and map to user-friendly strings
+    if (msg.includes('429') || msg.includes('Quota exceeded')) return "Service Busy (Quota Exceeded)";
+    if (msg.includes('503') || msg.includes('Overloaded')) return "Service Overloaded";
+    if (msg.includes('400') || msg.includes('API key')) return "Invalid Configuration/Key";
+    if (msg.includes('fetch failed')) return "Network Connection Lost";
+
+    // Truncate
+    if (msg.length > 60) return msg.substring(0, 57) + "...";
     return msg;
   } catch (e) {
-    return "Unknown error structure";
+    return "Connection disrupted";
   }
 };
 
@@ -171,7 +204,7 @@ const callWithRetry = async <T>(
     currentLLMModel = null;
     currentLLMModelPriorityLabel = "N/A (API Key Missing)";
     remainingLLMAlternativesCount = MODEL_CHAIN.length;
-    lastApiErrorMessage = "API Key is missing or invalid.";
+    lastApiErrorMessage = "API Key is missing.";
     throw new Error("API Key is missing.");
   }
 
@@ -188,7 +221,6 @@ const callWithRetry = async <T>(
         // Success Logic
         isAIFallingBack = false;
         currentLLMModel = modelName;
-        // Identify if this is a fallback scenario (index > 0 means we skipped the primary)
         isUsingFallbackModel = modelIndex > 0;
         currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback Tier ${modelIndex}`;
         remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
@@ -197,24 +229,20 @@ const callWithRetry = async <T>(
         return { data: result, model: modelName };
       } catch (error: any) {
         const status = error?.status || error?.statusCode;
-        const rawMsg = error?.message || "Unknown error";
         const cleanMsg = cleanErrorMessage(error);
         
-        collectedErrors.push(`[${modelName}]: ${cleanMsg}`);
-        console.warn(`LLM Attempt failed for ${modelName} (retry ${i}):`, rawMsg);
+        collectedErrors.push(cleanMsg);
+        console.warn(`LLM Attempt failed for ${modelName} (retry ${i}):`, cleanMsg);
         
-        // Fail fast on 400/404 - these are unlikely to be resolved by retrying the same model
-        if (status === 400 || status === 404) {
-            break;
-        }
+        // Fail fast on 400/404
+        if (status === 400 || status === 404) break;
 
+        // Exponential backoff
         if (((status >= 500 && status <= 599) || status === 429) && i < maxRetriesPerModel) {
-          // Exponential backoff for rate limits or server errors
           const delay = 1000 * Math.pow(2, i);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        // If not retryable, break loop to try next model
         break; 
       }
     }
@@ -222,24 +250,21 @@ const callWithRetry = async <T>(
   
   // Total Failure Logic
   isAIFallingBack = true;
-  isUsingFallbackModel = false; // N/A
+  isUsingFallbackModel = false;
   currentLLMModel = null;
-  // Store the last model name in the priority label so the UI can extract it for diagnostics
-  currentLLMModelPriorityLabel = `All failed (last: ${modelsToTry[modelsToTry.length - 1]})`;
+  currentLLMModelPriorityLabel = `All failed`;
   remainingLLMAlternativesCount = 0;
-  lastApiErrorMessage = collectedErrors.join(" | ");
-  throw new Error(`AI Service Unavailable. ${lastApiErrorMessage}`);
+  lastApiErrorMessage = collectedErrors.length > 0 ? collectedErrors[collectedErrors.length - 1] : "Service unavailable";
+  throw new Error(`AI Service Unavailable: ${lastApiErrorMessage}`);
 };
 
-// Checks the health of the generic LLM chain (Insights Engine)
 export const checkLLMConnectivity = async (): Promise<boolean> => {
   try {
-    // PASS 0 RETRIES to speed up the check and iterate through the fallback chain faster
     await callWithRetry(async (aiInstance, modelName) => {
        await aiInstance.models.generateContent({
         model: modelName,
-        contents: "Ping",
-        config: { maxOutputTokens: 1 }
+        contents: "Hello",
+        config: { maxOutputTokens: 5 }
       });
       return true;
     }, undefined, 0); 
@@ -531,29 +556,48 @@ export const getAIInsights = async (
 
   const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
 
+  // Commute Styles to add variance
+  const COMMUTE_FOCUS_THEMES = [
+    "Safety & Handling",
+    "Comfort & Warmth",
+    "Speed & Efficiency",
+    "Visibility & Awareness",
+    "Technical Road Surface Analysis"
+  ];
+  const theme = COMMUTE_FOCUS_THEMES[Math.floor(Math.random() * COMMUTE_FOCUS_THEMES.length)];
+
   try {
     const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
         contents: `Cycling Expert: Provide detailed, highly technical, but EXTREMELY CONCISE (max 10 words per field) tactical advice.
+        Focus Theme for this batch: ${theme}.
         Lang: ${settings.language}.
         Available Bikes: ${equipmentContext}.
-        Context: For 'clothing' field, specifically mention: short vs long bibs/sleeves, gloves, and overshoes necessity.
-        Context: For 'setup' field, recommend the best bike from the list (if applicable) and tire pressure adjustments (MUST use Bar, not PSI).
+        
+        Instructions:
+        - Avoid repetitive phrasing.
+        - Use varied vocabulary and specific cycling terminology.
+        - Ensure advice feels distinct from previous days.
+        - Context: For 'clothing' field, mention specific layers/accessories.
+        - Context: For 'setup' field, recommend tire pressure in Bar.
+
         Data: ${JSON.stringify(dataToProcess)}. 
         Return JSON array of objects: { "o": number, "mw": { "s": string, "st": string, "se": string, "c": string, "p": string }, "ew": { "s": string, "st": string, "se": string, "c": string, "p": string } } where s=summary, st=style, se=setup, c=clothing, p=performance.`,
-        config: { temperature: 0.8, responseMimeType: "application/json" }
+        config: { temperature: 0.9, responseMimeType: "application/json" }
       });
-      return JSON.parse(response.text || "[]");
+      return extractJson(response.text);
     });
 
     const result: Record<number, { morning: any; evening: any }> = {};
-    parsedAIResults.forEach((aiRes: any) => {
-      result[aiRes.o] = {
-        morning: { summary: aiRes.mw.s, style: aiRes.mw.st, setup: aiRes.mw.se, clothing: aiRes.mw.c, performance: aiRes.mw.p },
-        evening: { summary: aiRes.ew.s, style: aiRes.ew.st, setup: aiRes.ew.se, clothing: aiRes.ew.c, performance: aiRes.ew.p }
-      };
-    });
+    if (Array.isArray(parsedAIResults)) {
+      parsedAIResults.forEach((aiRes: any) => {
+        result[aiRes.o] = {
+          morning: { summary: aiRes.mw.s, style: aiRes.mw.st, setup: aiRes.mw.se, clothing: aiRes.mw.c, performance: aiRes.mw.p },
+          evening: { summary: aiRes.ew.s, style: aiRes.ew.st, setup: aiRes.ew.se, clothing: aiRes.ew.c, performance: aiRes.ew.p }
+        };
+      });
+    }
     return result;
   } catch (error) {
     isAIFallingBack = true;
@@ -568,10 +612,21 @@ export const getTrainingSessionAIAdvice = async (
   distance: number
 ): Promise<{ summary: string; style: string; setup: string; clothing: string; performance: string }> => {
   const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
+  const defaults = getStandardizedAdvice(weather);
+
+  // Training Personas to add variance
+  const PERSONAS = [
+    "World Tour Directer Sportif (Tactical Focus)",
+    "Exercise Physiologist (Body/Fuel Focus)",
+    "Veteran Flandrien (Grit/Toughness Focus)",
+    "Pro Team Mechanic (Equipment/Tire Focus)",
+    "Meteorologist (Wind/Weather Focus)"
+  ];
+  const persona = PERSONAS[Math.floor(Math.random() * PERSONAS.length)];
 
   try {
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
-      const prompt = `Role: World Tour Cycling Director. 
+      const prompt = `Role: ${persona}. 
       Task: Analyze forecast for a ${distance}km training ride.
       Weather Data: ${JSON.stringify(weather)}.
       Rider Equipment: ${equipmentContext}.
@@ -584,6 +639,7 @@ export const getTrainingSessionAIAdvice = async (
       - "style": Technical handling advice (braking, cornering).
       - "setup": Specific tire pressure (Bar) and equipment choice.
       - "clothing": Exact kit list (layers, gloves, overshoes).
+      - Style: Use professional cycling jargon. Vary sentence structure. Avoid generic advice.
 
       Output JSON Structure:
       { 
@@ -597,16 +653,24 @@ export const getTrainingSessionAIAdvice = async (
       const response = await aiInstance.models.generateContent({
         model: modelName,
         contents: prompt,
-        config: { temperature: 0.7, responseMimeType: "application/json" }
+        config: { temperature: 0.9, responseMimeType: "application/json" }
       });
-      const txt = response.text || "{}";
-      const cleaned = txt.replace(/```json/g, "").replace(/```/g, "").trim();
-      return JSON.parse(cleaned);
+      return extractJson(response.text);
     });
-    return data;
+    
+    // Merge valid AI data with defaults to ensure no empty fields
+    return {
+        summary: data.summary || defaults.summary,
+        style: data.style || defaults.style,
+        setup: data.setup || defaults.setup,
+        clothing: data.clothing || defaults.clothing,
+        performance: data.performance || defaults.performance
+    };
   } catch (e) {
-    console.warn("AI Training Advice failed:", e);
-    throw e;
+    console.warn("AI Training Advice failed, falling back to algorithm:", e);
+    // CRITICAL FIX: Return standard algorithmic advice instead of throwing
+    // This ensures fields are always populated even if API is down
+    return defaults;
   }
 };
 
@@ -628,7 +692,6 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
   }
 
   try {
-    // Note: Maps grounding is only supported in Gemini 2.5 series.
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
         const response = await aiInstance.models.generateContent({
         model: modelName, 
@@ -646,7 +709,7 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
         const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
         const parsed = extractJson(response.text);
         return { ...parsed, mapsUri };
-    }, "gemini-2.5-flash", 2); // FORCE 2.5 for Maps tools
+    }, "gemini-2.5-flash", 2); 
     
     return { 
         address: data.address || query, 
@@ -670,7 +733,7 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
       }
     });
     return extractJson(response.text);
-  }, "gemini-2.5-flash", 2); // FORCE 2.5 for Maps tools
+  }, "gemini-2.5-flash", 2); 
   
   return data.distance || null;
 };
@@ -695,10 +758,8 @@ export const getGlobalLocationSuggestions = async (query: string): Promise<Belgi
           tools: [{ googleMaps: {} }] 
         }
       });
-      
-      const cleanText = response.text?.replace(/```json/g, "").replace(/```/g, "").trim() || "[]";
-      return JSON.parse(cleanText);
-    }, "gemini-2.5-flash", 2); // FORCE 2.5 for Maps tools
+      return extractJson(response.text);
+    }, "gemini-2.5-flash", 2); 
     return data;
   } catch (e) {
     return [];
