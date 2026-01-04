@@ -14,11 +14,12 @@ export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
 export let isUsingFallbackModel = false; // Tracks if we have deviated from the primary model
 
-// Robust Model Chain: Performance -> Balance -> Stability
+// Robust Model Chain: Performance -> Balance -> Stability -> Emergency Low-Cost
 export const MODEL_CHAIN = [
-  "gemini-3-flash-preview", // Latest fast model
-  "gemini-2.5-flash",       // Stable, supports Maps/Search
-  "gemini-1.5-flash"        // High-quota workhorse fallback
+  "gemini-3-flash-preview",      // Tier 1: Latest fast model
+  "gemini-2.5-flash",            // Tier 2: Stable, balanced
+  "gemini-1.5-flash",            // Tier 3: High-quota workhorse
+  "gemini-2.0-flash-lite-preview" // Tier 4: Emergency fallback (Lite)
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {

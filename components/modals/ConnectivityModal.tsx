@@ -12,6 +12,15 @@ interface ConnectivityModalProps {
   isDark: boolean;
 }
 
+const formatModelName = (model: string | null): string => {
+  if (!model) return 'Unknown';
+  if (model.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
+  if (model.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
+  if (model.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
+  if (model.includes('gemini-2.0-flash-lite')) return 'Gemini 2.0 Flash Lite';
+  return model;
+};
+
 export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, onClose, status, onCheckConnection, isDark }) => {
   const [showAlternatives, setShowAlternatives] = useState(false);
 
@@ -75,9 +84,9 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                     {status.llmDetails.model ? 'Active Model:' : 'Last Attempted:'}
                   </span>
                   <span className={isDark ? 'text-white' : 'text-slate-900'}>
-                    {status.llmDetails.model || 
+                    {formatModelName(status.llmDetails.model) || 
                      (status.llmDetails.priority.startsWith('All failed') 
-                        ? status.llmDetails.priority.split('(initial: ')[1]?.replace(')', '') || 'Unknown' 
+                        ? formatModelName(status.llmDetails.priority.split('(initial: ')[1]?.replace(')', '')) || 'Unknown' 
                         : 'N/A')}
                   </span>
                 </div>
@@ -105,7 +114,7 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                     {alternativesList.map((m, i) => (
                       <div key={m} className="flex items-center gap-2 text-[9px] font-mono opacity-80">
                         <span className="text-slate-500">{i + 1}.</span>
-                        <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>{m}</span>
+                        <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>{formatModelName(m)}</span>
                       </div>
                     ))}
                   </div>
