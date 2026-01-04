@@ -33,7 +33,7 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 animate-in fade-in duration-300">
       <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
-      <div className={`relative w-full max-sm border rounded-[2rem] flex flex-col shadow-3xl p-6 animate-in zoom-in-95 duration-200 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
+      <div className={`relative w-full max-w-sm max-h-[85dvh] overflow-y-auto hide-scrollbar border rounded-[2rem] flex flex-col shadow-3xl p-6 animate-in zoom-in-95 duration-200 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
             <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center"><Activity className="w-4 h-4 text-blue-500" /></div>

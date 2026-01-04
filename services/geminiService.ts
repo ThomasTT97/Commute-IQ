@@ -16,10 +16,10 @@ export let isUsingFallbackModel = false; // Tracks if we have deviated from the 
 
 // Robust Model Chain: Performance -> Balance -> Stability -> Emergency Low-Cost
 export const MODEL_CHAIN = [
-  "gemini-3-flash-preview",      // Tier 1: Latest fast model
-  "gemini-2.5-flash",            // Tier 2: Stable, balanced
-  "gemini-1.5-flash",            // Tier 3: High-quota workhorse
-  "gemini-2.0-flash-lite-preview" // Tier 4: Emergency fallback (Lite)
+  "gemini-3-flash-preview",          // Tier 1: Latest fast model
+  "gemini-2.5-flash",                // Tier 2: Stable, balanced
+  "gemini-1.5-flash",                // Tier 3: High-quota workhorse
+  "gemini-2.0-flash-lite-preview-02-05" // Tier 4: Emergency fallback (Lite)
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
