@@ -17,7 +17,8 @@ export let remainingLLMAlternativesCount: number | null = null;
 const MODEL_CHAIN = [
   "gemini-2.5-flash",
   "gemini-2.0-flash",
-  "gemini-1.5-flash"
+  "gemini-1.5-flash",
+  "gemini-2.0-flash-lite-preview-02-05"
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
