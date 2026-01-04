@@ -85,9 +85,9 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                   </span>
                   <span className={isDark ? 'text-white' : 'text-slate-900'}>
                     {formatModelName(status.llmDetails.model) || 
-                     (status.llmDetails.priority.startsWith('All failed') 
-                        ? formatModelName(status.llmDetails.priority.split('(initial: ')[1]?.replace(')', '')) || 'Unknown' 
-                        : 'N/A')}
+                     (status.llmDetails.priority.includes('(last: ') 
+                        ? formatModelName(status.llmDetails.priority.split('(last: ')[1].replace(')', '')) 
+                        : (status.llmDetails.alternatives === 0 ? formatModelName(MODEL_CHAIN[MODEL_CHAIN.length-1]) : 'Unknown'))}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -123,7 +123,7 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                 {status.errorMessage && (
                   <div className="mt-2 pt-2 border-t border-dashed border-red-500/20">
                      <span className="text-red-400 block mb-0.5">Error Diagnosis:</span>
-                     <span className={`block font-mono text-[9px] ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                     <span className={`block font-mono text-[9px] break-all ${isDark ? 'text-red-300' : 'text-red-600'}`}>
                        {status.errorMessage}
                      </span>
                   </div>

@@ -109,8 +109,11 @@ const App: React.FC = () => {
       await checkLLMConnectivity();
       
       let llmStatus: 'ok' | 'fallback' | 'fail' = 'ok';
+      let errorMsg = undefined;
+
       if (isAIFallingBack) {
           llmStatus = 'fail';
+          errorMsg = lastApiErrorMessage || "Connection check failed";
       } else if (isUsingFallbackModel) {
           llmStatus = 'fallback';
       }
@@ -123,7 +126,7 @@ const App: React.FC = () => {
           priority: currentLLMModelPriorityLabel,
           alternatives: remainingLLMAlternativesCount,
         },
-        errorMessage: undefined
+        errorMessage: errorMsg
       }));
     } catch (e) {
       setConnectionStatus(prev => ({ 

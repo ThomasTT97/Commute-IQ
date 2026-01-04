@@ -204,7 +204,8 @@ const callWithRetry = async <T>(
   isAIFallingBack = true;
   isUsingFallbackModel = false; // N/A
   currentLLMModel = null;
-  currentLLMModelPriorityLabel = "All Chains Failed";
+  // Store the last model name in the priority label so the UI can extract it for diagnostics
+  currentLLMModelPriorityLabel = `All failed (last: ${modelsToTry[modelsToTry.length - 1]})`;
   remainingLLMAlternativesCount = 0;
   lastApiErrorMessage = collectedErrors.join(" | ");
   throw new Error(`AI Service Unavailable. ${lastApiErrorMessage}`);
