@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment } from "../types";
 import { BELGIAN_CITIES } from "../constants";
-import { BelgianLocation } from "../locations";
+import { BelgianLocation, BELGIAN_LOCATIONS } from "../locations";
 
 export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
@@ -15,10 +15,9 @@ export let remainingLLMAlternativesCount: number | null = null;
 
 
 const MODEL_CHAIN = [
-  "gemini-3-flash-preview",
-  "gemini-2.5-flash-lite-preview",
+  "gemini-2.5-flash",
   "gemini-2.0-flash",
-  "gemini-2.0-flash-lite-preview-02-05"
+  "gemini-1.5-flash"
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
@@ -156,12 +155,14 @@ const callWithRetry = async <T>(
 ): Promise<{ data: T; model: string }> => {
   let lastFnError: any;
   const apiKey = process.env.API_KEY;
+  lastApiErrorMessage = null;
   
   if (!apiKey || apiKey.length < 5) {
     isAIFallingBack = true;
     currentLLMModel = null;
     currentLLMModelPriorityLabel = "N/A (API Key Missing)";
     remainingLLMAlternativesCount = MODEL_CHAIN.length;
+    lastApiErrorMessage = "API Key is missing or invalid.";
     throw new Error("API Key is missing.");
   }
 
@@ -177,10 +178,13 @@ const callWithRetry = async <T>(
         currentLLMModel = modelName;
         currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback ${modelIndex}`;
         remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
+        lastApiErrorMessage = null;
         return { data: result, model: modelName };
       } catch (error: any) {
         lastFnError = error;
         const status = error?.status || error?.statusCode;
+        console.warn(`Attempt failed for ${modelName} (retry ${i}):`, error);
+        
         if (((status >= 500 && status <= 599) || status === 429) && i < maxRetriesPerModel) {
           // Retry for server errors or rate limits
           await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
@@ -196,6 +200,7 @@ const callWithRetry = async <T>(
   currentLLMModel = modelsToTry[modelsToTry.length - 1]; // Last attempted
   currentLLMModelPriorityLabel = `All failed (initial: ${modelsToTry[0]})`;
   remainingLLMAlternativesCount = 0;
+  lastApiErrorMessage = lastFnError?.message || "Unknown API Error";
   throw lastFnError;
 };
 
@@ -563,32 +568,54 @@ export const getTrainingSessionAIAdvice = async (
 };
 
 export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {
-  const normalizedQuery = query.trim();
-  for (const [name, coords] of Object.entries(BELGIAN_CITIES)) {
-    if (name.toLowerCase() === normalizedQuery.toLowerCase()) return { address: name, coords };
+  const normalizedQuery = query.trim().toLowerCase();
+  
+  // 1. LOCAL CHECK: Exact match in BELGIAN_CITIES (Map)
+  if (BELGIAN_CITIES[normalizedQuery]) {
+      return { address: normalizedQuery, coords: BELGIAN_CITIES[normalizedQuery] };
   }
   
-  const { data } = await callWithRetry(async (aiInstance, modelName) => {
-    const response = await aiInstance.models.generateContent({
-      model: modelName, 
-      contents: `Full address and coords for: "${query}". Return JSON: { "address": string, "lat": number, "lng": number }`,
-      config: { 
-        temperature: 0, 
-        tools: [{ googleMaps: {} }] 
-      },
-    });
+  // 2. LOCAL CHECK: Case-insensitive match in BELGIAN_CITIES keys
+  const cityKey = Object.keys(BELGIAN_CITIES).find(k => k.toLowerCase() === normalizedQuery);
+  if (cityKey) {
+      return { address: cityKey, coords: BELGIAN_CITIES[cityKey] };
+  }
+
+  // 3. LOCAL CHECK: Search in BELGIAN_LOCATIONS (Array)
+  const locationMatch = BELGIAN_LOCATIONS.find(l => l.name.toLowerCase() === normalizedQuery);
+  if (locationMatch) {
+      return { address: locationMatch.name, coords: { lat: locationMatch.lat, lng: locationMatch.lng } };
+  }
+
+  // 4. API FALLBACK
+  try {
+    const { data } = await callWithRetry(async (aiInstance, modelName) => {
+        const response = await aiInstance.models.generateContent({
+        model: modelName, 
+        contents: `Full address and coords for: "${query}". Return JSON: { "address": string, "lat": number, "lng": number }`,
+        config: { 
+            temperature: 0, 
+            tools: [{ googleMaps: {} }] 
+        },
+        });
+        
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
+        const parsed = extractJson(response.text);
+        return { ...parsed, mapsUri };
+    }, "gemini-2.5-flash");
     
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
-    const parsed = extractJson(response.text);
-    return { ...parsed, mapsUri };
-  }, "gemini-2.5-flash");
-  
-  return { 
-    address: data.address || query, 
-    coords: { lat: data.lat, lng: data.lng },
-    mapsUri: data.mapsUri
-  };
+    return { 
+        address: data.address || query, 
+        coords: { lat: data.lat, lng: data.lng },
+        mapsUri: data.mapsUri
+    };
+  } catch (e) {
+      console.warn("Address resolution failed:", e);
+      // Fallback to Brussels if everything fails to prevent app crash, 
+      // but strictly speaking should throw or handle in UI.
+      return { address: query, coords: { lat: 50.8503, lng: 4.3517 } };
+  }
 };
 
 export const getCommuteRoadDistance = async (origin: string, destination: string): Promise<number | null> => {
@@ -609,14 +636,23 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
 
 export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
   if (query.length < 3) return [];
+
+  // 1. LOCAL CHECK: Prioritize local DB to save LLM quota
+  const normalizedQuery = query.toLowerCase();
+  const localMatches = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(normalizedQuery)).slice(0, 5);
+  
+  // If we found good local matches, return them immediately without calling LLM.
+  // This drastically limits LLM usage for standard Belgian cities.
+  if (localMatches.length > 0) {
+      return localMatches;
+  }
+
   try {
-    // Use callWithRetry to utilize the full model chain, ensuring robustness.
-    // We use the googleMaps tool to ensure the data is grounded in reality, not hallucinated.
+    // 2. API FALLBACK: Only if no local matches found
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
         // Prompt asks for a JSON list derived from Google Maps data.
-        // We cannot use responseMimeType: "application/json" with tools, so we parse the text manually.
         contents: `Find up to 5 real geographic locations matching "${query}" using Google Maps. Return a raw JSON array (no markdown code blocks) of objects with properties: name (string), lat (number), lng (number).`,
         config: { 
           temperature: 0, 

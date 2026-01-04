@@ -27,7 +27,7 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
         </div>
         
         <div className="space-y-3 mb-6">
-          {Object.entries(status).filter(([name]) => name !== 'llmDetails').map(([name, stat]) => (
+          {Object.entries(status).filter(([name]) => name !== 'llmDetails' && name !== 'errorMessage').map(([name, stat]) => (
             <div key={name} className={`flex items-center justify-between p-3.5 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
               <div className="flex items-center gap-3">
                 {name === 'Open-Meteo' ? <Server className="w-4 h-4 text-slate-500" /> : name === 'Gemini LLM' ? <BrainCircuit className="w-4 h-4 text-blue-500" /> : <MapPin className="w-4 h-4 text-emerald-500" />}
@@ -84,6 +84,14 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                   <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>Alternatives Left:</span>
                   <span className={isDark ? 'text-white' : 'text-slate-900'}>{status.llmDetails.alternatives}</span>
                 </div>
+                {status.errorMessage && (
+                  <div className="mt-2 pt-2 border-t border-dashed border-red-500/20">
+                     <span className="text-red-400 block mb-0.5">Error Diagnosis:</span>
+                     <span className={`block font-mono text-[9px] ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                       {status.errorMessage}
+                     </span>
+                  </div>
+                )}
               </div>
             ) : (
               <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>

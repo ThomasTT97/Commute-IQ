@@ -88,7 +88,7 @@ export const DEFAULT_SETTINGS: CommuteSettings = {
   eveningWindow: ["17:00", "18:30"],
   language: 'en',
   theme: 'dark',
-  disableAI: false,
+  disableAI: true,
   equipment: []
 };
 

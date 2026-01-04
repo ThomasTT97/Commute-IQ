@@ -6,7 +6,6 @@ import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAI
 import { BELGIAN_LOCATIONS } from './locations';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
-import { TrainingWeeklyForecast } from './components/TrainingWeeklyForecast';
 import { Header } from './components/layout/Header';
 import { InfoModal } from './components/modals/InfoModal';
 import { ConnectivityModal } from './components/modals/ConnectivityModal';
@@ -27,7 +26,8 @@ import {
   isAIFallingBack,
   currentLLMModel,           
   currentLLMModelPriorityLabel, 
-  remainingLLMAlternativesCount 
+  remainingLLMAlternativesCount,
+  lastApiErrorMessage 
 } from './services/geminiService';
 
 const App: React.FC = () => {
@@ -81,7 +81,8 @@ const App: React.FC = () => {
       'Open-Meteo': 'checking',
       'Gemini LLM': 'checking',
       'Google Maps': 'checking',
-      llmDetails: { model: null, priority: null, alternatives: null }
+      llmDetails: { model: null, priority: null, alternatives: null },
+      errorMessage: undefined
     });
     
     try {
@@ -92,7 +93,7 @@ const App: React.FC = () => {
     }
 
     try {
-      await resolveAddress("Brussels");
+      await resolveAddress("Test Connectivity Check");
       setConnectionStatus(prev => ({ 
         ...prev, 
         'Gemini LLM': isAIFallingBack ? 'fallback' : 'ok', 
@@ -101,7 +102,8 @@ const App: React.FC = () => {
           model: currentLLMModel,
           priority: currentLLMModelPriorityLabel,
           alternatives: remainingLLMAlternativesCount,
-        }
+        },
+        errorMessage: undefined
       }));
     } catch (e) {
       setConnectionStatus(prev => ({ 
@@ -112,7 +114,8 @@ const App: React.FC = () => {
           model: currentLLMModel,
           priority: currentLLMModelPriorityLabel,
           alternatives: remainingLLMAlternativesCount,
-        }
+        },
+        errorMessage: lastApiErrorMessage || undefined
       }));
     }
   }, []);
@@ -508,25 +511,46 @@ const App: React.FC = () => {
   }, [activeTrainingSlot, viewMode, settings.disableAI, training.distance, settings]);
 
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
+    // 1. Close Modal Immediately to improve perceived responsiveness
+    setIsSettingsOpen(false);
     setLoading(true);
-    let roadDistance = newSettings.roadDistance;
+
     const locationChanged = newSettings.homeLocation !== settings.homeLocation || newSettings.workLocation !== settings.workLocation;
     const equipmentChanged = JSON.stringify(newSettings.equipment) !== JSON.stringify(settings.equipment);
+    const aiChanged = newSettings.disableAI !== settings.disableAI;
     
+    // 2. Optimistic Update: Apply changes immediately
+    let updatedSettings = { ...newSettings };
+    setSettings(updatedSettings);
+    localStorage.setItem('velo_settings', JSON.stringify(updatedSettings));
+
+    // 3. Perform heavy lifting in the background
     if (locationChanged) {
+      // Clear data immediately if location changed
+      setPulseDataMap({}); 
+      localStorage.removeItem(CACHE_KEY);
+      
       try {
         const dist = await getCommuteRoadDistance(newSettings.homeLocation, newSettings.workLocation);
-        if (dist) roadDistance = dist;
-      } catch (e: any) { }
+        if (dist) {
+          // Update local variable and state with new distance
+          updatedSettings = { ...updatedSettings, roadDistance: dist };
+          setSettings(updatedSettings); 
+          localStorage.setItem('velo_settings', JSON.stringify(updatedSettings));
+        }
+      } catch (e: any) { 
+        console.error("Distance check failed", e);
+      }
     }
-    const updated: CommuteSettings = { ...newSettings, roadDistance }; 
-    setSettings(updated);
-    localStorage.setItem('velo_settings', JSON.stringify(updated));
-    setIsSettingsOpen(false);
-    if (locationChanged || newSettings.disableAI !== settings.disableAI || equipmentChanged) { 
-      setPulseDataMap({});
-      localStorage.removeItem(CACHE_KEY);
-      syncFullWeek(updated);
+
+    if (locationChanged || aiChanged || equipmentChanged) {
+      if (!locationChanged) {
+         // Even if location didn't change, equipment/AI change requires cache invalidation
+         setPulseDataMap({});
+         localStorage.removeItem(CACHE_KEY);
+      }
+      // Re-fetch using the potentially updated settings (inc. new distance)
+      await syncFullWeek(updatedSettings);
     } else {
       setLoading(false);
     }
@@ -645,7 +669,7 @@ const App: React.FC = () => {
             <WeeklyForecast pulseDataMap={pulseDataMap} loadingOffsets={loadingOffsets} theme={settings.theme} onSelectDay={(offset: number) => { setSelectedDateOffset(offset); setViewMode('daily'); }} />
           </div>
         )}
-        {viewMode === 'training' && (
+        {(viewMode === 'training' || viewMode === 'training-weekly') && (
           <TrainingView 
             isDark={isDark}
             training={training}
@@ -660,7 +684,11 @@ const App: React.FC = () => {
             onReturn={() => setViewMode('daily')}
             onSearchChange={(val) => { setTrainingSearch(val); setShowTrainingSuggestions(true); }}
             onSetToHome={handleSetTrainingToHome}
-            onDateOffsetChange={(offset) => { setTraining(prev => ({...prev, dateOffset: offset})); setManualStartHour(null); }}
+            onDateOffsetChange={(offset) => { 
+                setTraining(prev => ({...prev, dateOffset: offset})); 
+                setManualStartHour(null); 
+                if (viewMode === 'training-weekly') setViewMode('training');
+            }}
             onDistanceChange={(dist) => { setTraining(prev => ({...prev, distance: dist})); setManualStartHour(null); }}
             onManualHourChange={(hour) => setManualStartHour(hour)}
             onSelectSuggestion={(loc) => handleSelectSuggestion('training', loc)}
@@ -668,19 +696,14 @@ const App: React.FC = () => {
             filterLocations={filterLocationsWithGlobal}
             globalTrainingResults={globalTrainingResults}
             getDayLabel={getDayLabel}
-          />
-        )}
-        {viewMode === 'training-weekly' && (
-          <TrainingWeeklyForecast 
-             data={trainingWeek}
-             loading={isTrainingWeekLoading}
-             onSelectDay={(offset, hour) => {
-                setTraining(prev => ({ ...prev, dateOffset: offset }));
-                setManualStartHour(hour);
-                setViewMode('training');
-             }}
-             onBack={() => setViewMode('training')}
-             theme={settings.theme}
+            isWeeklyView={viewMode === 'training-weekly'}
+            weeklyData={trainingWeek}
+            weeklyLoading={isTrainingWeekLoading}
+            onSelectWeeklySlot={(offset, hour) => {
+               setTraining(prev => ({ ...prev, dateOffset: offset }));
+               setManualStartHour(hour);
+               setViewMode('training');
+            }}
           />
         )}
       </main>

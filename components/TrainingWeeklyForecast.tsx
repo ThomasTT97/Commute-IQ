@@ -1,16 +1,15 @@
 
 import React from 'react';
-import { ArrowLeft, Clock, AlertTriangle, Droplets, ShieldCheck, Wind } from 'lucide-react';
+import { Clock, AlertTriangle, Droplets, ShieldCheck, Wind } from 'lucide-react';
 
 interface TrainingWeeklyForecastProps {
   data: any[];
   loading: boolean;
   onSelectDay: (offset: number, startHour: number) => void;
-  onBack: () => void;
   theme: 'dark' | 'light';
 }
 
-export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ data, loading, onSelectDay, onBack, theme }) => {
+export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ data, loading, onSelectDay, theme }) => {
   const isDark = theme === 'dark';
 
   const getDayLabel = (offset: number) => {
@@ -37,79 +36,72 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
   };
 
   return (
-    <div className="h-full flex flex-col animate-in fade-in slide-in-from-right-8 duration-300">
-      <div className="flex items-center gap-3 mb-6 flex-none px-1">
-        <button 
-          onClick={onBack} 
-          className={`p-2 rounded-full transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-            <h2 className={`text-lg font-black uppercase tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>Training Outlook</h2>
-            <p className="text-[10px] font-medium text-slate-500 mt-1">Best 2h windows for the next 7 days</p>
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-3 min-h-0 pb-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {loading ? (
+         Array.from({length: 7}).map((_, i) => (
+           <div key={i} className={`h-24 rounded-[1.5rem] border animate-pulse ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-white border-slate-200'}`} />
+         ))
+      ) : (
+         data.map((day) => {
+           const label = getDayLabel(day.offset);
+           const { bestSlot } = day;
+           const score = bestSlot?.score || 0;
+           const condition = bestSlot?.condition;
+           
+           return (
+             <button 
+               key={day.offset}
+               onClick={() => onSelectDay(day.offset, bestSlot.startHour)}
+               className={`group w-full p-4 rounded-[1.5rem] border transition-all active:scale-[0.98] relative overflow-hidden flex items-center justify-between ${isDark ? 'bg-[#0a0c10] border-white/5 hover:bg-white/5' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+             >
+               <div className="flex flex-col items-start gap-1.5 z-10">
+                  <div className="flex items-baseline gap-2">
+                      <span className={`text-[13px] font-black uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>{label.name}</span>
+                      <span className="text-[11px] font-bold text-slate-500">{label.date}</span>
+                  </div>
+                  
+                  <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border mt-0.5 ${getScoreBg(score)}`}>
+                      <Clock className={`w-3 h-3 ${getScoreColor(score)}`} />
+                      <span className={`text-[11px] font-black tracking-wide ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                          {bestSlot.window[0]} - {bestSlot.window[1]}
+                      </span>
+                  </div>
+               </div>
 
-      <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-3 min-h-0 pb-4">
-        {loading ? (
-           Array.from({length: 7}).map((_, i) => (
-             <div key={i} className={`h-24 rounded-[1.5rem] border animate-pulse ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-white border-slate-200'}`} />
-           ))
-        ) : (
-           data.map((day) => {
-             const label = getDayLabel(day.offset);
-             const { bestSlot } = day;
-             const score = bestSlot?.score || 0;
-             const condition = bestSlot?.condition;
-             
-             return (
-               <button 
-                 key={day.offset}
-                 onClick={() => onSelectDay(day.offset, bestSlot.startHour)}
-                 className={`group w-full p-4 rounded-[1.5rem] border transition-all active:scale-[0.98] relative overflow-hidden flex items-center justify-between ${isDark ? 'bg-[#0a0c10] border-white/5 hover:bg-white/5' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
-               >
-                 <div className="flex flex-col items-start gap-1.5 z-10">
-                    <div className="flex items-baseline gap-2">
-                        <span className={`text-[13px] font-black uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>{label.name}</span>
-                        <span className="text-[11px] font-bold text-slate-500">{label.date}</span>
-                    </div>
-                    
-                    <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border mt-0.5 ${getScoreBg(score)}`}>
-                        <Clock className={`w-3 h-3 ${getScoreColor(score)}`} />
-                        <span className={`text-[11px] font-black tracking-wide ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                            {bestSlot.window[0]} - {bestSlot.window[1]}
-                        </span>
-                    </div>
-                 </div>
-
-                 <div className="flex flex-col items-end gap-2 z-10">
-                    <div className="flex items-center gap-1.5">
-                       {condition?.iceRisk && (
-                           <div className="p-1.5 rounded-full bg-red-500/20 text-red-500" title="Ice Risk"><AlertTriangle className="w-3.5 h-3.5" /></div>
-                       )}
-                       {(condition?.wetSurfaceChance > 50 || condition?.precipitation > 0) ? (
-                           <div className="p-1.5 rounded-full bg-blue-500/20 text-blue-500" title="Wet Surface"><Droplets className="w-3.5 h-3.5" /></div>
-                       ) : (
-                           <div className="p-1.5 rounded-full bg-emerald-500/20 text-emerald-500" title="Dry Surface"><ShieldCheck className="w-3.5 h-3.5" /></div>
-                       )}
-                       {condition?.windSpeed > 25 && (
-                           <div className="p-1.5 rounded-full bg-orange-500/20 text-orange-500" title="High Wind"><Wind className="w-3.5 h-3.5" /></div>
-                       )}
-                    </div>
-                    <div className="flex items-baseline gap-0.5">
-                        <span className={`text-3xl font-black tracking-tighter ${getScoreColor(score)}`}>{Math.round(score)}</span>
-                        <span className={`text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/100</span>
-                    </div>
-                 </div>
-                 
-                 {/* Score Bar Background */}
-                 <div className={`absolute bottom-0 left-0 h-1 transition-all duration-1000 ${getScoreColor(score).replace('text-', 'bg-')}`} style={{ width: `${score}%`, opacity: 0.3 }} />
-               </button>
-             );
-           })
-        )}
-      </div>
+               <div className="flex flex-col items-end gap-2 z-10">
+                  <div className="flex items-center gap-1.5">
+                     {condition?.iceRisk && (
+                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-[9px] font-black uppercase tracking-wide">
+                             <AlertTriangle className="w-3 h-3" /> ICE
+                         </div>
+                     )}
+                     {(condition?.wetSurfaceChance > 50 || condition?.precipitation > 0) ? (
+                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-500 text-[9px] font-black uppercase tracking-wide">
+                             <Droplets className="w-3 h-3" /> WET
+                         </div>
+                     ) : (
+                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-wide">
+                             <ShieldCheck className="w-3 h-3" /> DRY
+                         </div>
+                     )}
+                     {condition?.windSpeed > 25 && (
+                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[9px] font-black uppercase tracking-wide">
+                             <Wind className="w-3 h-3" /> WIND
+                         </div>
+                     )}
+                  </div>
+                  <div className="flex items-baseline gap-0.5">
+                      <span className={`text-3xl font-black tracking-tighter ${getScoreColor(score)}`}>{Math.round(score)}</span>
+                      <span className={`text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/100</span>
+                  </div>
+               </div>
+               
+               {/* Score Bar Background */}
+               <div className={`absolute bottom-0 left-0 h-1 transition-all duration-1000 ${getScoreColor(score).replace('text-', 'bg-')}`} style={{ width: `${score}%`, opacity: 0.3 }} />
+             </button>
+           );
+         })
+      )}
     </div>
   );
 };

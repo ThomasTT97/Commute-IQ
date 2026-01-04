@@ -19,7 +19,8 @@ import {
   BrainCircuit, 
   Trophy, 
   Activity,
-  MapPin
+  MapPin,
+  Loader2
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -54,6 +55,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [globalHomeResults, setGlobalHomeResults] = useState<BelgianLocation[]>([]);
   const [globalWorkResults, setGlobalWorkResults] = useState<BelgianLocation[]>([]);
   const [isSearchingGlobal, setIsSearchingGlobal] = useState({ home: false, work: false });
+  const [isSaving, setIsSaving] = useState(false);
 
   // Sync internal state when opened
   useEffect(() => {
@@ -61,6 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setEditSettings(currentSettings);
       setHomeSearch(currentSettings.homeLocation);
       setWorkSearch(currentSettings.workLocation);
+      setIsSaving(false);
     }
   }, [isOpen, currentSettings]);
 
@@ -106,6 +109,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleThemeChange = (theme: 'dark' | 'light') => {
     setEditSettings(prev => ({ ...prev, theme }));
     onThemeChange(theme);
+  };
+
+  const handleSaveClick = async () => {
+    setIsSaving(true);
+    await onSave(editSettings);
+    // The modal will likely unmount here due to onSave logic in App.tsx
+    // But if not, we reset saving state
+    if (isOpen) setIsSaving(false);
   };
 
   if (!isOpen) return null;
@@ -282,7 +293,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {!isEquipmentViewOpen && (
           <div className="flex-none pt-2">
-            <button onClick={() => onSave(editSettings)} className="w-full py-3 bg-blue-600 rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] text-white shadow-xl shadow-blue-600/25 active:scale-[0.98] transition-all">Save Profile</button>
+            <button 
+              onClick={handleSaveClick} 
+              disabled={isSaving}
+              className={`w-full py-3 bg-blue-600 rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] text-white shadow-xl shadow-blue-600/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${isSaving ? 'opacity-80' : ''}`}
+            >
+              {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isSaving ? 'Saving...' : 'Save Profile'}
+            </button>
           </div>
         )}
       </div>

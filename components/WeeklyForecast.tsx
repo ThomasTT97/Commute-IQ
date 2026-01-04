@@ -219,7 +219,7 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, lo
               key={offset}
               onClick={() => onSelectDay(offset)}
               disabled={isLoading}
-              className={`group flex items-center justify-between py-2 px-4 rounded-[1.25rem] border transition-all duration-300 relative overflow-hidden flex-1 min-h-[54px] ${styles.bg} ${styles.shadow} ${isLoading ? 'opacity-70 animate-pulse' : 'hover:scale-[1.01] active:scale-[0.99] hover:border-blue-600/40'}`}
+              className={`group flex items-center justify-between py-2 px-4 rounded-[1.25rem] border transition-all duration-300 relative overflow-hidden flex-1 min-h-[60px] ${styles.bg} ${styles.shadow} ${isLoading ? 'opacity-70 animate-pulse' : 'hover:scale-[1.01] active:scale-[0.99] hover:border-blue-600/40'}`}
             >
               <div className="flex items-center gap-4 z-10">
                 <div className="flex flex-col items-center justify-center min-w-[2.5rem]">
@@ -229,22 +229,22 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, lo
 
                 <div className={`h-6 w-px ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
 
-                <div className="flex flex-col gap-1 min-w-[100px]">
+                <div className="flex flex-col gap-1.5 min-w-[100px]">
                   <div className="flex items-center gap-1.5 opacity-60">
-                    <span className={`text-[7px] font-black uppercase tracking-[0.2em] leading-none ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>Atmos Status</span>
+                    <span className={`text-[7px] font-black uppercase tracking-[0.2em] leading-none ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>Risk Indicators</span>
                     {isLoading && <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-600" />}
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     {!pulse || isLoading ? (
-                      <div className="h-4 w-16 rounded-full bg-slate-500/10 animate-pulse" />
+                      <div className="h-5 w-24 rounded-full bg-slate-500/10 animate-pulse" />
                     ) : (
                       <>
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[7px] font-black border ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
-                          {isWet ? <Droplets className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5" />}
+                        <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
+                          {isWet ? <Droplets className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
                           {isWet ? 'WET' : 'DRY'}
                         </div>
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[7px] font-black border ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
-                          {hasIce ? <AlertTriangle className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5 opacity-20" />}
+                        <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
+                          {hasIce ? <AlertTriangle className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3 opacity-20" />}
                           {hasIce ? 'ICE' : 'NO ICE'}
                         </div>
                       </>
