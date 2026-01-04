@@ -495,7 +495,14 @@ const App: React.FC = () => {
   }, [viewMode, training.location, training.distance, training.dateOffset, syncTraining]);
 
   useEffect(() => {
-    if (viewMode === 'training' && activeTrainingSlot && !activeTrainingSlot.isAIEnhanced && !activeTrainingSlot.aiFailed && !settings.disableAI) {
+    // Only run if specific conditions are met, preventing infinite loops or missed updates
+    if (
+      viewMode === 'training' && 
+      activeTrainingSlot && 
+      !activeTrainingSlot.isAIEnhanced && 
+      !activeTrainingSlot.aiFailed && 
+      !settings.disableAI
+    ) {
       const fetchAIAdvice = async () => {
         try {
           const aiAdvice = await getTrainingSessionAIAdvice(settings, activeTrainingSlot.condition, training.distance);
@@ -530,7 +537,16 @@ const App: React.FC = () => {
       const timer = setTimeout(fetchAIAdvice, 800); 
       return () => clearTimeout(timer);
     }
-  }, [activeTrainingSlot, viewMode, settings.disableAI, training.distance, settings]);
+    // Updated dependency array: Rely on primitives where possible to ensure stability
+  }, [
+    activeTrainingSlot?.startHour, 
+    activeTrainingSlot?.isAIEnhanced, 
+    activeTrainingSlot?.aiFailed, 
+    viewMode, 
+    settings.disableAI, 
+    training.distance, 
+    settings // kept settings, as it is state from App and stable
+  ]);
 
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
     // 1. Close Modal Immediately to improve perceived responsiveness

@@ -1,27 +1,9 @@
 
-import React from 'react';
-import { 
-  Sun, 
-  Cloud, 
-  CloudRain, 
-  Wind, 
-  Zap, 
-  Moon
-} from 'lucide-react';
 import { Language, CommuteSettings, Coordinates } from './types';
 
 export const ROAD_DETOUR_FACTOR = 1.32;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28.5; // km/h
-
-export const WEATHER_ICONS: Record<string, React.ReactNode> = {
-  Sunny: <Sun className="text-yellow-400" />,
-  Cloudy: <Cloud className="text-gray-400" />,
-  Rainy: <CloudRain className="text-blue-400" />,
-  Windy: <Wind className="text-teal-400" />,
-  Stormy: <Zap className="text-purple-400" />,
-  Dark: <Moon className="text-indigo-400" />,
-};
 
 // Comprehensive lookup for Belgian cities and villages
 export const BELGIAN_CITIES: Record<string, Coordinates> = {

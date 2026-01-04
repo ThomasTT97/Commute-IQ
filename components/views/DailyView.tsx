@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { WeatherCard } from '../WeatherCard';
-import { Zap, RefreshCw, Compass, Bike, Shirt, ChevronDown, Loader2 } from 'lucide-react';
+import { Zap, RefreshCw, Compass, Bike, Shirt, ChevronDown, Loader2, Sparkles, Calculator } from 'lucide-react';
 import { WeatherCondition } from '../../types';
 import { TypewriterText } from '../TypewriterText';
 
@@ -126,22 +126,25 @@ export const DailyView: React.FC<DailyViewProps> = ({
               {!settings.disableAI && !isCurrentDayEnhanced ? 'Analyzing...' : 'Commute Intelligence'}
             </span>
           </div>
-          {isAdviceExpanded ? (
-            <ChevronDown className="w-4 h-4 text-blue-500 rotate-180 transition-transform" />
-          ) : (
-            !isCurrentDayEnhanced && !settings.disableAI && (
-              <div className="flex items-center gap-1.5">
-                <RefreshCw className="w-2.5 h-2.5 text-blue-400 animate-spin" />
-              </div>
-            )
-          )}
+          
+          <div className="flex items-center gap-2">
+            {isAdviceExpanded ? (
+              <ChevronDown className="w-4 h-4 text-blue-500 rotate-180 transition-transform" />
+            ) : (
+              !isCurrentDayEnhanced && !settings.disableAI && (
+                <div className="flex items-center gap-1.5">
+                  <RefreshCw className="w-2.5 h-2.5 text-blue-400 animate-spin" />
+                </div>
+              )
+            )}
+          </div>
         </button>
         
         <div className={`flex-1 min-h-0 ${isAdviceExpanded ? 'overflow-y-auto hide-scrollbar' : ''}`}>
           {!isAdviceExpanded ? (
             renderSurfaceReason()
           ) : (
-            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-top-2 duration-500 pb-2">
               {shouldShowBlock(0) && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-2">
@@ -177,6 +180,16 @@ export const DailyView: React.FC<DailyViewProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* BOTTOM SOURCE INDICATOR - Subtle */}
+              <div className="pt-4 mt-2 border-t border-dashed border-slate-500/10 flex justify-end">
+                <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest opacity-40 ${
+                  isDark ? 'text-slate-300' : 'text-slate-600'
+                }`}>
+                  {isCurrentDayEnhanced ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
+                  <span>Source: {isCurrentDayEnhanced ? 'Gemini 2.0 Flash' : 'Standard Algorithm'}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -191,7 +204,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
       >
         <WeatherCard 
           {...secondaryData} 
-          distance={displayedDistance}
+          distance={displayedDistance} 
           safetyScore={secondaryData.score} 
           theme={settings.theme} 
           compact={activeLegIndex !== 1 || isAdviceExpanded}

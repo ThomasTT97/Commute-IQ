@@ -139,6 +139,25 @@ const extractJson = (text?: string): any => {
   }
 };
 
+const cleanErrorMessage = (error: any): string => {
+  try {
+    let msg = error?.message || JSON.stringify(error);
+    // If message is a JSON string, try to parse it to get cleaner output
+    if (msg.startsWith('{') || msg.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(msg);
+        if (parsed.error?.message) return parsed.error.message;
+        if (parsed.message) return parsed.message;
+      } catch { /* ignore */ }
+    }
+    // Truncate if too long
+    if (msg.length > 150) return msg.substring(0, 150) + "...";
+    return msg;
+  } catch (e) {
+    return "Unknown error structure";
+  }
+};
+
 const callWithRetry = async <T>(
   fn: (aiInstance: GoogleGenAI, modelName: string) => Promise<T>, 
   specificModel?: string,
@@ -178,10 +197,11 @@ const callWithRetry = async <T>(
         return { data: result, model: modelName };
       } catch (error: any) {
         const status = error?.status || error?.statusCode;
-        const errMsg = error?.message || "Unknown error";
-        collectedErrors.push(`[${modelName}]: ${errMsg}`);
+        const rawMsg = error?.message || "Unknown error";
+        const cleanMsg = cleanErrorMessage(error);
         
-        console.warn(`LLM Attempt failed for ${modelName} (retry ${i}):`, errMsg);
+        collectedErrors.push(`[${modelName}]: ${cleanMsg}`);
+        console.warn(`LLM Attempt failed for ${modelName} (retry ${i}):`, rawMsg);
         
         // Fail fast on 400/404 - these are unlikely to be resolved by retrying the same model
         if (status === 400 || status === 404) {
@@ -214,6 +234,7 @@ const callWithRetry = async <T>(
 // Checks the health of the generic LLM chain (Insights Engine)
 export const checkLLMConnectivity = async (): Promise<boolean> => {
   try {
+    // PASS 0 RETRIES to speed up the check and iterate through the fallback chain faster
     await callWithRetry(async (aiInstance, modelName) => {
        await aiInstance.models.generateContent({
         model: modelName,
@@ -221,7 +242,7 @@ export const checkLLMConnectivity = async (): Promise<boolean> => {
         config: { maxOutputTokens: 1 }
       });
       return true;
-    });
+    }, undefined, 0); 
     return true;
   } catch (e) {
     return false;
@@ -550,20 +571,37 @@ export const getTrainingSessionAIAdvice = async (
 
   try {
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
-      const prompt = `Cycling Coach: Provide highly technical, ultra-concise advice for a ${distance}km training session: ${JSON.stringify(weather)}. 
-      Lang: ${settings.language}. 
-      Available Bikes: ${equipmentContext}.
-      Mandatory for 'clothing': Specify short/long bibs, sleeve length, gloves, overshoes.
-      Mandatory for 'setup': Recommend best bike from list and tire pressure (always in Bar).
-      Each field MUST be max 15 words. Avoid fluff.
-      Return JSON: { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }.`;
+      const prompt = `Role: World Tour Cycling Director. 
+      Task: Analyze forecast for a ${distance}km training ride.
+      Weather Data: ${JSON.stringify(weather)}.
+      Rider Equipment: ${equipmentContext}.
+      Language: ${settings.language}.
+
+      Requirements:
+      - strictly JSON output.
+      - "summary": Analysis of road surface and atmospheric risks.
+      - "performance": Physiological strategy (heart rate, fueling, intensity).
+      - "style": Technical handling advice (braking, cornering).
+      - "setup": Specific tire pressure (Bar) and equipment choice.
+      - "clothing": Exact kit list (layers, gloves, overshoes).
+
+      Output JSON Structure:
+      { 
+        "summary": "string (max 20 words)", 
+        "performance": "string (max 20 words)",
+        "style": "string (max 15 words)", 
+        "setup": "string (max 15 words)", 
+        "clothing": "string (max 15 words)" 
+      }`;
       
       const response = await aiInstance.models.generateContent({
         model: modelName,
         contents: prompt,
-        config: { temperature: 0.9, responseMimeType: "application/json" }
+        config: { temperature: 0.7, responseMimeType: "application/json" }
       });
-      return JSON.parse(response.text || "{}");
+      const txt = response.text || "{}";
+      const cleaned = txt.replace(/```json/g, "").replace(/```/g, "").trim();
+      return JSON.parse(cleaned);
     });
     return data;
   } catch (e) {

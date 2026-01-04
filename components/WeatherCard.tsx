@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { LocationSuggestion } from '../types';
+import { LocationSuggestion, WeatherCondition } from '../types';
 import { BelgianLocation } from '../locations';
 import { 
   Wind, 
@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 interface WeatherCardProps {
-  condition?: any | null; 
+  condition?: WeatherCondition | null; 
   timeRange?: string;
   dateLabel?: string;
   startLocation?: string;
@@ -119,7 +119,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       }
       return "Surface Alert: High moisture combined with near-freezing temperatures detected. Roads are likely to be slippery with frost or black ice.";
     } else {
-      // Improved Safety Messaging: Don't falsely claim "consistently above freezing" if it was freezing recently.
       if (condition.minPastTemp !== undefined && condition.minPastTemp <= 0) {
          return "Safe: Sub-zero temperatures were recorded recently, but current humidity levels are sufficiently low to prevent ice formation.";
       }
@@ -324,8 +323,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className={`absolute top-full mt-2 left-0 p-4 rounded-2xl border z-[160] min-w-[150px] animate-in fade-in slide-in-from-top-2 duration-200 ${popupBgClass}`}>
               <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Temp Range</span><button onClick={() => setShowTempDetails(false)} className="p-1 -mr-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between text-[11px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MIN TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.minTemp ?? condition?.temp)}°C</span></div>
-                <div className="flex items-center justify-between text-[11px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MAX TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.maxTemp ?? condition?.temp)}°C</span></div>
+                <div className="flex items-center justify-between text-[11px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MIN TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.minTemp ?? condition?.temp ?? 0)}°C</span></div>
+                <div className="flex items-center justify-between text-[11px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MAX TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.maxTemp ?? condition?.temp ?? 0)}°C</span></div>
               </div>
             </div>
           )}

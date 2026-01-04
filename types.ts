@@ -86,33 +86,6 @@ export interface WeatherCondition {
   optimalPressure?: string;
 }
 
-export interface CommuteInsight {
-  day: string;
-  morning: WeatherCondition;
-  evening: WeatherCondition;
-  score: number;
-}
-
-export interface RouteOption {
-  id: string;
-  name: string;
-  description: string;
-  distance: number;
-  estimatedTime: number;
-  headwindFactor: number;
-  bendsCount: number;
-  waypoints: { x: number; y: number }[];
-  gpxString?: string;
-}
-
-export interface ClothingAdvice {
-  baseLayer: string;
-  midLayer: string;
-  outerLayer: string;
-  accessories: string[];
-  reasoning: string;
-}
-
 export interface ConnectionStatusState {
   'Open-Meteo': 'checking' | 'ok' | 'fail' | 'fallback';
   'Gemini LLM': 'checking' | 'ok' | 'fail' | 'fallback';

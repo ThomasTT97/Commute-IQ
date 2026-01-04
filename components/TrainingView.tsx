@@ -18,7 +18,10 @@ import {
   Loader2,
   MapPin,
   Database,
-  CalendarRange
+  CalendarRange,
+  Sparkles,
+  Calculator,
+  CloudRain
 } from 'lucide-react';
 import { TrainingState } from '../types';
 import { BelgianLocation } from '../locations';
@@ -155,31 +158,34 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const suggestions = useMemo(() => filterLocations(trainingSearch, globalTrainingResults), [filterLocations, trainingSearch, globalTrainingResults]);
 
   const isAIActive = trainingData?.isAIEnhanced;
+  const isAIFailed = trainingData?.aiFailed;
 
   const shouldShowBlock = (index: number) => {
-    // If AI is disabled, show everything immediately
-    if (!aiEnabled) return true;
+    // If AI is disabled or FAILED, show everything immediately (fallbacks)
+    if (!aiEnabled || isAIFailed) return true;
     // If AI is enabled but not ready, show nothing (except loading)
     if (!isAIActive) return false;
     // If AI is ready, show based on sequence
     return typingStep >= index;
   };
 
-  const renderAdviceText = (text: string, fallback: string, stepIndex: number) => {
-    if (!aiEnabled) {
-      return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{text || fallback}</span>;
+  const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
+    // Determine content to show: valid AI text or fallback
+    const content = (isAIActive && text && text.length > 0) ? text : fallback;
+    
+    // If AI failed, disabled, or we are falling back (active but empty text), render static text immediately
+    if (!aiEnabled || isAIFailed || (isAIActive && (!text || text.length === 0))) {
+      return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{content}</span>;
     }
     
-    if (isAIActive) {
-      return (
-        <TypewriterText 
-          text={text} 
-          className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
-          onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
-        />
-      );
-    }
-    return null;
+    // If AI is active and we have text, render typewriter
+    return (
+      <TypewriterText 
+        text={content} 
+        className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
+        onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
+      />
+    );
   };
 
   return (
@@ -426,13 +432,14 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                   >
                     <div className="flex items-center justify-between w-full flex-none">
                       <div className="flex items-center gap-2">
-                        <div className={`p-1.5 rounded-lg transition-colors ${aiEnabled && !isAIActive ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
+                        <div className={`p-1.5 rounded-lg transition-colors ${aiEnabled && !isAIActive && !isAIFailed ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
                           <Zap className="w-4 h-4" />
                         </div>
-                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${aiEnabled && !isAIActive ? 'text-slate-600' : 'text-blue-600'}`}>
-                          {aiEnabled && !isAIActive ? 'Deep Analysis...' : 'Training Intelligence'}
+                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${aiEnabled && !isAIActive && !isAIFailed ? 'text-slate-600' : 'text-blue-600'}`}>
+                          {aiEnabled && !isAIActive && !isAIFailed ? 'Deep Analysis...' : 'Training Intelligence'}
                         </span>
                       </div>
+
                       <button 
                         onClick={() => setIsIntelligenceExpanded(false)}
                         className={`p-1.5 rounded-full border transition-all ${
@@ -443,8 +450,8 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       </button>
                     </div>
 
-                    <div className="flex flex-col gap-6 flex-1">
-                      {aiEnabled && !isAIActive && (
+                    <div className="flex flex-col gap-6 flex-1 pb-2">
+                      {aiEnabled && !isAIActive && !isAIFailed && (
                         <div className="flex items-center gap-2 py-1">
                           <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
                           <span className="text-[8px] font-black uppercase text-blue-600 tracking-widest">Generative Intelligence active...</span>
@@ -454,11 +461,11 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       {shouldShowBlock(0) && (
                         <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                           <div className="flex items-center gap-2">
-                            <Activity className="w-4 h-4 text-emerald-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
+                            <CloudRain className="w-4 h-4 text-blue-500" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Conditions Analysis</span>
                           </div>
                           <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.performanceAdvice, "Conditions are within standard operating parameters. Monitor heart rate response and hydration.", 0)}
+                            {renderAdviceText(trainingData.condition.surfaceReason, "Standard atmospheric conditions. No specific hazards detected.", 0)}
                           </div>
                         </div>
                       )}
@@ -466,11 +473,11 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       {shouldShowBlock(1) && (
                         <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                           <div className="flex items-center gap-2">
-                            <Compass className="w-4 h-4 text-blue-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
+                            <Activity className="w-4 h-4 text-emerald-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
                           </div>
                           <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.ridingStyleAdvice, "Maintain standard session protocols.", 1)}
+                            {renderAdviceText(trainingData.condition.performanceAdvice, "Conditions are within standard operating parameters. Monitor heart rate response and hydration.", 1)}
                           </div>
                         </div>
                       )}
@@ -478,11 +485,11 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       {shouldShowBlock(2) && (
                         <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                           <div className="flex items-center gap-2">
-                            <Bike className="w-4 h-4 text-blue-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
+                            <Compass className="w-4 h-4 text-blue-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
                           </div>
                           <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.bikeSetupAdvice, "Check essential hardware and tire pressures.", 2)}
+                            {renderAdviceText(trainingData.condition.ridingStyleAdvice, "Maintain standard session protocols.", 2)}
                           </div>
                         </div>
                       )}
@@ -490,14 +497,36 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       {shouldShowBlock(3) && (
                         <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                           <div className="flex items-center gap-2">
+                            <Bike className="w-4 h-4 text-blue-600" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
+                            {renderAdviceText(trainingData.condition.bikeSetupAdvice, "Check essential hardware and tire pressures.", 3)}
+                          </div>
+                        </div>
+                      )}
+
+                      {shouldShowBlock(4) && (
+                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-2">
                             <Shirt className="w-4 h-4 text-blue-600" />
                             <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Clothing Advice</span>
                           </div>
                           <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.clothingAdvice, "Standard training kit recommendation.", 3)}
+                            {renderAdviceText(trainingData.condition.clothingAdvice, "Standard training kit recommendation.", 4)}
                           </div>
                         </div>
                       )}
+
+                      {/* BOTTOM SOURCE INDICATOR - Subtle */}
+                      <div className="pt-4 mt-2 border-t border-dashed border-slate-500/20 flex justify-end">
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest opacity-40 ${
+                          isDark ? 'text-slate-300' : 'text-slate-600'
+                        }`}>
+                          {isAIActive ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
+                          <span>Source: {isAIActive ? 'Gemini 2.0 Flash' : 'Standard Algorithm'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

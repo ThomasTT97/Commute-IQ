@@ -49,6 +49,8 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
            const condition = bestSlot?.condition;
            
            const isIndoorRecommended = score < 45 || condition?.iceRisk;
+           const isWet = condition?.wetSurfaceChance > 50 || condition?.precipitation > 0;
+           const hasIce = condition?.iceRisk;
 
            return (
              <button 
@@ -77,20 +79,19 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
                              <MonitorPlay className="w-3 h-3" /> INDOOR
                          </div>
                      )}
-                     {condition?.iceRisk && (
-                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-[9px] font-black uppercase tracking-wide">
-                             <AlertTriangle className="w-3 h-3" /> ICE
-                         </div>
-                     )}
-                     {(condition?.wetSurfaceChance > 50 || condition?.precipitation > 0) ? (
-                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-500 text-[9px] font-black uppercase tracking-wide">
-                             <Droplets className="w-3 h-3" /> WET
-                         </div>
-                     ) : (
-                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-wide">
-                             <ShieldCheck className="w-3 h-3" /> DRY
-                         </div>
-                     )}
+                     
+                     {/* Surface Indicator */}
+                     <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wide ${isWet ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'}`}>
+                         {isWet ? <Droplets className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
+                         {isWet ? 'WET' : 'DRY'}
+                     </div>
+
+                     {/* Ice Indicator - Always Show */}
+                     <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wide ${hasIce ? 'bg-red-500/10 border-red-500/20 text-red-500' : (isDark ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-slate-100 border-slate-200 text-slate-500')}`}>
+                         {hasIce ? <AlertTriangle className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3 opacity-50" />}
+                         {hasIce ? 'ICE' : 'NO ICE'}
+                     </div>
+
                      {condition?.windSpeed > 25 && (
                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[9px] font-black uppercase tracking-wide">
                              <Wind className="w-3 h-3" /> WIND

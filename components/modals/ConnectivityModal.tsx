@@ -12,8 +12,8 @@ interface ConnectivityModalProps {
   isDark: boolean;
 }
 
-const formatModelName = (model: string | null): string => {
-  if (!model) return 'Unknown';
+const formatModelName = (model: string | null): string | null => {
+  if (!model) return null;
   if (model.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
   if (model.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
   if (model.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
@@ -123,7 +123,7 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
                 {status.errorMessage && (
                   <div className="mt-2 pt-2 border-t border-dashed border-red-500/20">
                      <span className="text-red-400 block mb-0.5">Error Diagnosis:</span>
-                     <span className={`block font-mono text-[9px] break-all ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                     <span className={`block font-mono text-[9px] break-all whitespace-pre-wrap ${isDark ? 'text-red-300' : 'text-red-600'}`}>
                        {status.errorMessage}
                      </span>
                   </div>
