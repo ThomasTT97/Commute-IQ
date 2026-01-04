@@ -26,6 +26,7 @@ import {
   resolveAddress,
   checkLLMConnectivity,
   isAIFallingBack,
+  isUsingFallbackModel,
   currentLLMModel,           
   currentLLMModelPriorityLabel, 
   remainingLLMAlternativesCount,
@@ -95,7 +96,7 @@ const App: React.FC = () => {
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'fail' }));
     }
 
-    // 2. Maps Check (Specific Model)
+    // 2. Maps Check (Using explicit model for maps in service)
     try {
       await resolveAddress("Test Connectivity Check");
       setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'ok' }));
@@ -104,12 +105,19 @@ const App: React.FC = () => {
     }
 
     // 3. Generic LLM Check (Robust Chain including Lite)
-    // Run this last to ensure global LLM state vars reflect the full chain capability
     try {
       await checkLLMConnectivity();
+      
+      let llmStatus: 'ok' | 'fallback' | 'fail' = 'ok';
+      if (isAIFallingBack) {
+          llmStatus = 'fail';
+      } else if (isUsingFallbackModel) {
+          llmStatus = 'fallback';
+      }
+
       setConnectionStatus(prev => ({ 
         ...prev, 
-        'Gemini LLM': isAIFallingBack ? 'fallback' : 'ok', 
+        'Gemini LLM': llmStatus, 
         llmDetails: {
           model: currentLLMModel,
           priority: currentLLMModelPriorityLabel,
@@ -123,10 +131,10 @@ const App: React.FC = () => {
         'Gemini LLM': 'fail', 
         llmDetails: {
           model: currentLLMModel,
-          priority: currentLLMModelPriorityLabel,
-          alternatives: remainingLLMAlternativesCount,
+          priority: currentLLMModelPriorityLabel || 'All Chains Failed',
+          alternatives: 0,
         },
-        errorMessage: lastApiErrorMessage || undefined
+        errorMessage: lastApiErrorMessage || (e as Error).message
       }));
     }
   }, []);

@@ -8,17 +8,17 @@ export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
 export let isAIFallingBack = false;
 
-// New globals to track active LLM model information
+// New globals to track active LLM model information for UI feedback
 export let currentLLMModel: string | null = null;
 export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
+export let isUsingFallbackModel = false; // Tracks if we have deviated from the primary model
 
-
+// Robust Model Chain: Performance -> Balance -> Stability
 export const MODEL_CHAIN = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-2.0-flash-lite-preview-02-05"
+  "gemini-3-flash-preview", // Latest fast model
+  "gemini-2.5-flash",       // Stable, supports Maps/Search
+  "gemini-1.5-flash"        // High-quota workhorse fallback
 ];
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
@@ -53,33 +53,23 @@ export const sliceWeatherData = (hourly: any, window: [string, string], offset: 
 
 const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): string => {
   const { riderWeight, tireWidth, type } = equipment;
-  // Simplified calculation based on weight, width and type
-  // Output in Bar
   let pressure = 0;
 
   if (type === 'Road Bike' || type === 'Speedpedelec') {
-    // Heuristic: Base 2.0 + (Weight * 0.05) - (Width - 25) * 0.1
     pressure = 2.0 + (riderWeight * 0.05) - ((tireWidth - 25) * 0.1);
-    // Clamp reasonable bounds for road
     pressure = Math.max(3.5, Math.min(8.5, pressure));
   } else if (type === 'Gravel Bike') {
-    // Heuristic: Base 1.0 + (Weight * 0.03) - (Width - 35) * 0.05
     pressure = 1.0 + (riderWeight * 0.03) - ((tireWidth - 35) * 0.05);
-    // Clamp reasonable bounds for gravel
     pressure = Math.max(1.8, Math.min(4.5, pressure));
   } else {
-    // Mountainbike
-    // Heuristic: Base 0.5 + (Weight * 0.02)
     pressure = 0.5 + (riderWeight * 0.02);
-    // Clamp reasonable bounds for MTB
     pressure = Math.max(1.4, Math.min(3.0, pressure));
   }
 
-  // Weather adjustments
   if (w.iceRisk) {
-    pressure -= 0.5; // Significant drop for contact patch
+    pressure -= 0.5;
   } else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) {
-    pressure -= 0.3; // Drop for traction
+    pressure -= 0.3;
   }
 
   return `${pressure.toFixed(1)} Bar`;
@@ -92,7 +82,6 @@ export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment
   let clothing = "Short bibs and short sleeves. Standard kit.";
   let performance = "Optimal physiological conditions for threshold training and endurance improvement.";
 
-  // Clothing Logic based on Temperature
   if (w.temp < 5) {
     clothing = "Thermal long bibs, winter jacket, heavy gloves, and neoprene overshoes required.";
   } else if (w.temp < 10) {
@@ -154,7 +143,6 @@ const callWithRetry = async <T>(
   specificModel?: string,
   maxRetriesPerModel = 1
 ): Promise<{ data: T; model: string }> => {
-  let lastFnError: any;
   const apiKey = process.env.API_KEY;
   lastApiErrorMessage = null;
   
@@ -169,40 +157,56 @@ const callWithRetry = async <T>(
 
   const ai = new GoogleGenAI({ apiKey });
   const modelsToTry = specificModel ? [specificModel] : MODEL_CHAIN;
+  const collectedErrors: string[] = [];
 
   for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
     const modelName = modelsToTry[modelIndex];
     for (let i = 0; i <= maxRetriesPerModel; i++) {
       try {
         const result = await fn(ai, modelName);
+        
+        // Success Logic
         isAIFallingBack = false;
         currentLLMModel = modelName;
-        currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback ${modelIndex}`;
+        // Identify if this is a fallback scenario (index > 0 means we skipped the primary)
+        isUsingFallbackModel = modelIndex > 0;
+        currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback Tier ${modelIndex}`;
         remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
         lastApiErrorMessage = null;
+        
         return { data: result, model: modelName };
       } catch (error: any) {
-        lastFnError = error;
         const status = error?.status || error?.statusCode;
-        console.warn(`Attempt failed for ${modelName} (retry ${i}):`, error);
+        const errMsg = error?.message || "Unknown error";
+        collectedErrors.push(`[${modelName}]: ${errMsg}`);
         
+        console.warn(`LLM Attempt failed for ${modelName} (retry ${i}):`, errMsg);
+        
+        // Fail fast on 400/404 - these are unlikely to be resolved by retrying the same model
+        if (status === 400 || status === 404) {
+            break;
+        }
+
         if (((status >= 500 && status <= 599) || status === 429) && i < maxRetriesPerModel) {
-          // Retry for server errors or rate limits
-          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          // Exponential backoff for rate limits or server errors
+          const delay = 1000 * Math.pow(2, i);
+          await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        // If not a retryable error or max retries reached for this model, try next model
+        // If not retryable, break loop to try next model
         break; 
       }
     }
   }
-  // If all models in the chain failed
+  
+  // Total Failure Logic
   isAIFallingBack = true;
-  currentLLMModel = modelsToTry[modelsToTry.length - 1]; // Last attempted
-  currentLLMModelPriorityLabel = `All failed (initial: ${modelsToTry[0]})`;
+  isUsingFallbackModel = false; // N/A
+  currentLLMModel = null;
+  currentLLMModelPriorityLabel = "All Chains Failed";
   remainingLLMAlternativesCount = 0;
-  lastApiErrorMessage = lastFnError?.message || "Unknown API Error";
-  throw lastFnError;
+  lastApiErrorMessage = collectedErrors.join(" | ");
+  throw new Error(`AI Service Unavailable. ${lastApiErrorMessage}`);
 };
 
 // Checks the health of the generic LLM chain (Insights Engine)
@@ -211,7 +215,7 @@ export const checkLLMConnectivity = async (): Promise<boolean> => {
     await callWithRetry(async (aiInstance, modelName) => {
        await aiInstance.models.generateContent({
         model: modelName,
-        contents: "Test connection",
+        contents: "Ping",
         config: { maxOutputTokens: 1 }
       });
       return true;
@@ -384,22 +388,11 @@ export const aggregateRawWeather = (
     }
   }
 
-  // Refined Ice Risk Logic
-  const activeFreezing = minTemp <= 0.5; // Keeping buffer for sensor accuracy
-  // If ground was freezing recently (overnight), it will stay frozen if air is <= 3.5C
+  const activeFreezing = minTemp <= 0.5; 
   const nearFreezing = minTemp <= 3.5; 
   const overnightFreeze = minPastTemp <= 0;
-  
-  // Adjusted Humidity Threshold:
-  // If the ground has been frozen (overnightFreeze), moisture condenses/freezes at lower humidity levels (frost).
-  // Standard threshold is 75%, but we lower it to 60% if thermal inertia is in play.
   const humidityThreshold = overnightFreeze ? 60 : 75;
-
   const hasMoisture = totalPrecip > 0 || avgHum > humidityThreshold || lastPrecipTime !== "None";
-  
-  // Ice risk exists if:
-  // 1. It is currently freezing and moisture is present.
-  // 2. It was freezing recently (thermal inertia) AND it's still cold enough AND moisture is present.
   const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && nearFreezing));
 
   const baseWeather: any = {
@@ -471,15 +464,12 @@ export const getTelemetryBatch = async (
       sunset: homeRaw.daily?.sunset?.[offset] || "20:00"
     };
 
-    // FIX: getAbsoluteIdx must also account for the 24h past buffer.
     const getAbsoluteIdx = (window: [string, string], offset: number) => {
-      // (offset + 1) to skip yesterday (0-23)
       return (offset + 1) * 24 + parseInt(window[0].split(':')[0]);
     };
 
     const getMinPastTemp = (raw: any, offset: number, window: [string, string]) => {
       const idx = getAbsoluteIdx(window, offset);
-      // Grab 6 hours BEFORE the window start
       const pastTemps = (raw.hourly.temperature_2m || []).slice(Math.max(0, idx - 6), idx);
       return pastTemps.length ? Math.min(...pastTemps) : 10;
     };
@@ -526,7 +516,7 @@ export const getAIInsights = async (
         Lang: ${settings.language}.
         Available Bikes: ${equipmentContext}.
         Context: For 'clothing' field, specifically mention: short vs long bibs/sleeves, gloves, and overshoes necessity.
-        Context: For 'setup' field, recommend the best bike from the list (if applicable) and tire pressure adjustments.
+        Context: For 'setup' field, recommend the best bike from the list (if applicable) and tire pressure adjustments (MUST use Bar, not PSI).
         Data: ${JSON.stringify(dataToProcess)}. 
         Return JSON array of objects: { "o": number, "mw": { "s": string, "st": string, "se": string, "c": string, "p": string }, "ew": { "s": string, "st": string, "se": string, "c": string, "p": string } } where s=summary, st=style, se=setup, c=clothing, p=performance.`,
         config: { temperature: 0.8, responseMimeType: "application/json" }
@@ -549,16 +539,11 @@ export const getAIInsights = async (
   }
 };
 
-/**
- * Specifically for Training View to avoid repetitive text.
- * Prompt refined for extreme conciseness to avoid scrolling.
- */
 export const getTrainingSessionAIAdvice = async (
   settings: CommuteSettings,
   weather: WeatherCondition,
   distance: number
 ): Promise<{ summary: string; style: string; setup: string; clothing: string; performance: string }> => {
-  
   const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
 
   try {
@@ -567,7 +552,7 @@ export const getTrainingSessionAIAdvice = async (
       Lang: ${settings.language}. 
       Available Bikes: ${equipmentContext}.
       Mandatory for 'clothing': Specify short/long bibs, sleeve length, gloves, overshoes.
-      Mandatory for 'setup': Recommend best bike from list and tire pressure.
+      Mandatory for 'setup': Recommend best bike from list and tire pressure (always in Bar).
       Each field MUST be max 15 words. Avoid fluff.
       Return JSON: { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }.`;
       
@@ -581,36 +566,32 @@ export const getTrainingSessionAIAdvice = async (
     return data;
   } catch (e) {
     console.warn("AI Training Advice failed:", e);
-    throw e; // Throw so the UI knows AI failed and doesn't claim "Training Intelligence" with hardcoded data
+    throw e;
   }
 };
 
 export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {
   const normalizedQuery = query.trim().toLowerCase();
   
-  // 1. LOCAL CHECK: Exact match in BELGIAN_CITIES (Map)
   if (BELGIAN_CITIES[normalizedQuery]) {
       return { address: normalizedQuery, coords: BELGIAN_CITIES[normalizedQuery] };
   }
   
-  // 2. LOCAL CHECK: Case-insensitive match in BELGIAN_CITIES keys
   const cityKey = Object.keys(BELGIAN_CITIES).find(k => k.toLowerCase() === normalizedQuery);
   if (cityKey) {
       return { address: cityKey, coords: BELGIAN_CITIES[cityKey] };
   }
 
-  // 3. LOCAL CHECK: Search in BELGIAN_LOCATIONS (Array)
   const locationMatch = BELGIAN_LOCATIONS.find(l => l.name.toLowerCase() === normalizedQuery);
   if (locationMatch) {
       return { address: locationMatch.name, coords: { lat: locationMatch.lat, lng: locationMatch.lng } };
   }
 
-  // 4. API FALLBACK
   try {
+    // Note: Maps grounding is only supported in Gemini 2.5 series.
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
         const response = await aiInstance.models.generateContent({
         model: modelName, 
-        // Refined prompt to explicitly handle specific street addresses vs general queries
         contents: `Find the precise geographic coordinates and full standardized address for: "${query}". 
         If it's a specific street address, return that. If it's a city, return the city.
         Include Country.
@@ -625,7 +606,7 @@ export const resolveAddress = async (query: string): Promise<{ address: string; 
         const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
         const parsed = extractJson(response.text);
         return { ...parsed, mapsUri };
-    }, "gemini-2.5-flash", 2); // Explicitly use 2.5 for Maps grounding, increase retries to compensate for lack of fallback
+    }, "gemini-2.5-flash", 2); // FORCE 2.5 for Maps tools
     
     return { 
         address: data.address || query, 
@@ -649,7 +630,7 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
       }
     });
     return extractJson(response.text);
-  }, "gemini-2.5-flash", 2); // Explicitly use 2.5 for Maps grounding, increase retries
+  }, "gemini-2.5-flash", 2); // FORCE 2.5 for Maps tools
   
   return data.distance || null;
 };
@@ -657,22 +638,17 @@ export const getCommuteRoadDistance = async (origin: string, destination: string
 export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
   if (query.length < 3) return [];
 
-  // 1. LOCAL CHECK: Prioritize local DB to save LLM quota
   const normalizedQuery = query.toLowerCase();
   const localMatches = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(normalizedQuery)).slice(0, 5);
   
-  // If we found good local matches, return them immediately without calling LLM.
-  // This drastically limits LLM usage for standard Belgian cities.
   if (localMatches.length > 0) {
       return localMatches;
   }
 
   try {
-    // 2. API FALLBACK: Only if no local matches found
     const { data } = await callWithRetry(async (aiInstance, modelName) => {
       const response = await aiInstance.models.generateContent({
         model: modelName,
-        // Prompt asks for a JSON list derived from Google Maps data.
         contents: `Find up to 5 real specific locations (cities, landmarks, or streets) matching "${query}" using Google Maps. Return a raw JSON array (no markdown code blocks) of objects with properties: name (string, format "Name, Country" or "Street, City, Country"), lat (number), lng (number).`,
         config: { 
           temperature: 0, 
@@ -682,7 +658,7 @@ export const getGlobalLocationSuggestions = async (query: string): Promise<Belgi
       
       const cleanText = response.text?.replace(/```json/g, "").replace(/```/g, "").trim() || "[]";
       return JSON.parse(cleanText);
-    });
+    }, "gemini-2.5-flash", 2); // FORCE 2.5 for Maps tools
     return data;
   } catch (e) {
     return [];
