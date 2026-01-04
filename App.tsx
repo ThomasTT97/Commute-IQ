@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAI
 import { BELGIAN_LOCATIONS } from './locations';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
+import { TrainingWeeklyForecast } from './components/TrainingWeeklyForecast';
 import { Header } from './components/layout/Header';
 import { InfoModal } from './components/modals/InfoModal';
 import { ConnectivityModal } from './components/modals/ConnectivityModal';
@@ -62,7 +63,7 @@ const App: React.FC = () => {
     }
   });
   
-  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'training'>('daily');
+  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'training' | 'training-weekly'>('daily');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
@@ -141,6 +142,8 @@ const App: React.FC = () => {
   const [trainingLoading, setTrainingLoading] = useState(false);
   const [manualStartHour, setManualStartHour] = useState<number | null>(null);
   const [trainingSlots, setTrainingSlots] = useState<any[]>([]);
+  const [trainingWeek, setTrainingWeek] = useState<any[]>([]);
+  const [isTrainingWeekLoading, setIsTrainingWeekLoading] = useState(false);
 
   const bestStartHour = useMemo(() => {
     if (!trainingSlots.length) return null;
@@ -396,6 +399,72 @@ const App: React.FC = () => {
     } catch (e: any) { console.error(e); } finally { setTrainingLoading(false); }
   }, [training, settings, manualStartHour]);
 
+  const syncTrainingWeek = useCallback(async () => {
+    setIsTrainingWeekLoading(true);
+    setViewMode('training-weekly');
+    try {
+      const rawData = await fetchRawWeatherData(training.coords);
+      const durationHours = training.distance / AVG_TRAINING_SPEED;
+      const durationInt = Math.ceil(durationHours);
+      const weeklyResults = [];
+      
+      for (let offset = 0; offset < 7; offset++) {
+         const dayIdx = (offset + 1) * 24;
+         const sunTimes = {
+            sunrise: rawData.daily?.sunrise?.[offset] || "07:00",
+            sunset: rawData.daily?.sunset?.[offset] || "20:00"
+         };
+         
+         let bestSlot = null;
+         
+         for (let hour = 5; hour <= 20; hour++) {
+            const startTimeStr = `${hour.toString().padStart(2, '0')}:00`;
+            const endHourVal = hour + durationInt;
+            const endTimeStr = `${endHourVal.toString().padStart(2, '0')}:00`;
+            const window: [string, string] = [startTimeStr, endTimeStr];
+            
+            const startIndex = dayIdx + hour;
+            const endIndex = dayIdx + endHourVal;
+            
+            const slice: any = {};
+            if (rawData.hourly) {
+               Object.keys(rawData.hourly).forEach(k => {
+                  if (Array.isArray(rawData.hourly[k]) && startIndex <= endIndex && endIndex < rawData.hourly[k].length) {
+                     slice[k] = rawData.hourly[k].slice(startIndex, endIndex + 1);
+                  }
+               });
+            }
+            
+            const pastTemps = (rawData.hourly?.temperature_2m || []).slice(Math.max(0, startIndex - 6), startIndex);
+            const minPastTemp = pastTemps.length ? Math.min(...pastTemps) : 10;
+            
+            const condition = aggregateRawWeather(
+                slice, 
+                0, 
+                true, 
+                settings, 
+                sunTimes, 
+                minPastTemp, 
+                window, 
+                undefined, 
+                undefined, 
+                true
+            );
+            
+            if (!bestSlot || condition.score > bestSlot.score) {
+                bestSlot = { score: condition.score, condition, startHour: hour, window };
+            }
+         }
+         weeklyResults.push({ offset, bestSlot });
+      }
+      setTrainingWeek(weeklyResults);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsTrainingWeekLoading(false);
+    }
+  }, [training.coords, training.distance, settings]);
+
   useEffect(() => {
     if (viewMode === 'training') syncTraining();
   }, [viewMode, training.location, training.distance, training.dateOffset, syncTraining]);
@@ -541,12 +610,12 @@ const App: React.FC = () => {
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <Header 
         onOpenInfo={() => setIsInfoOpen(true)}
-        viewMode={viewMode}
+        viewMode={viewMode as 'daily' | 'weekly' | 'training'}
         isDateDropdownOpen={isDateDropdownOpen}
         setIsDateDropdownOpen={setIsDateDropdownOpen}
         selectedDateOffset={selectedDateOffset}
         setSelectedDateOffset={setSelectedDateOffset}
-        setViewMode={setViewMode}
+        setViewMode={(m) => setViewMode(m as any)}
         activeDayLabels={activeDayLabels}
         loading={loading}
         onSync={() => viewMode === 'training' ? syncTraining() : syncFullWeek(settings)}
@@ -595,9 +664,23 @@ const App: React.FC = () => {
             onDistanceChange={(dist) => { setTraining(prev => ({...prev, distance: dist})); setManualStartHour(null); }}
             onManualHourChange={(hour) => setManualStartHour(hour)}
             onSelectSuggestion={(loc) => handleSelectSuggestion('training', loc)}
+            onShowWeekly={() => syncTrainingWeek()}
             filterLocations={filterLocationsWithGlobal}
             globalTrainingResults={globalTrainingResults}
             getDayLabel={getDayLabel}
+          />
+        )}
+        {viewMode === 'training-weekly' && (
+          <TrainingWeeklyForecast 
+             data={trainingWeek}
+             loading={isTrainingWeekLoading}
+             onSelectDay={(offset, hour) => {
+                setTraining(prev => ({ ...prev, dateOffset: offset }));
+                setManualStartHour(hour);
+                setViewMode('training');
+             }}
+             onBack={() => setViewMode('training')}
+             theme={settings.theme}
           />
         )}
       </main>

@@ -17,7 +17,8 @@ import {
   Activity,
   X,
   Loader2,
-  MapPin
+  MapPin,
+  Database
 } from 'lucide-react';
 import { TrainingState } from '../types';
 import { BelgianLocation } from '../locations';
@@ -42,6 +43,7 @@ interface TrainingViewProps {
   onDistanceChange: (dist: number) => void;
   onManualHourChange: (hour: number) => void;
   onSelectSuggestion: (loc: BelgianLocation) => void;
+  onShowWeekly: () => void;
   filterLocations: (query: string, globalResults: BelgianLocation[]) => BelgianLocation[];
   globalTrainingResults: BelgianLocation[];
   getDayLabel: (offset: number) => { name: string; num: number; month: string };
@@ -65,6 +67,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   onDistanceChange,
   onManualHourChange,
   onSelectSuggestion,
+  onShowWeekly,
   filterLocations,
   globalTrainingResults,
   getDayLabel
@@ -151,12 +154,12 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
         </button>
 
         <div className={`flex-1 h-12 rounded-[1.25rem] border overflow-hidden relative ${isDark ? 'bg-black/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
-          <div className={`absolute inset-y-0 left-0 w-10 z-10 pointer-events-none bg-gradient-to-r ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
-          <div className={`absolute inset-y-0 right-0 w-10 z-10 pointer-events-none bg-gradient-to-l ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
+          <div className={`absolute inset-y-0 left-0 w-8 z-10 pointer-events-none bg-gradient-to-r ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
+          <div className={`absolute inset-y-0 right-0 w-8 z-10 pointer-events-none bg-gradient-to-l ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
           
           <div 
             ref={dayScrollRef}
-            className="h-full flex items-center gap-3 overflow-x-auto hide-scrollbar scroll-smooth pl-4"
+            className="h-full flex items-center gap-3 overflow-x-auto hide-scrollbar scroll-smooth px-4"
           >
             {dayOffsets.map(o => {
               const l = getDayLabel(o);
@@ -177,6 +180,18 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                 </button>
               );
             })}
+            
+            <div className={`w-px h-6 flex-none ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
+
+            <button 
+              onClick={onShowWeekly}
+              className={`flex-none px-3 h-8 flex items-center gap-1.5 transition-all z-30 rounded-lg ${
+                isDark ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+              }`}
+            >
+              <Database className="w-3 h-3" />
+              <span className="text-[9px] font-black uppercase leading-none">7-Day</span>
+            </button>
           </div>
         </div>
       </div>
