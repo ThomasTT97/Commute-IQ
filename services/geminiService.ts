@@ -387,7 +387,9 @@ export const aggregateRawWeather = (
   customWindow?: [string, string],
   fullRawHourlyPrecip?: number[],
   sessionStartAbsoluteIdx?: number,
-  isTraining: boolean = false
+  isTraining: boolean = false,
+  fullRawHourlyHumidity?: number[],
+  fullRawHourlyTemp?: number[]
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
   const precips = (rawSlice.precipitation || []) as number[];
@@ -436,6 +438,49 @@ export const aggregateRawWeather = (
     }
   }
 
+  // Dry Time Estimation Logic
+  let estimatedDryTime: number | undefined;
+  if ((totalPrecip > 0 || lastPrecipTime !== "None") && fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
+    let stopIdx = -1;
+    // Find when it stops raining (Scan up to 48 hours forward)
+    for (let i = 0; i < 48; i++) {
+      const idx = sessionStartAbsoluteIdx + i;
+      if (idx >= fullRawHourlyPrecip.length) break;
+      
+      // Look for a 3-hour window of no rain
+      const rainAhead = fullRawHourlyPrecip.slice(idx, idx + 3);
+      if (rainAhead.length >= 1 && rainAhead.every(v => v === 0)) {
+        stopIdx = idx;
+        break;
+      }
+    }
+
+    if (stopIdx !== -1) {
+      // Base evaporation buffer
+      let evaporationHours = 2;
+      
+      // Adjust based on humidity/temp at stop time if available
+      const humAtStop = (fullRawHourlyHumidity?.[stopIdx] ?? avgHum);
+      const tempAtStop = (fullRawHourlyTemp?.[stopIdx] ?? avgTemp);
+      
+      if (humAtStop > 85) evaporationHours += 6;
+      else if (humAtStop > 70) evaporationHours += 3;
+      
+      if (tempAtStop < 5) evaporationHours += 4;
+      else if (tempAtStop < 12) evaporationHours += 2;
+
+      // Calculate absolute timestamp
+      const now = new Date();
+      // Calculate how many hours from now sessionStartAbsoluteIdx is
+      // Open-Meteo past_days=1 means first index is yesterday 00:00
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0);
+      
+      estimatedDryTime = startDate.getTime() + (stopIdx + evaporationHours) * 60 * 60 * 1000;
+    }
+  }
+
   const activeFreezing = minTemp <= 0.5; 
   const nearFreezing = minTemp <= 3.5; 
   const overnightFreeze = minPastTemp <= 0;
@@ -461,6 +506,7 @@ export const aggregateRawWeather = (
     overnightFreeze,
     minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime,
+    estimatedDryTime,
     precipDuringSession: parseFloat(totalPrecip.toFixed(1)),
     sunrise: sunTimes?.sunrise,
     sunset: sunTimes?.sunset
@@ -522,8 +568,8 @@ export const getTelemetryBatch = async (
       return pastTemps.length ? Math.min(...pastTemps) : 10;
     };
 
-    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, getMinPastTemp(homeRaw, offset, settings.morningWindow), undefined, homeRaw.hourly.precipitation, getAbsoluteIdx(settings.morningWindow, offset), false);
-    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, getMinPastTemp(workRaw, offset, settings.eveningWindow), undefined, workRaw.hourly.precipitation, getAbsoluteIdx(settings.eveningWindow, offset), false);
+    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, getMinPastTemp(homeRaw, offset, settings.morningWindow), undefined, homeRaw.hourly.precipitation, getAbsoluteIdx(settings.morningWindow, offset), false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
+    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, getMinPastTemp(workRaw, offset, settings.eveningWindow), undefined, workRaw.hourly.precipitation, getAbsoluteIdx(settings.eveningWindow, offset), false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
 
     batch[offset] = { 
       offset, 

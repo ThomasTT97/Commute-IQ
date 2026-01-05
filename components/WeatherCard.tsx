@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { LocationSuggestion, WeatherCondition } from '../types';
 import { BelgianLocation } from '../locations';
 import { 
@@ -26,7 +26,8 @@ import {
   Droplets,
   Sunrise,
   Sunset,
-  Zap
+  Zap,
+  Timer
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -86,6 +87,29 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const [showLightsDetails, setShowLightsDetails] = useState(false);
   const [showRoutePopup, setShowRoutePopup] = useState(false);
   const [showLocationPopup, setShowLocationPopup] = useState(false);
+  const [showDryTimerPopup, setShowDryTimerPopup] = useState(false);
+  const [countdown, setCountdown] = useState<string>("");
+
+  useEffect(() => {
+    if (!condition?.estimatedDryTime || !showDryTimerPopup) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diff = condition.estimatedDryTime - now;
+
+      if (diff <= 0) {
+        setCountdown("DRY");
+        clearInterval(interval);
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setCountdown(`${hours}h ${minutes}m ${seconds}s`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [condition?.estimatedDryTime, showDryTimerPopup]);
 
   const wind = useMemo(() => {
     const impact = condition?.headwindImpact ?? 0;
@@ -196,6 +220,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     setShowLightsDetails(false);
     setShowRoutePopup(false);
     setShowLocationPopup(false);
+    setShowDryTimerPopup(false);
   };
 
   const toggleWind = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showWindDetails) setShowWindDetails(false); else { closeAllPopups(); setShowWindDetails(true); } };
@@ -206,6 +231,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleLights = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLightsDetails) setShowLightsDetails(false); else { closeAllPopups(); setShowLightsDetails(true); } };
   const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
+  const toggleDryTimer = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showDryTimerPopup) setShowDryTimerPopup(false); else { closeAllPopups(); setShowDryTimerPopup(true); } };
 
   const popupBgClass = isDark 
     ? 'bg-[#1a1d24] border-white/20 shadow-2xl' 
@@ -263,6 +289,67 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   return (
     <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-6 sm:pb-8 shadow-2xl transition-all ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
+      {/* DRY TIMER POPUP - MOVED ABOVE HEADER */}
+      {showDryTimerPopup && condition?.estimatedDryTime && (
+        <div className="fixed inset-x-4 top-4 z-[300] animate-in fade-in slide-in-from-top-4 duration-300">
+           <div className={`p-5 rounded-[2rem] border shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col gap-4 ${popupBgClass}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-blue-500/10">
+                    <Timer className="w-4 h-4 text-blue-500 animate-spin-slow" />
+                  </div>
+                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none">Desiccation Analysis</span>
+                </div>
+                <button onClick={toggleDryTimer} className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+                  <X className="w-4 h-4 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center py-1">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 opacity-60">T-Minus to Dry Base</span>
+                <span className={`text-[1.75rem] font-black font-mono tracking-tighter leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
+                  {countdown}
+                </span>
+              </div>
+
+              {/* Wetness Visualization */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Saturation Level</span>
+                  <span className="text-[9px] font-mono font-bold text-blue-500">{condition.wetSurfaceChance}%</span>
+                </div>
+                <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-1000" 
+                    style={{ width: `${condition.wetSurfaceChance}%` }} 
+                  />
+                </div>
+              </div>
+
+              <div className={`p-3.5 rounded-2xl border flex flex-col gap-2 ${isDark ? 'bg-black/40 border-white/5' : 'bg-slate-50 border-slate-100 shadow-inner'}`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-3 h-3 text-slate-500" />
+                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Expected dry time</span>
+                  </div>
+                  <span className={`text-[11px] font-mono font-black ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                    {new Date(condition.estimatedDryTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-3 h-3 text-slate-500" />
+                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Projection Date</span>
+                  </div>
+                  <span className={`text-[11px] font-mono font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                    {new Date(condition.estimatedDryTime).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       <div className="flex-none flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">
         <div className="flex items-center gap-2">
           <Calendar className="w-3.5 h-3.5 text-blue-500/50" />
@@ -394,11 +481,17 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${isDark ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span>
+            {(condition?.wetSurfaceChance ?? 0) > 50 && (
+              <div onClick={toggleDryTimer} className={`p-1 rounded-md transition-all active:scale-90 ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+                <Clock className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-600'} animate-pulse`} />
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span>
             <div className={surface.color}>{surface.icon}</div>
           </div>
+
           {showSurfaceDetails && (
             <div className={`absolute ${showRawWind ? 'bottom-full mb-3' : 'top-full mt-3'} left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in ${showRawWind ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2'} duration-200 ${popupBgClass}`}>
               <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Surface Diagnostics</span><button onClick={toggleSurface} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>

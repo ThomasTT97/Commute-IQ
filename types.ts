@@ -79,6 +79,7 @@ export interface WeatherCondition {
   clothingAdvice?: string;
   performanceAdvice?: string;
   lastPrecipitationTime?: string;
+  estimatedDryTime?: number; // Unix timestamp in ms
   precipDuringSession: number;
   scoreBreakdown?: ScoreDeduction[];
   sunrise?: string;
