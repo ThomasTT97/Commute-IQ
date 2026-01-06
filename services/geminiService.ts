@@ -438,16 +438,16 @@ export const aggregateRawWeather = (
     }
   }
 
-  // Dry Time Estimation Logic
+  // Dry Time Estimation Logic Restored
   let estimatedDryTime: number | undefined;
   if ((totalPrecip > 0 || lastPrecipTime !== "None") && fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
     let stopIdx = -1;
-    // Find when it stops raining (Scan up to 48 hours forward)
+    // Find when it stops raining (Scan up to 48 hours forward from the session start or current precip point)
     for (let i = 0; i < 48; i++) {
       const idx = sessionStartAbsoluteIdx + i;
       if (idx >= fullRawHourlyPrecip.length) break;
       
-      // Look for a 3-hour window of no rain
+      // Look for a window of no rain
       const rainAhead = fullRawHourlyPrecip.slice(idx, idx + 3);
       if (rainAhead.length >= 1 && rainAhead.every(v => v === 0)) {
         stopIdx = idx;
@@ -458,34 +458,37 @@ export const aggregateRawWeather = (
     if (stopIdx !== -1) {
       // Base evaporation buffer
       let evaporationHours = 2;
-      
-      // Adjust based on humidity/temp at stop time if available
       const humAtStop = (fullRawHourlyHumidity?.[stopIdx] ?? avgHum);
       const tempAtStop = (fullRawHourlyTemp?.[stopIdx] ?? avgTemp);
       
       if (humAtStop > 85) evaporationHours += 6;
       else if (humAtStop > 70) evaporationHours += 3;
-      
       if (tempAtStop < 5) evaporationHours += 4;
       else if (tempAtStop < 12) evaporationHours += 2;
 
-      // Calculate absolute timestamp
-      const now = new Date();
-      // Calculate how many hours from now sessionStartAbsoluteIdx is
-      // Open-Meteo past_days=1 means first index is yesterday 00:00
+      // Absolute timestamp calculation
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 1);
       startDate.setHours(0, 0, 0, 0);
-      
       estimatedDryTime = startDate.getTime() + (stopIdx + evaporationHours) * 60 * 60 * 1000;
     }
   }
+
+  const sessionStartAbsoluteMs = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    d.setHours(0,0,0,0);
+    return d.getTime() + (sessionStartAbsoluteIdx || 0) * 60 * 60 * 1000;
+  })();
+
+  const isCurrentlyInDryingPhase = estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false;
+  const isWet = totalPrecip > 0 || isCurrentlyInDryingPhase;
 
   const activeFreezing = minTemp <= 0.5; 
   const nearFreezing = minTemp <= 3.5; 
   const overnightFreeze = minPastTemp <= 0;
   const humidityThreshold = overnightFreeze ? 60 : 75;
-  const hasMoisture = totalPrecip > 0 || avgHum > humidityThreshold || lastPrecipTime !== "None";
+  const hasMoisture = isWet || avgHum > humidityThreshold;
   const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && nearFreezing));
 
   const baseWeather: any = {
@@ -498,8 +501,8 @@ export const aggregateRawWeather = (
     windDirection: Math.round(avgDir),
     humidity: Math.round(avgHum),
     isDark,
-    slipperyChance: totalPrecip > 0 ? 60 : (avgTemp < 3 ? 40 : 10),
-    wetSurfaceChance: (totalPrecip > 0 || lastPrecipTime !== "None") ? 90 : 10,
+    slipperyChance: isWet ? 60 : (avgTemp < 3 ? 40 : 10),
+    wetSurfaceChance: isWet ? 90 : 10,
     headwindImpact,
     iceRisk, 
     activeFreezing,
@@ -575,7 +578,7 @@ export const getTelemetryBatch = async (
       offset, 
       score: Math.min(morning.score, evening.score), 
       summary: { 
-        isWet: (morning.precipitation > 0 || morning.wetSurfaceChance > 50) || (evening.precipitation > 0 || evening.wetSurfaceChance > 50),
+        isWet: (morning.wetSurfaceChance > 50) || (evening.wetSurfaceChance > 50),
         isIcy: morning.iceRisk || evening.iceRisk
       }, 
       weather: { 

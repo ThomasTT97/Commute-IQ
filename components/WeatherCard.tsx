@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { LocationSuggestion, WeatherCondition } from '../types';
+import { LocationSuggestion } from '../types';
 import { BelgianLocation } from '../locations';
 import { 
   Wind, 
@@ -87,29 +87,34 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const [showLightsDetails, setShowLightsDetails] = useState(false);
   const [showRoutePopup, setShowRoutePopup] = useState(false);
   const [showLocationPopup, setShowLocationPopup] = useState(false);
-  const [showDryTimerPopup, setShowDryTimerPopup] = useState(false);
   const [countdown, setCountdown] = useState<string>("");
 
   useEffect(() => {
-    if (!condition?.estimatedDryTime || !showDryTimerPopup) return;
+    if (!condition?.estimatedDryTime || !showSurfaceDetails) return;
 
-    const interval = setInterval(() => {
+    const updateCountdown = () => {
       const now = Date.now();
       const diff = condition.estimatedDryTime - now;
 
       if (diff <= 0) {
         setCountdown("DRY");
-        clearInterval(interval);
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        setCountdown(`${hours}h ${minutes}m ${seconds}s`);
+        
+        if (hours > 0) {
+          setCountdown(`${hours}h ${minutes}m`);
+        } else {
+          setCountdown(`${minutes}m ${seconds}s`);
+        }
       }
-    }, 1000);
+    };
 
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [condition?.estimatedDryTime, showDryTimerPopup]);
+  }, [condition?.estimatedDryTime, showSurfaceDetails]);
 
   const wind = useMemo(() => {
     const impact = condition?.headwindImpact ?? 0;
@@ -138,40 +143,24 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (!condition) return "";
     if (condition.iceRisk) {
       if (condition.activeFreezing) {
-        return "Critical: Surface moisture has frozen solid. Air and ground temperatures are below 0°C, creating a treacherous layer of ice on the roads.";
+        return "Critical: Surface moisture has frozen solid. Air and ground temperatures have been at or below 0°C, creating a treacherous layer of ice.";
       }
       if (condition.overnightFreeze) {
-        return "Caution: Sub-zero temperatures recorded in the last 6 hours. Due to thermal inertia, the road surface remains colder than the air, and damp patches may be frozen.";
+        return "Caution: Sub-zero temperatures were recorded recently. Due to thermal inertia, the road surface remains colder than the air, and damp patches may be frozen.";
       }
-      return "Surface Alert: High moisture combined with near-freezing temperatures detected. Roads are likely to be slippery with frost or black ice.";
+      return "Surface Alert: Near-freezing air with high humidity is causing frost or 'black ice' to settle on the asphalt.";
     } else {
-      if (condition.minPastTemp !== undefined && condition.minPastTemp <= 0) {
-         return "Safe: Sub-zero temperatures were recorded recently, but current humidity levels are sufficiently low to prevent ice formation.";
-      }
-      if (condition.temp < 5 && (condition.humidity || 0) < 50) {
-        return "Safe: Although cold, the atmosphere is dry enough to prevent frost formation. Roads are clear.";
-      }
-      return "Safe: Air and ground temperatures have remained consistently above the freezing threshold, ensuring no latent ice on the commute route.";
+      return "Safe: Air and ground temperatures have consistently remained above freezing, ensuring no latent ice remains.";
     }
   }, [condition]);
 
   const surfaceRiskReason = useMemo(() => {
     if (!condition) return "";
-    const isWet = (condition.wetSurfaceChance ?? 0) > 50;
-    const rainDuring = condition.precipDuringSession ?? condition.precipitation ?? 0;
-    const history = condition.lastPrecipitationTime;
-
-    if (isWet) {
-      if (rainDuring > 0) {
-        return `Active Saturation: ${rainDuring}mm of precipitation is falling or has recently fallen. Traction is significantly reduced due to a consistent water film accumulation on the asphalt.`;
-      }
-      if (history && history !== "None") {
-        return `Residual Moisture: Roads remain wet following rain at ${history}. High ambient humidity (${condition.humidity}%) is currently inhibiting the evaporation process.`;
-      }
-      return `Damp Surface: Elevated humidity and low solar radiation have prevented the surface from fully drying. Expect "greasy" asphalt, especially in shaded or sheltered route segments.`;
-    } else {
-      return "Optimal Traction: The road surface is dry. Absence of recent precipitation combined with effective evaporation cycles have cleared the asphalt of moisture.";
-    }
+    const prec = condition.precipitation ?? 0;
+    const wetChance = condition.wetSurfaceChance ?? 0;
+    if (prec > 0) return `Active Rain: ${prec}mm of falling precipitation. Traction is significantly compromised. Expect spray and long braking distances.`;
+    if (wetChance > 70) return `Residual Moisture: Asphalt is saturated from recent rain. A water film remains present on the surface.`;
+    return "Optimal Surface: No recent rainfall and moderate humidity have ensured a clean, dry contact patch.";
   }, [condition]);
 
   const iceVitals = useMemo(() => {
@@ -220,7 +209,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     setShowLightsDetails(false);
     setShowRoutePopup(false);
     setShowLocationPopup(false);
-    setShowDryTimerPopup(false);
   };
 
   const toggleWind = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showWindDetails) setShowWindDetails(false); else { closeAllPopups(); setShowWindDetails(true); } };
@@ -231,7 +219,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleLights = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLightsDetails) setShowLightsDetails(false); else { closeAllPopups(); setShowLightsDetails(true); } };
   const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
-  const toggleDryTimer = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showDryTimerPopup) setShowDryTimerPopup(false); else { closeAllPopups(); setShowDryTimerPopup(true); } };
 
   const popupBgClass = isDark 
     ? 'bg-[#1a1d24] border-white/20 shadow-2xl' 
@@ -289,67 +276,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   return (
     <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-6 sm:pb-8 shadow-2xl transition-all ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
-      {/* DRY TIMER POPUP - MOVED ABOVE HEADER */}
-      {showDryTimerPopup && condition?.estimatedDryTime && (
-        <div className="fixed inset-x-4 top-4 z-[300] animate-in fade-in slide-in-from-top-4 duration-300">
-           <div className={`p-5 rounded-[2rem] border shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col gap-4 ${popupBgClass}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-blue-500/10">
-                    <Timer className="w-4 h-4 text-blue-500 animate-spin-slow" />
-                  </div>
-                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none">Desiccation Analysis</span>
-                </div>
-                <button onClick={toggleDryTimer} className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-                  <X className="w-4 h-4 text-slate-500" />
-                </button>
-              </div>
-
-              <div className="flex flex-col items-center py-1">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 opacity-60">T-Minus to Dry Base</span>
-                <span className={`text-[1.75rem] font-black font-mono tracking-tighter leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
-                  {countdown}
-                </span>
-              </div>
-
-              {/* Wetness Visualization */}
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Saturation Level</span>
-                  <span className="text-[9px] font-mono font-bold text-blue-500">{condition.wetSurfaceChance}%</span>
-                </div>
-                <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-1000" 
-                    style={{ width: `${condition.wetSurfaceChance}%` }} 
-                  />
-                </div>
-              </div>
-
-              <div className={`p-3.5 rounded-2xl border flex flex-col gap-2 ${isDark ? 'bg-black/40 border-white/5' : 'bg-slate-50 border-slate-100 shadow-inner'}`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Expected dry time</span>
-                  </div>
-                  <span className={`text-[11px] font-mono font-black ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
-                    {new Date(condition.estimatedDryTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-3 h-3 text-slate-500" />
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Projection Date</span>
-                  </div>
-                  <span className={`text-[11px] font-mono font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                    {new Date(condition.estimatedDryTime).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}
-                  </span>
-                </div>
-              </div>
-           </div>
-        </div>
-      )}
-
       <div className="flex-none flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">
         <div className="flex items-center gap-2">
           <Calendar className="w-3.5 h-3.5 text-blue-500/50" />
@@ -481,15 +407,12 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${isDark ? 'bg-slate-900/40 border-white/5 hover:bg-slate-900/60' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span>
-            {(condition?.wetSurfaceChance ?? 0) > 50 && (
-              <div onClick={toggleDryTimer} className={`p-1 rounded-md transition-all active:scale-90 ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-                <Clock className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-600'} animate-pulse`} />
-              </div>
-            )}
           </div>
-          <div className="flex items-center justify-between">
-            <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span>
-            <div className={surface.color}>{surface.icon}</div>
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between">
+              <span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span>
+              <div className={surface.color}>{surface.icon}</div>
+            </div>
           </div>
 
           {showSurfaceDetails && (
@@ -505,6 +428,17 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                     <span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span>
                   </div>
                 ))}
+                
+                {/* DRYING TIMER SECTION IN POPUP */}
+                {(condition?.estimatedDryTime && (condition?.wetSurfaceChance ?? 0) > 50) && (
+                  <div className="col-span-2 mt-1 pt-2 border-t border-slate-500/10 flex items-center justify-between text-[10px] font-black">
+                    <div className="flex items-center gap-2">
+                       <Timer className="w-4 h-4 text-blue-500 animate-pulse" />
+                       <span className="text-blue-500 uppercase tracking-widest">Dry surface at:</span>
+                    </div>
+                    <span className={`font-mono text-[11px] ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{countdown}</span>
+                  </div>
+                )}
               </div>
               <div className={`mt-1 p-2.5 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black/60 border-white/10' : 'bg-slate-50 border-slate-100'}`}>
                 <span className="text-[7px] font-black text-blue-500 uppercase tracking-widest">Atmos Logic Analysis</span>

@@ -371,7 +371,22 @@ const App: React.FC = () => {
         }
         const pastTemps = (rawCurrentLocation.hourly?.temperature_2m || []).slice(Math.max(0, startIndex - 6), startIndex);
         const minPastTemp = pastTemps.length ? Math.min(...pastTemps) : 10;
-        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimesCurrent, minPastTemp, window, undefined, undefined, true);
+        
+        // Fix: Pass full hourly data for drying time calculation
+        const condition = aggregateRawWeather(
+          slice, 
+          0, 
+          true, 
+          settings, 
+          sunTimesCurrent, 
+          minPastTemp, 
+          window, 
+          rawCurrentLocation.hourly.precipitation, 
+          startIndex, 
+          true,
+          rawCurrentLocation.hourly.relative_humidity_2m,
+          rawCurrentLocation.hourly.temperature_2m
+        );
         scanWindowsCurrent.push({ startHour: hour, condition, window, score: condition.score });
       }
 
@@ -471,9 +486,11 @@ const App: React.FC = () => {
                 sunTimes, 
                 minPastTemp, 
                 window, 
-                undefined, 
-                undefined, 
-                true
+                rawData.hourly.precipitation, 
+                startIndex, 
+                true,
+                rawData.hourly.relative_humidity_2m,
+                rawData.hourly.temperature_2m
             );
             
             if (!bestSlot || condition.score > bestSlot.score) {
