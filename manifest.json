@@ -1,17 +1,13 @@
-
 {
   "name": "Commute IQ",
   "short_name": "Commute IQ",
   "description": "Smart cycling intelligence for commuters.",
   "start_url": "/",
   "scope": "/",
-  "id": "com.commuteiq.pulse",
+  "id": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#05070a",
   "theme_color": "#05070a",
-  "categories": ["lifestyle", "utilities", "productivity"],
-  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-v4.png",
@@ -30,18 +26,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Morning Pulse",
-      "url": "/?mode=morning",
-      "description": "Quick view for morning commute"
-    },
-    {
-      "name": "Training Mode",
-      "url": "/?mode=training",
-      "description": "Switch to performance insights"
     }
   ]
 }

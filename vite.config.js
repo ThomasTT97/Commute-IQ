@@ -1,4 +1,3 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
@@ -10,6 +9,7 @@ export default defineConfig(({ mode }) => {
   const copyLogoPlugin = () => ({
     name: 'copy-logo',
     generateBundle() {
+      // Fixed: Use process.cwd() because __dirname is not available in ESM modules
       const logoPath = path.resolve(process.cwd(), 'logo.png');
       
       if (fs.existsSync(logoPath)) {
@@ -33,14 +33,16 @@ export default defineConfig(({ mode }) => {
     plugins: [
       copyLogoPlugin(),
       VitePWA({
-        strategies: 'injectManifest',
-        srcDir: '.',
-        filename: 'sw.js',
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        devOptions: {
-          enabled: true, // Allow testing PWA features in development
-          type: 'module'
+        includeAssets: ['icon-v4.png'],
+        manifestFilename: 'manifest.json',
+        workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          globPatterns: ['**/*.{js,css,html,ico,svg,png}'],
+          ignoreURLParametersMatching: [/^v$/]
         },
         manifest: {
           name: "Commute IQ",
@@ -49,10 +51,9 @@ export default defineConfig(({ mode }) => {
           theme_color: "#05070a",
           background_color: "#05070a",
           display: "standalone",
-          orientation: "portrait",
           scope: "/",
           start_url: "/",
-          id: "com.commuteiq.pulse",
+          id: "/",
           icons: [
             {
               "src": "/icon-v4.png",

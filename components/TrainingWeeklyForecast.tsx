@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Clock, AlertTriangle, Droplets, ShieldCheck } from 'lucide-react';
+import { Clock, AlertTriangle, Droplets, ShieldCheck, Wind, MonitorPlay } from 'lucide-react';
 
 interface TrainingWeeklyForecastProps {
   data: any[];
@@ -48,6 +48,7 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
            const score = bestSlot?.score || 0;
            const condition = bestSlot?.condition;
            
+           const isIndoorRecommended = score < 45 || condition?.iceRisk;
            const isWet = condition?.wetSurfaceChance > 50 || condition?.precipitation > 0;
            const hasIce = condition?.iceRisk;
 
@@ -70,6 +71,11 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
                             {bestSlot.window[0]} - {bestSlot.window[1]}
                         </span>
                     </div>
+                    {isIndoorRecommended && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 text-[9px] font-black uppercase tracking-wide mt-0.5">
+                             <MonitorPlay className="w-3 h-3" /> INDOOR
+                         </div>
+                     )}
                   </div>
                </div>
 
@@ -86,6 +92,12 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
                          {hasIce ? <AlertTriangle className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3 opacity-50" />}
                          {hasIce ? 'ICE' : 'NO ICE'}
                      </div>
+
+                     {condition?.windSpeed > 25 && (
+                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[9px] font-black uppercase tracking-wide">
+                             <Wind className="w-3 h-3" /> WIND
+                         </div>
+                     )}
                   </div>
                   <div className="flex items-baseline gap-0.5">
                       <span className={`text-3xl font-black tracking-tighter ${getScoreColor(score)}`}>{Math.round(score)}</span>

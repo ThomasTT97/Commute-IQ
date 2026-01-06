@@ -438,16 +438,16 @@ export const aggregateRawWeather = (
     }
   }
 
-  // Dry Time Estimation Logic Restored
+  // Dry Time Estimation Logic
   let estimatedDryTime: number | undefined;
   if ((totalPrecip > 0 || lastPrecipTime !== "None") && fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
     let stopIdx = -1;
-    // Find when it stops raining (Scan up to 48 hours forward from the session start or current precip point)
+    // Find when it stops raining (Scan up to 48 hours forward from the session start or precip point)
     for (let i = 0; i < 48; i++) {
       const idx = sessionStartAbsoluteIdx + i;
       if (idx >= fullRawHourlyPrecip.length) break;
       
-      // Look for a window of no rain
+      // Look for a 3-hour window of no rain
       const rainAhead = fullRawHourlyPrecip.slice(idx, idx + 3);
       if (rainAhead.length >= 1 && rainAhead.every(v => v === 0)) {
         stopIdx = idx;
@@ -458,31 +458,36 @@ export const aggregateRawWeather = (
     if (stopIdx !== -1) {
       // Base evaporation buffer
       let evaporationHours = 2;
+      
+      // Adjust based on humidity/temp at stop time if available
       const humAtStop = (fullRawHourlyHumidity?.[stopIdx] ?? avgHum);
       const tempAtStop = (fullRawHourlyTemp?.[stopIdx] ?? avgTemp);
       
       if (humAtStop > 85) evaporationHours += 6;
       else if (humAtStop > 70) evaporationHours += 3;
+      
       if (tempAtStop < 5) evaporationHours += 4;
       else if (tempAtStop < 12) evaporationHours += 2;
 
-      // Absolute timestamp calculation
+      // Calculate absolute timestamp
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 1);
       startDate.setHours(0, 0, 0, 0);
+      
       estimatedDryTime = startDate.getTime() + (stopIdx + evaporationHours) * 60 * 60 * 1000;
     }
   }
 
-  const sessionStartAbsoluteMs = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    d.setHours(0,0,0,0);
-    return d.getTime() + (sessionStartAbsoluteIdx || 0) * 60 * 60 * 1000;
-  })();
+  // SESSION START TIME in Absolute MS
+  const absoluteSessionStartDate = new Date();
+  absoluteSessionStartDate.setDate(absoluteSessionStartDate.getDate() - 1);
+  absoluteSessionStartDate.setHours(0,0,0,0);
+  const sessionStartAbsoluteMs = absoluteSessionStartDate.getTime() + (sessionStartAbsoluteIdx || 0) * 60 * 60 * 1000;
 
+  // CRITICAL CONSISTENCY CHECK: If the road will only be dry AFTER the session start, it is WET.
+  const isWetFromPrecip = totalPrecip > 0 || lastPrecipTime !== "None";
   const isCurrentlyInDryingPhase = estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false;
-  const isWet = totalPrecip > 0 || isCurrentlyInDryingPhase;
+  const isWet = isWetFromPrecip && (totalPrecip > 0 || isCurrentlyInDryingPhase);
 
   const activeFreezing = minTemp <= 0.5; 
   const nearFreezing = minTemp <= 3.5; 
