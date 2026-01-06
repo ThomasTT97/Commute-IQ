@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -113,8 +112,8 @@ export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment
     setup = "Avoid deep-section rims. Remove large panniers.";
     clothing = "Tight-fitting gear to prevent flapping. Gilet highly recommended.";
     performance = "Extreme aerobic demand. Monitor heart rate recovery carefully.";
-  } else if (w.temp < 0) {
-    summary = "Freezing temperatures. Frost risk present.";
+  } else if (w.temp <= 0) {
+    summary = "Freezing temperatures. Surface dynamics have reached or dropped below 0°C.";
     style = "Stay alert for micro-patches of frost in shaded areas.";
     setup = "Ensure chain is well-lubricated against road salt.";
     performance = "Cold-air inhalation risk. Caloric burn rate will increase.";
@@ -630,6 +629,7 @@ export const getAIInsights = async (
         Available Bikes: ${equipmentContext}.
         
         Instructions:
+        - Ensure all descriptions are mathematically consistent with the provided telemetry (e.g., if temp is 0, do not describe it as 'sub-zero'). Use 'at or below freezing' instead.
         - Avoid repetitive phrasing.
         - Use varied vocabulary and specific cycling terminology.
         - Ensure advice feels distinct from previous days.
@@ -687,6 +687,7 @@ export const getTrainingSessionAIAdvice = async (
       Language: ${settings.language}.
 
       Requirements:
+      - Strictly adhere to numeric values; do not use 'sub-zero' or 'below zero' if temperature is 0°C. Use 'reached freezing' or 'at 0°C' instead.
       - strictly JSON output.
       - "summary": Analysis of road surface and atmospheric risks.
       - "performance": Physiological strategy (heart rate, fueling, intensity).

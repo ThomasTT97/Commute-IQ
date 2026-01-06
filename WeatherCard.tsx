@@ -114,15 +114,18 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       if (condition.activeFreezing) {
         return "Critical: Surface moisture has frozen solid. Air and ground temperatures have been at or below 0°C, creating a treacherous layer of ice.";
       }
-      // If not actively freezing, but there was an overnight freeze (and overall iceRisk is true, meaning minTemp <= 4)
       if (condition.overnightFreeze) {
         return "Caution: Sub-zero temperatures were recorded recently. Due to thermal inertia, the road surface remains colder than the air, and damp patches may be frozen.";
       }
-      // General case if iceRisk is true but not active freezing or strong overnight freeze conditions for "Caution"
-      // This means hasMoisture is true and minTemp is near 0, but not fully meeting higher risk criteria
       return "Surface Alert: Near-freezing air with high humidity is causing frost or 'black ice' to settle on the asphalt.";
     } else { // If there is NO overall ice risk...
-      return "Safe: Air and ground temperatures have consistently remained above freezing, ensuring no latent ice remains.";
+      const isFreezing = (condition.temp <= 0.5) || (condition.minTemp !== undefined && condition.minTemp <= 0.5);
+      const wasFreezingRecently = condition.minPastTemp !== undefined && condition.minPastTemp <= 0;
+
+      if (isFreezing || wasFreezingRecently) {
+        return "Safe (Dry Cold): Conditions are at or below freezing, but critically low humidity and the absence of surface moisture have inhibited the formation of ice or frost. The substrate remains high-traction and dry.";
+      }
+      return "Safe: Temperatures have consistently remained above the freezing threshold, ensuring no latent ice accumulation.";
     }
   }, [condition]);
 
@@ -155,7 +158,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleIce = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showIceDetails) setShowIceDetails(false); else { closeAllPopups(); setShowIceDetails(true); } };
   const toggleSurface = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showSurfaceDetails) setShowSurfaceDetails(false); else { closeAllPopups(); setShowSurfaceDetails(true); } };
   const toggleScore = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showScoreDetails) setShowScoreDetails(false); else { closeAllPopups(); setShowScoreDetails(true); } };
-  // Only render advice buttons if the props are explicitly defined (not undefined) AND have items
   const toggleRoute = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
@@ -243,7 +245,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         )}
       </div>
 
-      {/* TRAINING ADVICE BUTTONS - Only render if relevant props are defined and not compact */}
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && locationAdvice.length > 0)) && !compact && (
         <div className="flex-none mb-3 flex gap-2 relative z-[100]">
           {optimizationAdvice && optimizationAdvice.length > 0 && (
@@ -265,7 +266,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </button>
           )}
 
-          {/* ROUTE ADVICE POPUP */}
           {showRoutePopup && (
             <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border shadow-2xl z-[110] animate-in fade-in slide-in-from-top-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/20' : 'bg-white border-slate-300'}`}>
               <div className="flex items-center justify-between mb-3">
@@ -289,7 +289,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </div>
           )}
 
-          {/* LOCATION ADVICE POPUP */}
           {showLocationPopup && (
             <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border shadow-2xl z-[110] animate-in fade-in slide-in-from-top-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/20' : 'bg-white border-slate-300'}`}>
               <div className="flex items-center justify-between mb-3">
@@ -306,7 +305,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                         e.preventDefault(); 
                         e.stopPropagation(); 
                         if (onSelectLocationAdvice) onSelectLocationAdvice({ name: loc.name, lat: loc.lat, lng: loc.lng });
-                        closeAllPopups(); // Close all popups in WeatherCard
+                        closeAllPopups(); 
                       }}
                       className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors hover:bg-orange-500/10 active:scale-[0.98] ${isDark ? 'bg-slate-900 border-white/5' : 'bg-slate-50 border-slate-200'}`}
                     >
@@ -330,7 +329,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         </div>
       )}
 
-      {/* TEMPERATURE DISPLAY */}
       <div className="flex-none flex items-center justify-between mb-4 sm:mb-6">
         <div className="flex flex-col">
           {condition?.minTemp !== undefined && condition?.maxTemp !== undefined ? (
@@ -365,7 +363,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 flex-grow min-h-0">
-        {/* Wind Box */}
         <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span>
@@ -393,7 +390,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           )}
         </div>
 
-        {/* Surface Box */}
         <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span>
@@ -411,7 +407,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           )}
         </div>
 
-        {/* Ice Risk Box */}
         <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span>
@@ -429,7 +424,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           )}
         </div>
 
-        {/* Score Box */}
         <div className={`rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 ${isDark ? 'bg-slate-900/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span>
@@ -441,7 +435,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           </div>
           {showScoreDetails && (
             <div className={`absolute bottom-full mb-3 left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[60] flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/20' : 'bg-white border-slate-300'}`}>
-              <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Deduction Breakdown</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
+              <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest text-slate-500">Deduction Breakdown</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="space-y-2">
                 {scoreBreakdown.length > 0 ? scoreBreakdown.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-[10px] font-bold">

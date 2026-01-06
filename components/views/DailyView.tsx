@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { WeatherCard } from '../WeatherCard';
 import { Zap, RefreshCw, Compass, Bike, Shirt, ChevronDown, Loader2, Sparkles, Calculator, CloudRain, Activity, X } from 'lucide-react';
@@ -41,22 +40,19 @@ export const DailyView: React.FC<DailyViewProps> = ({
     if (isAdviceExpanded) {
       setTypingStep(0);
     }
-  }, [isAdviceExpanded, activeLegIndex]); // Changed dependency to activeLegIndex to ensure reset on switch
+  }, [isAdviceExpanded, activeLegIndex]); 
   
   const shouldShowBlock = (index: number) => {
     if (settings.disableAI) return true;
-    // If AI is enabled but not enhanced, only show if NOT loading (meaning failed fallback)
     if (!isCurrentDayEnhanced) return !isCurrentDayLoading;
     return typingStep >= index;
   };
 
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
-    // If AI disabled, or failed (not enhanced and not loading), show fallback immediately
     if (settings.disableAI || (!isCurrentDayEnhanced && !isCurrentDayLoading)) {
       return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{text || fallback}</span>;
     }
     
-    // If enhanced, type it out
     if (isCurrentDayEnhanced) {
       return (
         <TypewriterText 
@@ -80,7 +76,6 @@ export const DailyView: React.FC<DailyViewProps> = ({
       return <TypewriterText text={activeWeather?.surfaceReason || ""} className={`text-[13px] font-medium leading-[1.5] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
     }
 
-    // AI on, waiting for enhancement
     return (
       <div className="flex items-center gap-2 py-1">
          <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
@@ -92,11 +87,9 @@ export const DailyView: React.FC<DailyViewProps> = ({
   const handleCardClick = (index: number) => {
     if (activeLegIndex !== index) {
       setActiveLegIndex(index);
-      // Keep expanded if it was expanded, allowing seamless switching
     } else {
-      // If clicking the active card, toggle expansion
       if (isAdviceExpanded) setIsAdviceExpanded(false);
-      else setIsAdviceExpanded(true); // Optional: Clicking active card opens intelligence? Maybe better to just toggle off.
+      else setIsAdviceExpanded(true); 
     }
   };
 
@@ -104,8 +97,9 @@ export const DailyView: React.FC<DailyViewProps> = ({
 
   return (
     <div className="flex flex-col gap-4 flex-1 h-full">
+      {/* Top Card: Popups open DOWNWARDS to avoid being hidden by header */}
       <div 
-        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 0 ? 'flex-[3]' : 'flex-[1]')}`}
+        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative z-40 ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 0 ? 'flex-[3]' : 'flex-[1]')}`}
         onClick={() => handleCardClick(0)}
       >
         <WeatherCard 
@@ -115,12 +109,13 @@ export const DailyView: React.FC<DailyViewProps> = ({
           theme={settings.theme} 
           compact={activeLegIndex !== 0 || isAdviceExpanded}
           isActive={activeLegIndex === 0}
+          popupDirection="down"
         />
       </div>
 
       <div 
         onClick={() => !isAdviceExpanded && setIsAdviceExpanded(true)}
-        className={`border rounded-[2rem] p-5 flex flex-col gap-3 transition-all duration-500 ease-in-out overflow-hidden shadow-xl ${
+        className={`border rounded-[2rem] p-5 flex flex-col gap-3 transition-all duration-500 ease-in-out overflow-hidden shadow-xl z-10 ${
           isAdviceExpanded 
             ? `flex-1 min-h-0 ${isDark ? 'bg-blue-600/5 border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'}`
             : `flex-none cursor-pointer active:scale-[0.99] ${isDark ? 'bg-blue-500/5 border-blue-500/20 shadow-blue-500/5' : 'bg-white border-blue-100 shadow-sm'}`
@@ -235,7 +230,6 @@ export const DailyView: React.FC<DailyViewProps> = ({
                 </div>
               )}
 
-              {/* BOTTOM SOURCE INDICATOR - Subtle */}
               <div className="pt-4 mt-2 border-t border-dashed border-slate-500/20 flex justify-end">
                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest opacity-40 ${
                   isDark ? 'text-slate-300' : 'text-slate-600'
@@ -250,7 +244,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
       </div>
 
       <div 
-        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 1 ? 'flex-[3]' : 'flex-[1]')}`}
+        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative z-30 ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 1 ? 'flex-[3]' : 'flex-[1]')}`}
         onClick={() => handleCardClick(1)}
       >
         <WeatherCard 
@@ -260,6 +254,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
           theme={settings.theme} 
           compact={activeLegIndex !== 1 || isAdviceExpanded}
           isActive={activeLegIndex === 1}
+          popupDirection="up"
         />
       </div>
     </div>
