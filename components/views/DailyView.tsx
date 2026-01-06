@@ -115,6 +115,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
           theme={settings.theme} 
           compact={activeLegIndex !== 0 || isAdviceExpanded}
           isActive={activeLegIndex === 0}
+          popupDirection="down"
         />
       </div>
 
@@ -260,6 +261,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
           theme={settings.theme} 
           compact={activeLegIndex !== 1 || isAdviceExpanded}
           isActive={activeLegIndex === 1}
+          popupDirection="up"
         />
       </div>
     </div>

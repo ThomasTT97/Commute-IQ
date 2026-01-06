@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
@@ -9,14 +10,13 @@ export default defineConfig(({ mode }) => {
   const copyLogoPlugin = () => ({
     name: 'copy-logo',
     generateBundle() {
-      // Fixed: Use process.cwd() because __dirname is not available in ESM modules
       const logoPath = path.resolve(process.cwd(), 'logo.png');
       
       if (fs.existsSync(logoPath)) {
         const source = fs.readFileSync(logoPath);
         this.emitFile({
           type: 'asset',
-          fileName: 'icon-v4.png',
+          fileName: 'logo.png',
           source: source
         });
       } else {
@@ -33,17 +33,12 @@ export default defineConfig(({ mode }) => {
     plugins: [
       copyLogoPlugin(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: '.',
+        filename: 'sw.js',
         registerType: 'autoUpdate',
-        injectRegister: 'auto',
-        includeAssets: ['icon-v4.png'],
+        injectRegister: false,
         manifestFilename: 'manifest.json',
-        workbox: {
-          cleanupOutdatedCaches: true,
-          clientsClaim: true,
-          skipWaiting: true,
-          globPatterns: ['**/*.{js,css,html,ico,svg,png}'],
-          ignoreURLParametersMatching: [/^v$/]
-        },
         manifest: {
           name: "Commute IQ",
           short_name: "Commute IQ",
@@ -51,24 +46,25 @@ export default defineConfig(({ mode }) => {
           theme_color: "#05070a",
           background_color: "#05070a",
           display: "standalone",
+          orientation: "portrait",
           scope: "/",
           start_url: "/",
-          id: "/",
+          id: "com.commuteiq.app",
           icons: [
             {
-              "src": "/icon-v4.png",
+              "src": "/logo.png",
               "sizes": "192x192",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/icon-v4.png",
+              "src": "/logo.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/icon-v4.png",
+              "src": "/logo.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "maskable"

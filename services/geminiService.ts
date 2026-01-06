@@ -113,10 +113,11 @@ export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment
     setup = "Avoid deep-section rims. Remove large panniers.";
     clothing = "Tight-fitting gear to prevent flapping. Gilet highly recommended.";
     performance = "Extreme aerobic demand. Monitor heart rate recovery carefully.";
-  } else if (w.temp < 0) {
-    summary = "Freezing temperatures. Frost risk present.";
-    style = "Stay alert for micro-patches of frost in shaded areas.";
-    setup = "Ensure chain is well-lubricated against road salt.";
+  } else if (w.temp <= 0) {
+    // If temp <= 0 but iceRisk is FALSE (checked above), it's a dry freeze
+    summary = "Dry Freeze: Temperatures are sub-zero, but dry air prevents ice formation. Traction is standard.";
+    style = "Standard handling. Stay alert for frost in persistently shaded micro-climates.";
+    setup = "Check drivetrain; road salt may be present. Standard tire pressure.";
     performance = "Cold-air inhalation risk. Caloric burn rate will increase.";
   } else if (w.temp > 30) {
     performance = "Heat stress risk. Focus on hydration and shorter, high-quality efforts.";

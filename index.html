@@ -14,14 +14,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commute IQ">
     
-    <!-- iOS Icon - Using new filename to force cache update -->
-    <link rel="apple-touch-icon" href="/icon-v4.png">
+    <!-- Android/Chrome Standalone Support -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#05070a">
+    
+    <!-- iOS Icon -->
+    <link rel="apple-touch-icon" href="/logo.png">
     
     <!-- Favicons -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-v4.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon-v4.png">
-    
-    <meta name="theme-color" content="#05070a">
+    <link rel="icon" type="image/png" sizes="192x192" href="/logo.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/logo.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,18 +32,18 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #05070a; /* Default dark background */
-            color: #f8fafc; /* Default text color */
-            height: 100dvh; /* Use dynamic viewport height */
-            width: 100vw; /* Use viewport width */
-            position: fixed; /* Keep it fixed for smooth scrolling of inner content */
-            overflow: auto; /* Allow body to scroll if content somehow overflows, but prefer inner elements to manage */
+            background-color: #05070a;
+            color: #f8fafc;
+            height: 100dvh;
+            width: 100vw;
+            position: fixed;
+            overflow: auto;
         }
         #root {
             height: 100%;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* App component's outer div will manage its own overflow */
+            overflow: hidden;
         }
         .font-mono {
             font-family: 'JetBrains Mono', monospace;
@@ -85,5 +87,14 @@
 <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.log('SW registration failed: ', err);
+          });
+        });
+      }
+    </script>
 </body>
 </html>
