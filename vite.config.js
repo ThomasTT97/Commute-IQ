@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   const copyLogoPlugin = () => ({
     name: 'copy-logo',
     generateBundle() {
-      const logoPath = path.resolve(process.cwd(), 'logo.png');
+      const logoPath = path.resolve('logo.png');
       
       if (fs.existsSync(logoPath)) {
         const source = fs.readFileSync(logoPath);
@@ -19,8 +19,6 @@ export default defineConfig(({ mode }) => {
           fileName: 'logo.png',
           source: source
         });
-      } else {
-        console.warn('Warning: logo.png not found in project root. PWA icon will be missing.');
       }
     }
   });
@@ -37,12 +35,14 @@ export default defineConfig(({ mode }) => {
         srcDir: '.',
         filename: 'sw.js',
         injectManifest: {
-          swSrc: 'sw.js',
+          // Source is uniquely named to avoid collisions
+          swSrc: 'service-worker-src.js',
+          // Built output will go to dist/sw.js
           swDest: 'dist/sw.js',
+          injectionPoint: 'self.__WB_MANIFEST',
         },
         registerType: 'autoUpdate',
         injectRegister: false,
-        manifestFilename: 'manifest.json',
         manifest: {
           name: "Commute IQ",
           short_name: "Commute IQ",
@@ -50,6 +50,7 @@ export default defineConfig(({ mode }) => {
           theme_color: "#05070a",
           background_color: "#05070a",
           display: "standalone",
+          display_override: ["standalone", "window-controls-overlay"],
           orientation: "portrait",
           scope: "/",
           start_url: "/",
