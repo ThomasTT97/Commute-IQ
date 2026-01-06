@@ -74,65 +74,54 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
             <button
               key={day.offset}
               onClick={() => onSelectDay(day.offset, bestSlot.startHour)}
-              className={`group flex items-center justify-between py-1 px-4 rounded-[1.25rem] border transition-all duration-300 relative overflow-hidden flex-1 ${styles.bg} ${styles.shadow} hover:scale-[1.01] active:scale-[0.99] hover:border-blue-600/40`}
+              className={`group flex items-center justify-between py-2 px-4 rounded-[1.25rem] border transition-all duration-300 relative overflow-hidden flex-1 min-h-[56px] ${styles.bg} ${styles.shadow} hover:scale-[1.01] active:scale-[0.99] hover:border-blue-600/40`}
             >
-              <div className="flex items-center gap-3 z-10">
+              {/* Left Side: Date and Stacked Time Window */}
+              <div className="flex items-center gap-4 z-10">
                 <div className="flex flex-col items-center justify-center min-w-[2.2rem]">
                   <span className={`text-[8px] font-black tracking-widest ${isWeekend ? (isDark ? 'text-slate-600' : 'text-slate-500') : (isDark ? 'text-slate-400' : 'text-slate-600')}`}>
                     {dayName}
                   </span>
-                  <span className={`text-lg font-black leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
+                  <span className={`text-xl font-black leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
                     {dateNum}
                   </span>
                 </div>
 
-                <div className={`h-6 w-px ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
+                <div className={`h-8 w-px ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
 
-                <div className="flex flex-col gap-0.5 min-w-[80px]">
-                  <div className="flex items-center gap-1.5 opacity-60">
-                    <span className={`text-[6px] font-black uppercase tracking-[0.2em] leading-none ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
-                      Outlook
+                <div className="flex flex-col gap-0.5 items-start justify-center">
+                  <div className="flex flex-col justify-center leading-tight">
+                    <span className={`text-[11px] font-black font-mono leading-none ${isDark ? 'text-white' : 'text-slate-950'}`}>
+                      {bestSlot?.window[0]}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-wide ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
-                      {isWet ? <Droplets className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5" />}
-                      {isWet ? 'WET' : 'DRY'}
-                    </div>
-                    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-wide ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
-                      {hasIce ? <AlertTriangle className="w-2.5 h-2.5" /> : <ShieldCheck className="w-2.5 h-2.5 opacity-20" />}
-                      {hasIce ? 'ICE' : 'NO ICE'}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* IDEAL WINDOW SECTION - CIRCLED AREA FROM USER REQUEST */}
-                <div className="flex flex-col gap-0.5 min-w-[75px]">
-                  <div className="flex items-center gap-1.5 opacity-60">
-                    <span className={`text-[6px] font-black uppercase tracking-[0.2em] leading-none ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
-                      Ideal Window
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className={`w-2.5 h-2.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-                    <span className={`text-[10px] font-black font-mono leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {bestSlot?.window[0]} - {bestSlot?.window[1]}
+                    <span className={`text-[11px] font-bold font-mono leading-none opacity-50 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {bestSlot?.window[1]}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 z-10">
-                <div className="flex flex-col items-end">
+              {/* Right Side: Risk Indicators (Grid) & Score */}
+              <div className="flex items-center gap-4 z-10">
+                <div className="grid grid-cols-2 gap-2">
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
+                      {isWet ? 'WET' : 'DRY'}
+                    </div>
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
+                      {hasIce ? 'ICE' : 'NO ICE'}
+                    </div>
+                </div>
+
+                <div className="flex flex-col items-end min-w-[2.5rem]">
                   <span className={`text-[7px] font-black uppercase tracking-widest leading-none mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>Score</span>
                   <div className="flex items-baseline gap-0.5">
-                    <span className={`text-xl font-black font-mono leading-none ${styles.color}`}>
+                    <span className={`text-2xl font-black font-mono leading-none ${styles.color}`}>
                       {Math.round(score)}
                     </span>
-                    <span className={`text-[8px] font-bold opacity-80 ${styles.color}`}>%</span>
+                    <span className={`text-[9px] font-bold opacity-80 ${styles.color}`}>%</span>
                   </div>
                 </div>
-                <ChevronRight className={`w-3.5 h-3.5 text-slate-500 transition-transform group-hover:translate-x-1`} />
+                <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform group-hover:translate-x-1`} />
               </div>
 
               <div 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
@@ -43,7 +44,10 @@ const App: React.FC = () => {
       ...parsed,
       homeCoords: parsed.homeCoords || DEFAULT_SETTINGS.homeCoords,
       workCoords: parsed.workCoords || DEFAULT_SETTINGS.workCoords,
-      equipment: parsed.equipment || DEFAULT_SETTINGS.equipment || []
+      equipment: parsed.equipment || DEFAULT_SETTINGS.equipment || [],
+      averageSpeed: parsed.averageSpeed || DEFAULT_SETTINGS.averageSpeed,
+      fitnessGoal: parsed.fitnessGoal || DEFAULT_SETTINGS.fitnessGoal,
+      workDays: parsed.workDays || DEFAULT_SETTINGS.workDays
     };
   });
 
@@ -422,8 +426,12 @@ const App: React.FC = () => {
     try {
       const rawCurrentLocation = await fetchRawWeatherData(training.coords);
       const dayIdx = (training.dateOffset + 1) * 24; 
-      const durationHours = training.distance / AVG_TRAINING_SPEED;
+      
+      // Use user's average speed or fallback to constant
+      const speed = settings.averageSpeed || AVG_TRAINING_SPEED;
+      const durationHours = training.distance / speed;
       const durationInt = Math.ceil(durationHours);
+      
       const sunTimesCurrent = {
         sunrise: rawCurrentLocation.daily?.sunrise?.[training.dateOffset] || "07:00",
         sunset: rawCurrentLocation.daily?.sunset?.[training.dateOffset] || "20:00"
@@ -505,8 +513,12 @@ const App: React.FC = () => {
     setViewMode('training-weekly');
     try {
       const rawData = await fetchRawWeatherData(training.coords);
-      const durationHours = training.distance / AVG_TRAINING_SPEED;
+      
+      // Use user's average speed or fallback to constant
+      const speed = settings.averageSpeed || AVG_TRAINING_SPEED;
+      const durationHours = training.distance / speed;
       const durationInt = Math.ceil(durationHours);
+      
       const weeklyResults = [];
       
       for (let offset = 0; offset < 7; offset++) {
@@ -629,6 +641,7 @@ const App: React.FC = () => {
     const locationChanged = newSettings.homeLocation !== settings.homeLocation || newSettings.workLocation !== settings.workLocation;
     const equipmentChanged = JSON.stringify(newSettings.equipment) !== JSON.stringify(settings.equipment);
     const aiChanged = newSettings.disableAI !== settings.disableAI;
+    const personalChanged = newSettings.averageSpeed !== settings.averageSpeed || newSettings.fitnessGoal !== settings.fitnessGoal;
     
     let updatedSettings = { ...newSettings };
     setSettings(updatedSettings);
@@ -650,8 +663,14 @@ const App: React.FC = () => {
       }
     }
 
-    if (locationChanged || aiChanged || equipmentChanged) {
+    if (locationChanged || aiChanged || equipmentChanged || personalChanged) {
       if (!locationChanged) {
+         // Clear cache to force re-evaluation with new personal settings if needed (e.g. AI advice context)
+         // but maybe not strictly necessary for simple visual updates. 
+         // For now, let's keep cache unless location changes to save API calls.
+         // Actually, if AI context changes (fitness goal), we might want new insights.
+         // Let's rely on standard re-sync.
+      } else {
          setPulseDataMap({});
          localStorage.removeItem(CACHE_KEY);
       }
@@ -755,7 +774,7 @@ const App: React.FC = () => {
       )}
 
       <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${
-        isWeeklyMode ? 'pt-[max(1.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'
+        isWeeklyMode ? 'pt-[max(0.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'
       } ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
         {viewMode === 'daily' && (
           <DailyView 
@@ -782,6 +801,7 @@ const App: React.FC = () => {
               theme={settings.theme} 
               onSelectDay={(offset: number) => { setSelectedDateOffset(offset); setViewMode('daily'); }}
               onToggleMode={() => { syncTrainingWeek(); }}
+              workDays={settings.workDays}
             />
           </div>
         )}

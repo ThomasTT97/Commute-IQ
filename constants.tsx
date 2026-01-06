@@ -3,7 +3,7 @@ import { Language, CommuteSettings, Coordinates } from './types';
 
 export const ROAD_DETOUR_FACTOR = 1.32;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
-export const AVG_TRAINING_SPEED = 28.5; // km/h
+export const AVG_TRAINING_SPEED = 28; // km/h
 
 // Comprehensive lookup for Belgian cities and villages
 export const BELGIAN_CITIES: Record<string, Coordinates> = {
@@ -71,7 +71,10 @@ export const DEFAULT_SETTINGS: CommuteSettings = {
   language: 'en',
   theme: 'dark',
   disableAI: false,
-  equipment: []
+  equipment: [],
+  averageSpeed: 25,
+  fitnessGoal: 'active',
+  workDays: [1, 2, 3, 4, 5]
 };
 
 export const LANGUAGES: { code: Language; label: string; flag: string }[] = [

@@ -22,6 +22,8 @@ export interface Equipment {
   isSelected: boolean;
 }
 
+export type FitnessGoal = 'commute' | 'active' | 'fitness';
+
 export interface CommuteSettings {
   homeLocation: string;
   homeCoords?: Coordinates;
@@ -34,6 +36,9 @@ export interface CommuteSettings {
   theme: 'dark' | 'light';
   disableAI: boolean;
   equipment: Equipment[];
+  averageSpeed: number;
+  fitnessGoal: FitnessGoal;
+  workDays: number[]; // 0=Sun, 1=Mon...
 }
 
 export interface ScoreDeduction {

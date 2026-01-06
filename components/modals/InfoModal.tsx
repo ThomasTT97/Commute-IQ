@@ -46,7 +46,7 @@ export const InfoModal: React.FC<InfoModalProps> = ({ isOpen, onClose, isDark, l
             <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><Zap className="w-5 h-5 text-blue-500" /></div>
             <div className="flex flex-col">
               <h2 className={`text-sm font-black uppercase tracking-widest ${isDark ? 'text-white' : 'text-slate-900'}`}>The Briefing</h2>
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">Your Intelligent Cycling Coach</span>
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">Your Intelligent Ride Analyst</span>
             </div>
           </div>
           <button onClick={onClose} className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/5 text-slate-600 hover:text-white' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-900'}`}><X className="w-5 h-5" /></button>

@@ -1,5 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { LocationSuggestion, WeatherCondition } from '../types';
 import { BelgianLocation } from '../locations';
 import { 
@@ -27,8 +28,7 @@ import {
   Sunrise,
   Sunset,
   Zap,
-  Timer,
-  Compass
+  Timer
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -61,6 +61,21 @@ const formatTime = (isoString?: string): string => {
   if (!isoString) return "--:--";
   const timePart = isoString.includes('T') ? isoString.split('T')[1] : isoString;
   return timePart.substring(0, 5);
+};
+
+const Modal = ({ children, onClose, isDark }: { children?: React.ReactNode, onClose: () => void, isDark: boolean }) => {
+  return createPortal(
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={(e) => { e.stopPropagation(); onClose(); }} />
+      <div 
+        className={`relative w-full max-w-[320px] rounded-[1.5rem] shadow-2xl p-5 border animate-in zoom-in-95 fade-in duration-200 ${isDark ? 'bg-[#0f1115] border-white/20' : 'bg-white border-slate-200'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
 };
 
 export const WeatherCard: React.FC<WeatherCardProps> = ({ 
@@ -251,16 +266,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
-  const popupBgClass = isDark ? 'bg-[#0f1115] border-white/20 shadow-2xl' : 'bg-white border-slate-300 shadow-2xl';
   const blockBgClass = isDark ? 'bg-[#0f1115] border-white/5 hover:bg-[#14171d]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100';
-
-  const getPopupStyles = (isLeftOffset = false, isRightOffset = false, isFullWidth = false) => {
-    const vertical = popupDirection === 'up' ? 'bottom-full mb-3' : 'top-full mt-3';
-    const horizontal = isFullWidth ? 'left-0 right-0' : (isRightOffset ? 'right-0' : (isLeftOffset ? 'left-0' : 'left-0 right-0'));
-    const animation = popupDirection === 'up' ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2';
-    const widthClass = isFullWidth ? 'w-full' : 'w-max max-w-[calc(100vw-3rem)] sm:max-w-[320px]';
-    return `${vertical} ${horizontal} animate-in fade-in ${animation} duration-200 ${widthClass} z-[1100] transform-gpu`;
-  };
+  const actionBtnClass = isDark 
+    ? 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]' 
+    : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 shadow-sm';
 
   if (compact) {
     return (
@@ -279,7 +288,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2.5">
                 <Lightbulb className={`w-4 h-4 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]' : 'text-slate-700 opacity-40'}`} />
-                <div className="flex gap-2 sm:gap-3 text-[9px] sm:text-[10px] font-black items-center"><span className={surface.color}>{surface.label}</span><span className="text-slate-700 opacity-20">|</span><span className={iceInfo.label === 'NO ICE' ? 'text-emerald-500' : 'text-red-500'}>{iceInfo.label}</span></div>
+                <div className="flex gap-2 sm:gap-3 text-[11px] sm:text-[12px] font-black items-center"><span className={surface.color}>{surface.label}</span><span className="text-slate-700 opacity-20">|</span><span className={iceInfo.label === 'NO ICE' ? 'text-emerald-500' : 'text-red-500'}>{iceInfo.label}</span></div>
               </div>
             </div>
           <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl font-black text-[9px] sm:text-[10px] border tracking-wider transition-colors ${isDark ? 'bg-[#1a1d24] border-white/5' : 'bg-slate-50 border-slate-200'} ${showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}`}>{showRawWind ? `${Math.round(condition?.windSpeed ?? 0)} ${getCardinal(condition?.windDirection ?? 0)}` : wind.label} <Wind className="w-4 h-4" /></div>
@@ -288,51 +297,106 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     );
   }
 
-  const actionBtnClass = isDark 
-    ? 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]' 
-    : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 shadow-sm';
-
   return (
     <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-5 shadow-2xl transition-all relative ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
       
-      {isAnyPopupOpen && (
-        <div 
-          className="fixed inset-0 z-[900] bg-black/60 transition-all duration-300 cursor-default" 
-          onClick={(e) => { e.stopPropagation(); closeAllPopups(); }} 
-        />
-      )}
-
+      {/* MODALS using Portal */}
       {showSurfaceDetails && (
-        <div className={`absolute shadow-2xl flex flex-col gap-3 p-4 rounded-2xl border ${getPopupStyles(false, false, true)} ${popupBgClass}`}>
-          <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Surface Diagnostics</span><button onClick={toggleSurface} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
+        <Modal onClose={() => setShowSurfaceDetails(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Surface Diagnostics</span><button onClick={() => setShowSurfaceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
           {condition?.estimatedDryTime && (condition?.wetSurfaceChance ?? 0) > 50 && (
-            <div className={`p-3 rounded-xl border flex flex-col gap-1.5 ${isDark ? 'bg-black border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}>
+            <div className={`p-3 rounded-xl border flex flex-col gap-1.5 mb-3 ${isDark ? 'bg-black border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}>
               <div className="flex justify-between items-center"><div className="flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 text-blue-500 animate-pulse" /><span className="text-[7px] font-black text-blue-500 uppercase tracking-widest">Time to dry</span></div><span className={`text-sm font-black font-mono tracking-tighter ${isDark ? 'text-white' : 'text-blue-700'}`}>{countdown}</span></div>
               <div className={`h-1 w-full rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.max(0, 100 - (condition.wetSurfaceChance || 0))}%` }} /></div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">{surfaceVitals.map((item, i) => (<div key={i} className="flex items-center justify-between text-[10px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span></div><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>))}</div>
-          <div className={`mt-1 p-2.5 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-100'}`}><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Atmos Logic Analysis</span><p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{surfaceRiskReason}</p></div>
-        </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-3">{surfaceVitals.map((item, i) => (<div key={i} className="flex items-center justify-between text-[11px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span></div><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>))}</div>
+          <div className={`p-3 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-100'}`}><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Atmos Logic Analysis</span><p className={`text-[11px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{surfaceRiskReason}</p></div>
+        </Modal>
       )}
 
       {showIceDetails && (
-        <div className={`absolute shadow-2xl flex flex-col gap-3 p-4 rounded-2xl border ${getPopupStyles(false, false, true)} ${popupBgClass}`}>
-          <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk assessment</span><button onClick={toggleIce} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">{iceVitals.map((item, i) => (<div key={i} className="flex items-center justify-between text-[10px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span></div><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>))}</div>
-          <div className={`mt-1 p-2.5 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-100'}`}><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Assessment Details</span><p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{iceRiskReason}</p></div>
-        </div>
+        <Modal onClose={() => setShowIceDetails(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk Assessment</span><button onClick={() => setShowIceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-3">{iceVitals.map((item, i) => (<div key={i} className="flex items-center justify-between text-[11px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span></div><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>))}</div>
+          <div className={`p-3 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-100'}`}><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Assessment Details</span><p className={`text-[11px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{iceRiskReason}</p></div>
+        </Modal>
       )}
 
       {showScoreDetails && (
-        <div className={`absolute shadow-2xl flex flex-col gap-3 p-4 rounded-2xl border ${getPopupStyles(false, false, true)} ${popupBgClass}`}>
-          <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Deduction Breakdown</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-          <div className="space-y-2">
+        <Modal onClose={() => setShowScoreDetails(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Score Breakdown</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="space-y-3">
             {scoreBreakdown.length > 0 ? scoreBreakdown.map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-[10px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span></div><span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span></div>
-            )) : <p className="text-[10px] font-bold text-emerald-500">Perfect conditions: No deductions applied.</p>}
+              <div key={i} className="flex items-center justify-between text-[11px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span></div><span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span></div>
+            )) : <p className="text-[11px] font-bold text-emerald-500 text-center py-2">Perfect conditions: No deductions applied.</p>}
           </div>
-        </div>
+        </Modal>
+      )}
+
+      {showWindDetails && (
+        <Modal onClose={() => setShowWindDetails(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Wind Analysis</span><button onClick={() => setShowWindDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="flex flex-col gap-4 items-center py-2">
+             <div className={`p-4 rounded-full border-2 ${isDark ? 'border-white/10 bg-white/5' : 'border-slate-100 bg-slate-50'}`}>
+                <div style={{ transform: `rotate(${condition?.windDirection || 0}deg)` }} className="transition-transform duration-500">
+                   <Navigation className={`w-8 h-8 ${isDark ? 'text-white' : 'text-slate-900'}`} />
+                </div>
+             </div>
+             <div className="text-center">
+                <div className={`text-3xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-sm text-slate-500 font-bold">km/h</span></div>
+                <div className={`text-xs font-black uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>From {getCardinal(condition?.windDirection ?? 0)}</div>
+             </div>
+          </div>
+        </Modal>
+      )}
+
+      {showTempDetails && (
+        <Modal onClose={() => setShowTempDetails(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Temperature Range</span><button onClick={() => setShowTempDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between text-[13px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MIN TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.minTemp ?? condition?.temp ?? 0)}°C</span></div>
+            <div className="flex items-center justify-between text-[13px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MAX TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.maxTemp ?? condition?.temp ?? 0)}°C</span></div>
+          </div>
+        </Modal>
+      )}
+
+      {showLightsDetails && (
+        <Modal onClose={() => setShowLightsDetails(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Solar Cycle</span><button onClick={() => setShowLightsDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4"><div className="flex items-center gap-2"><Sunrise className="w-4 h-4 text-orange-400" /><span className="text-[12px] font-black text-slate-500 uppercase">Sunrise</span></div><span className={`text-[14px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunrise)}</span></div>
+            <div className="flex items-center justify-between gap-4"><div className="flex items-center gap-2"><Sunset className="w-4 h-4 text-indigo-400" /><span className="text-[12px] font-black text-slate-500 uppercase">Sunset</span></div><span className={`text-[14px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunset)}</span></div>
+          </div>
+        </Modal>
+      )}
+
+      {showRoutePopup && (
+        <Modal onClose={() => setShowRoutePopup(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Suggested Points</span><button onClick={() => setShowRoutePopup(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto hide-scrollbar">
+            {optimizationAdvice?.slice(0, 5).map((loc, idx) => (
+              <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5' : 'bg-slate-100 border-slate-300'}`}>
+                <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                <span className="text-[9px] font-bold text-slate-500">{Math.round(loc.distFromCenter || 0)}km away</span>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {showLocationPopup && (
+        <Modal onClose={() => setShowLocationPopup(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Alternatives</span><button onClick={() => setShowLocationPopup(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
+          <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto hide-scrollbar">
+            {locationAdvice?.slice(0, 5).map((loc, idx) => (
+              <button key={idx} onClick={() => { onSelectLocationAdvice?.(loc); setShowLocationPopup(false); }} className={`p-3 rounded-xl border flex items-center justify-between transition-colors ${isDark ? 'bg-black border-white/5 hover:bg-blue-500/10' : 'bg-slate-100 border-slate-300 hover:bg-blue-50'}`}>
+                <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                <MapIcon className="w-3 h-3 text-blue-500" />
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
 
       <div className="flex-none flex items-center justify-between text-[9px] font-black tracking-widest text-slate-500 uppercase mb-1.5">
@@ -340,36 +404,14 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       </div>
       <div className="flex-none flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate max-w-[70%]"><MapPin className="w-3 h-3 text-blue-500/50 flex-none" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2.5 h-2.5 opacity-30 flex-none" /><span className="truncate">{endLocation}</span></div>
-        {distance && (<div className="flex items-center gap-1.5 text-[8px] font-black text-slate-500 flex-none"><Navigation className="w-2.5 h-2.5 text-blue-500" /><span>{distance.toFixed(1)} KM</span></div>)}
+        {distance && (<div className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 flex-none"><Navigation className="w-2.5 h-2.5 text-blue-500" /><span>{distance.toFixed(1)} KM</span></div>)}
       </div>
 
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && locationAdvice.length > 0) || onToggleIntelligence) && (
-        <div className="flex-none mb-2 flex gap-1.5 relative z-[1000]">
+        <div className="flex-none mb-2 flex gap-1.5 relative z-[100]">
           {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Sparkles className="w-2.5 h-2.5" />route</button>)}
           {locationAdvice && locationAdvice.length > 0 && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><MapIcon className="w-2.5 h-2.5" />location</button>)}
           {onToggleIntelligence && (<button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${isIntelligenceExpanded ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Zap className="w-2.5 h-2.5" />Intel</button>)}
-          
-          {showRoutePopup && (
-            <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1200] transform-gpu`}>
-              <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black uppercase text-blue-500">Suggested Points</span><button onClick={() => setShowRoutePopup(false)} className="p-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-2">{optimizationAdvice?.slice(0, 5).map((loc, idx) => (
-                <div key={idx} className={`p-2 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5' : 'bg-slate-100 border-slate-300'}`}>
-                  <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                </div>
-              ))}</div>
-            </div>
-          )}
-          {showLocationPopup && (
-            <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1200] transform-gpu`}>
-              <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black uppercase text-blue-500">Alternatives</span><button onClick={() => setShowLocationPopup(false)} className="p-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-2">{locationAdvice?.slice(0, 5).map((loc, idx) => (
-                <button key={idx} onClick={() => onSelectLocationAdvice?.(loc)} className={`p-2 rounded-xl border flex items-center justify-between transition-colors ${isDark ? 'bg-black border-white/5 hover:bg-blue-500/10' : 'bg-slate-100 border-slate-300 hover:bg-blue-50'}`}>
-                  <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                  <MapIcon className="w-3 h-3 text-blue-500" />
-                </button>
-              ))}</div>
-            </div>
-          )}
         </div>
       )}
 
@@ -378,57 +420,33 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-all active:opacity-70 text-left">
             <span className={`text-4xl sm:text-5xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{Math.round(condition?.temp ?? 0)}°</span><span className="text-lg font-bold text-slate-500 tracking-tighter ml-1">C</span>
           </button>
-          {showTempDetails && (
-            <div className={`absolute p-4 rounded-2xl border min-w-[150px] ${getPopupStyles()} ${popupBgClass}`}>
-              <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Temp Range</span><button onClick={() => setShowTempDetails(false)} className="p-1 -mr-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between text-[11px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MIN TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.minTemp ?? condition?.temp ?? 0)}°C</span></div>
-                <div className="flex items-center justify-between text-[11px] font-black"><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>MAX TEMP</span><span className={isDark ? 'text-white' : 'text-slate-900'}>{Math.round(condition?.maxTemp ?? condition?.temp ?? 0)}°C</span></div>
-              </div>
-            </div>
-          )}
         </div>
         <div className="relative">
           <button onClick={toggleLights} className={`rounded-[1.25rem] p-2.5 flex items-center gap-3 min-w-[110px] transition-all active:scale-[0.98] ${isDark ? 'bg-[#161920] border border-white/5 hover:bg-[#1c2029]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
             <Lightbulb className={`w-5 h-5 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
             <div className="flex flex-col text-left"><span className="text-[6px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[9px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
           </button>
-          {showLightsDetails && (
-            <div className={`absolute p-4 rounded-2xl border min-w-[160px] ${getPopupStyles(false, true)} ${popupBgClass}`}>
-              <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Solar Analysis</span><button onClick={() => setShowLightsDetails(false)} className="p-1 -mr-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-4"><div className="flex items-center gap-2"><Sunrise className="w-3.5 h-3.5 text-orange-400" /><span className="text-[10px] font-black text-slate-500 uppercase">Sunrise</span></div><span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunrise)}</span></div>
-                <div className="flex items-center justify-between gap-4"><div className="flex items-center gap-2"><Sunset className="w-3.5 h-3.5 text-indigo-400" /><span className="text-[10px] font-black text-slate-500 uppercase">Sunset</span></div><span className={`text-[11px] font-mono font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>{formatTime(condition?.sunset)}</span></div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 flex-grow min-h-0">
         <button onClick={toggleWind} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showWindDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span></div>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span></div>
           <div className="flex items-center justify-between">{showRawWind ? (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-[8px] opacity-60">KM/H</span> {getCardinal(condition?.windDirection ?? 0)}</span>) : (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${wind.color}`}>{wind.label}</span>)}<div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div></div>
-          {showWindDetails && (
-            <div className={`absolute shadow-2xl flex items-center justify-between p-3 rounded-2xl border ${getPopupStyles(true, false)} ${popupBgClass}`}>
-              <div className="flex flex-col gap-1.5 flex-1"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Wind Details</span><p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>Speed: {Math.round(condition?.windSpeed ?? 0)} km/h<br/>Direction: {getCardinal(condition?.windDirection ?? 0)}</p></div>
-              <button onClick={toggleWind} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button>
-            </div>
-          )}
         </button>
 
         <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span></div>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span></div>
           <div className="flex items-center justify-between"><span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span><div className={surface.color}>{surface.icon}</div></div>
         </button>
 
         <button onClick={toggleIce} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showIceDetails ? 'ring-1 ring-red-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span></div>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span></div>
           <div className="flex items-center justify-between"><span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${iceInfo.color}`}>{iceInfo.label}</span><div className={iceInfo.color}>{iceInfo.icon}</div></div>
         </button>
 
         <button onClick={toggleScore} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showScoreDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span></div>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span></div>
           <div className="flex items-center justify-between"><span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${scoreColor}`}>{Math.round(safetyScore ?? 0)}%</span><div className={scoreColor}><Bike className="w-5.5 h-5.5" /></div></div>
         </button>
       </div>

@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { CommuteSettings } from '../../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { CommuteSettings, FitnessGoal } from '../../types';
 import { EquipmentManager } from '../EquipmentManager';
 import { BelgianLocation, BELGIAN_LOCATIONS } from '../../locations';
 import { getGlobalLocationSuggestions } from '../../services/geminiService';
@@ -20,7 +20,14 @@ import {
   Trophy, 
   Activity,
   MapPin,
-  Loader2
+  Loader2,
+  User,
+  Zap,
+  Heart,
+  Briefcase,
+  ArrowLeft,
+  Gauge,
+  CalendarDays
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -45,7 +52,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isDark 
 }) => {
   const [editSettings, setEditSettings] = useState<CommuteSettings>(currentSettings);
-  const [isEquipmentViewOpen, setIsEquipmentViewOpen] = useState(false);
+  const [currentView, setCurrentView] = useState<'main' | 'equipment' | 'personal'>('main');
   
   // Search State
   const [homeSearch, setHomeSearch] = useState(currentSettings.homeLocation);
@@ -57,6 +64,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSearchingGlobal, setIsSearchingGlobal] = useState({ home: false, work: false });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Constants
+  const speedRange = useMemo(() => Array.from({ length: 31 }, (_, i) => i + 15), []); // 15 to 45 kph
+  const speedPickerRef = useRef<HTMLDivElement>(null);
+
   // Sync internal state when opened
   useEffect(() => {
     if (isOpen) {
@@ -64,6 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setHomeSearch(currentSettings.homeLocation);
       setWorkSearch(currentSettings.workLocation);
       setIsSaving(false);
+      setCurrentView('main');
     }
   }, [isOpen, currentSettings]);
 
@@ -94,6 +106,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => clearTimeout(timer);
   }, [workSearch]);
 
+  // Sync Speed Picker
+  useEffect(() => {
+    if (currentView === 'personal' && speedPickerRef.current && editSettings.averageSpeed) {
+      const timer = setTimeout(() => {
+        const el = speedPickerRef.current?.querySelector(`[data-speed="${editSettings.averageSpeed}"]`);
+        if (el) {
+           el.scrollIntoView({ behavior: 'auto', inline: 'center' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [currentView, editSettings.averageSpeed]);
+
   const handleSelectSuggestion = (type: 'home' | 'work', loc: BelgianLocation) => {
     if (type === 'home') {
       setEditSettings(prev => ({ ...prev, homeLocation: loc.name, homeCoords: { lat: loc.lat, lng: loc.lng } }));
@@ -119,13 +144,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) setIsSaving(false);
   };
 
+  const toggleWorkDay = (day: number) => {
+    setEditSettings(prev => {
+      const current = prev.workDays || [1, 2, 3, 4, 5];
+      if (current.includes(day)) {
+        return { ...prev, workDays: current.filter(d => d !== day) };
+      } else {
+        return { ...prev, workDays: [...current, day].sort() };
+      }
+    });
+  };
+
+  const fitnessGoals: { id: FitnessGoal; label: string; desc: string; icon: React.ReactNode }[] = [
+    { id: 'commute', label: 'Commute', desc: 'Efficiency first. Get from A to B.', icon: <Briefcase className="w-4 h-4" /> },
+    { id: 'active', label: 'Active', desc: 'Health maintenance. Moderate effort.', icon: <Heart className="w-4 h-4" /> },
+    { id: 'fitness', label: 'Fitness', desc: 'Performance gains. High intensity.', icon: <Zap className="w-4 h-4" /> },
+  ];
+
+  const weekDays = [
+    { label: 'M', val: 1 },
+    { label: 'T', val: 2 },
+    { label: 'W', val: 3 },
+    { label: 'T', val: 4 },
+    { label: 'F', val: 5 },
+    { label: 'S', val: 6 },
+    { label: 'S', val: 0 },
+  ];
+
   if (!isOpen) return null;
 
   return (
     <div className={`fixed inset-0 z-[200] flex flex-col animate-in fade-in duration-300 ${isDark ? 'bg-[#05070a]' : 'bg-white'}`}>
       <div className="flex-1 max-w-md mx-auto w-full flex flex-col px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] h-full">
         
-        {!isEquipmentViewOpen && (
+        {currentView === 'main' && (
           <div className="flex items-center justify-between pb-1.5 flex-none">
             <h2 className={`text-xl font-bold uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Settings</h2>
             <button onClick={onClose} className={`p-2 rounded-full ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}><X className={`w-5 h-5 ${isDark ? 'text-white' : 'text-slate-900'}`} /></button>
@@ -134,13 +186,127 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto hide-scrollbar pb-4 gap-3">
            
-           {isEquipmentViewOpen ? (
+           {currentView === 'equipment' ? (
              <EquipmentManager 
                 equipment={editSettings.equipment}
                 onChange={(newEq) => setEditSettings(prev => ({...prev, equipment: newEq}))}
-                onClose={() => setIsEquipmentViewOpen(false)}
+                onClose={() => setCurrentView('main')}
                 isDark={isDark}
              />
+           ) : currentView === 'personal' ? (
+             <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-300">
+                <div className="flex items-center gap-3 mb-4 flex-none">
+                  <button onClick={() => setCurrentView('main')} className={`p-2 rounded-full transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <h2 className={`text-lg font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Personal Profile</h2>
+                </div>
+
+                <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-6 min-h-0">
+                  
+                  {/* Speed Configuration */}
+                  <div className={`p-5 rounded-3xl border flex flex-col gap-3 flex-none ${isDark ? 'bg-[#05070a] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
+                    <div className="flex justify-between items-end px-1">
+                       <div className="flex items-center gap-2 text-slate-500">
+                          <Gauge className="w-4 h-4" />
+                          <span className="text-[9px] font-black uppercase tracking-widest">Cruising Velocity</span>
+                       </div>
+                       <span className={`text-xl font-black font-mono ${isDark ? 'text-white' : 'text-slate-900'}`}>{editSettings.averageSpeed || 25} <span className="text-xs text-slate-500">km/h</span></span>
+                    </div>
+                    
+                    <div className={`h-16 rounded-2xl border overflow-hidden relative ${isDark ? 'bg-black/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+                       <div className={`absolute inset-y-0 left-0 w-12 z-10 pointer-events-none bg-gradient-to-r ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
+                       <div className={`absolute inset-y-0 right-0 w-12 z-10 pointer-events-none bg-gradient-to-l ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
+                       <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-12 rounded-xl border-2 pointer-events-none z-20 ${isDark ? 'border-blue-500/20 bg-blue-500/5' : 'border-blue-400 bg-white shadow-sm'}`} />
+
+                       <div 
+                         ref={speedPickerRef}
+                         className="h-full flex items-center gap-4 overflow-x-auto hide-scrollbar scroll-smooth snap-x snap-mandatory px-[calc(50%-28px)]"
+                       >
+                          {speedRange.map(s => {
+                            const isSelected = (editSettings.averageSpeed || 25) === s;
+                            return (
+                              <button
+                                key={s} data-speed={s} onClick={() => setEditSettings(prev => ({ ...prev, averageSpeed: s }))}
+                                className={`flex-none w-14 h-10 flex flex-col items-center justify-center transition-all snap-center relative rounded-lg z-30 ${
+                                  isSelected 
+                                    ? (isDark ? 'text-blue-400 scale-115 font-black' : 'text-slate-950 scale-115 font-black') 
+                                    : (isDark ? 'text-slate-700 font-bold' : 'text-slate-400 font-bold')
+                                }`}
+                              >
+                                <span className="text-[15px] leading-none">{s}</span>
+                              </button>
+                            );
+                          })}
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* Workdays Selector */}
+                  <div className={`p-5 rounded-3xl border flex flex-col gap-4 flex-none ${isDark ? 'bg-[#05070a] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
+                    <div className="flex items-center gap-2 text-slate-500 px-1">
+                       <CalendarDays className="w-4 h-4" />
+                       <span className="text-[9px] font-black uppercase tracking-widest">Active Commute Days</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {weekDays.map(d => {
+                         const isActive = editSettings.workDays?.includes(d.val);
+                         return (
+                           <button
+                             key={d.label + d.val}
+                             onClick={() => toggleWorkDay(d.val)}
+                             className={`flex-1 h-10 rounded-xl font-black text-[11px] transition-all active:scale-95 ${
+                               isActive 
+                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
+                                 : isDark ? 'bg-slate-900/50 border border-white/5 text-slate-500 hover:text-slate-300' : 'bg-slate-50 border border-slate-200 text-slate-400 hover:text-slate-600'
+                             }`}
+                           >
+                             {d.label}
+                           </button>
+                         )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Goal Selection */}
+                  <div className="flex flex-col gap-3 flex-none">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Strategic Focus</label>
+                    <div className="flex flex-col gap-2">
+                      {fitnessGoals.map((goal) => (
+                        <button
+                          key={goal.id}
+                          onClick={() => setEditSettings(prev => ({ ...prev, fitnessGoal: goal.id }))}
+                          className={`p-4 rounded-2xl border text-left flex items-center gap-4 transition-all duration-200 active:scale-[0.98] ${
+                            editSettings.fitnessGoal === goal.id
+                              ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-600/20' 
+                              : isDark 
+                                ? 'bg-slate-900/50 border-white/5 hover:bg-white/5' 
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <div className={`p-2.5 rounded-xl ${editSettings.fitnessGoal === goal.id ? 'bg-white/20 text-white' : isDark ? 'bg-white/5 text-slate-400' : 'bg-white text-slate-500 shadow-sm'}`}>
+                            {goal.icon}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className={`text-xs font-black uppercase ${editSettings.fitnessGoal === goal.id ? 'text-white' : isDark ? 'text-slate-200' : 'text-slate-900'}`}>{goal.label}</span>
+                            <span className={`text-[10px] font-medium leading-tight ${editSettings.fitnessGoal === goal.id ? 'text-blue-100' : 'text-slate-500'}`}>{goal.desc}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+                
+                <div className="flex-none pt-2">
+                  <button 
+                    onClick={() => setCurrentView('main')}
+                    className={`w-full py-3.5 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-lg transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800 text-white border border-white/10' : 'bg-white text-slate-900 border border-slate-200'}`}
+                  >
+                    Back to Settings
+                  </button>
+                </div>
+             </div>
            ) : (
              <div className="flex flex-col gap-3 animate-in slide-in-from-left-4 duration-300">
                
@@ -250,7 +416,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                {/* Equipment */}
                <div className="flex flex-col gap-1.5">
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Equipment</label>
-                 <button onClick={() => setIsEquipmentViewOpen(true)} className={`w-full py-3 rounded-xl border flex items-center justify-between px-3.5 transition-all ${isDark ? 'bg-slate-900/50 border-white/5 hover:bg-white/5' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+                 <button onClick={() => setCurrentView('equipment')} className={`w-full py-3 rounded-xl border flex items-center justify-between px-3.5 transition-all ${isDark ? 'bg-slate-900/50 border-white/5 hover:bg-white/5' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
                    <div className="flex items-center gap-2.5">
                      <Bike className="w-4 h-4 text-blue-500" />
                      <div className="flex flex-col items-start">
@@ -278,9 +444,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                
                {/* Footer Buttons */}
                <div className="flex flex-col gap-2 mt-1 pb-4">
-                 <button onClick={() => { onOpenTraining(); onClose(); }} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' : 'bg-orange-50 border-orange-200 text-orange-600'}`}>
-                   <Trophy className="w-4 h-4" />
-                   <span className="text-[10px] font-black uppercase tracking-widest">Training Mode</span>
+                 <button onClick={() => setCurrentView('personal')} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' : 'bg-orange-50 border-orange-200 text-orange-600'}`}>
+                   <User className="w-4 h-4" />
+                   <span className="text-[10px] font-black uppercase tracking-widest">Personal Settings</span>
                  </button>
                  <button onClick={onOpenConnectivity} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-blue-500/5 border-white/5 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                    <Activity className="w-4 h-4 text-blue-500" />
@@ -291,7 +457,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
            )}
         </div>
 
-        {!isEquipmentViewOpen && (
+        {currentView === 'main' && (
           <div className="flex-none pt-2">
             <button 
               onClick={handleSaveClick} 

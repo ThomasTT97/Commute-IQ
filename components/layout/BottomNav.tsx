@@ -37,7 +37,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         ? 'bg-[#05070a]/95 backdrop-blur-3xl border-white/5 shadow-[0_-8px_30px_rgba(0,0,0,0.6)]' 
         : 'bg-white/95 backdrop-blur-3xl border-slate-200 shadow-[0_-4px_15px_rgba(0,0,0,0.05)]'
     }`}>
-      <div className="w-full max-w-md mx-auto flex items-center justify-between gap-0 px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-md mx-auto flex items-center justify-between gap-0 px-2 pt-4 pb-[max(2px,calc(env(safe-area-inset-bottom)-24px))]">
         <button 
           onClick={() => setViewMode('daily')}
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-90 ${
