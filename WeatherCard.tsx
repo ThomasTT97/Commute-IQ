@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { LocationSuggestion, WeatherCondition } from './types';
 import { BelgianLocation } from './locations';
@@ -249,8 +250,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
-  // COMPLETELY OPAQUE BACKGROUND COLORS - REMOVED BACKDROP BLUR TO FIX RENDERING ARTIFACTS/BLURRINESS
-  const popupBgClass = isDark ? 'bg-[#0a0c10] border-white/20 shadow-2xl' : 'bg-white border-slate-300 shadow-2xl';
+  const popupBgClass = isDark ? 'bg-[#0f1115] border-white/20 shadow-2xl' : 'bg-white border-slate-300 shadow-2xl';
   const blockBgClass = isDark ? 'bg-[#0f1115] border-white/5 hover:bg-[#14171d]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100';
 
   const getPopupStyles = (isLeftOffset = false, isRightOffset = false, isFullWidth = false) => {
@@ -258,31 +258,30 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     const horizontal = isFullWidth ? 'left-0 right-0' : (isRightOffset ? 'right-0' : (isLeftOffset ? 'left-0' : 'left-0 right-0'));
     const animation = popupDirection === 'up' ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2';
     const widthClass = isFullWidth ? 'w-full' : 'w-max max-w-[calc(100vw-3rem)] sm:max-w-[320px]';
-    // Added transform-gpu to ensure sharper text rendering
     return `${vertical} ${horizontal} animate-in fade-in ${animation} duration-200 ${widthClass} z-[1100] transform-gpu`;
   };
 
   if (compact) {
     return (
-      <div className={`w-full rounded-[1.5rem] p-4 sm:p-5 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500 bg-[#0a0c10]' : 'border-blue-300 bg-blue-50') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-[9px] font-black tracking-[0.15em] text-slate-500 uppercase">
-            <div className="flex items-center gap-2"><Calendar className="w-3 h-3 text-blue-500/50" /><span>{dateLabel}</span></div>
-            <div className="flex items-center gap-2"><Clock className="w-3 h-3 text-slate-600" /><span>{timeRange}</span></div>
+      <div className={`w-full rounded-[1.5rem] p-3 sm:p-4 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500 bg-[#0a0c10]' : 'border-blue-300 bg-blue-50') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[8px] font-black tracking-[0.15em] text-slate-500 uppercase">
+            <div className="flex items-center gap-1.5"><Calendar className="w-2.5 h-2.5 text-blue-500/50" /><span>{dateLabel}</span></div>
+            <div className="flex items-center gap-1.5"><Clock className="w-2.5 h-2.5 text-slate-600" /><span>{timeRange}</span></div>
           </div>
-          <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-tight truncate border-t pt-2 ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
-            <MapPin className="w-3 h-3 flex-none text-blue-500/50" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2.5 h-2.5 opacity-30 flex-none" /><span className="truncate">{endLocation}</span>
+          <div className={`flex items-center gap-2 text-[9px] font-bold uppercase tracking-tight truncate border-t pt-1.5 ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
+            <MapPin className="w-2.5 h-2.5 flex-none text-blue-500/50" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2 h-2 opacity-30 flex-none" /><span className="truncate">{endLocation}</span>
           </div>
         </div>
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center gap-4 sm:gap-6"><span className={`text-2xl sm:text-3xl font-black leading-none tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{Math.round(condition?.temp ?? 0)}°</span></div>
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-4 sm:gap-6"><span className={`text-xl sm:text-2xl font-black leading-none tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{Math.round(condition?.temp ?? 0)}°</span></div>
           <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-3">
-                <Lightbulb className={`w-4.5 h-4.5 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]' : 'text-slate-700 opacity-40'}`} />
-                <div className="flex gap-3 sm:gap-4 text-[10px] sm:text-[11px] font-black items-center"><span className={surface.color}>{surface.label}</span><span className="text-slate-700 opacity-20">|</span><span className={iceInfo.label === 'NO ICE' ? 'text-emerald-500' : 'text-red-500'}>{iceInfo.label}</span></div>
+              <div className="flex items-center gap-2.5">
+                <Lightbulb className={`w-4 h-4 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]' : 'text-slate-700 opacity-40'}`} />
+                <div className="flex gap-2 sm:gap-3 text-[9px] sm:text-[10px] font-black items-center"><span className={surface.color}>{surface.label}</span><span className="text-slate-700 opacity-20">|</span><span className={iceInfo.label === 'NO ICE' ? 'text-emerald-500' : 'text-red-500'}>{iceInfo.label}</span></div>
               </div>
             </div>
-          <div className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-[10px] sm:text-[11px] border tracking-wider transition-colors ${isDark ? 'bg-[#1a1d24] border-white/5' : 'bg-slate-50 border-slate-200'} ${showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}`}>{showRawWind ? `${Math.round(condition?.windSpeed ?? 0)} ${getCardinal(condition?.windDirection ?? 0)}` : wind.label} <Wind className="w-5.5 h-5.5" /></div>
+          <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl font-black text-[9px] sm:text-[10px] border tracking-wider transition-colors ${isDark ? 'bg-[#1a1d24] border-white/5' : 'bg-slate-50 border-slate-200'} ${showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}`}>{showRawWind ? `${Math.round(condition?.windSpeed ?? 0)} ${getCardinal(condition?.windDirection ?? 0)}` : wind.label} <Wind className="w-4 h-4" /></div>
         </div>
       </div>
     );
@@ -293,9 +292,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 shadow-sm';
 
   return (
-    <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-6 sm:pb-8 shadow-2xl transition-all relative ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
+    <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-5 shadow-2xl transition-all relative ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
       
-      {/* LOCAL BACKDROP */}
       {isAnyPopupOpen && (
         <div 
           className="fixed inset-0 z-[900] bg-black/60 transition-all duration-300 cursor-default" 
@@ -336,19 +334,19 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         </div>
       )}
 
-      <div className="flex-none flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">
-        <div className="flex items-center gap-2"><Calendar className="w-3.5 h-3.5 text-blue-500/50" /><span>{dateLabel}</span><Clock className="w-3.5 h-3.5 text-slate-600 ml-1.5" /><span>{timeRange}</span></div>
+      <div className="flex-none flex items-center justify-between text-[9px] font-black tracking-widest text-slate-500 uppercase mb-1.5">
+        <div className="flex items-center gap-1.5"><Calendar className="w-3 h-3 text-blue-500/50" /><span>{dateLabel}</span><Clock className="w-3 h-3 text-slate-600 ml-1" /><span>{timeRange}</span></div>
       </div>
-      <div className="flex-none flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tight truncate max-w-[70%]"><MapPin className="w-3.5 h-3.5 text-blue-500/50 flex-none" /><span className="truncate">{startLocation}</span><ArrowRight className="w-3 h-3 opacity-30 flex-none" /><span className="truncate">{endLocation}</span></div>
-        {distance && (<div className="flex items-center gap-2 text-[9px] font-black text-slate-500 flex-none"><Navigation className="w-3 h-3 text-blue-500" /><span>{distance.toFixed(1)} KM</span></div>)}
+      <div className="flex-none flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate max-w-[70%]"><MapPin className="w-3 h-3 text-blue-500/50 flex-none" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2.5 h-2.5 opacity-30 flex-none" /><span className="truncate">{endLocation}</span></div>
+        {distance && (<div className="flex items-center gap-1.5 text-[8px] font-black text-slate-500 flex-none"><Navigation className="w-2.5 h-2.5 text-blue-500" /><span>{distance.toFixed(1)} KM</span></div>)}
       </div>
 
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && locationAdvice.length > 0) || onToggleIntelligence) && (
-        <div className="flex-none mb-3 flex gap-2 relative z-[1000]">
-          {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Sparkles className="w-3 h-3" />route</button>)}
-          {locationAdvice && locationAdvice.length > 0 && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><MapIcon className="w-3 h-3" />location</button>)}
-          {onToggleIntelligence && (<button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${isIntelligenceExpanded ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Zap className="w-3 h-3" />Intelligence</button>)}
+        <div className="flex-none mb-2 flex gap-1.5 relative z-[1000]">
+          {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Sparkles className="w-2.5 h-2.5" />route</button>)}
+          {locationAdvice && locationAdvice.length > 0 && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><MapIcon className="w-2.5 h-2.5" />location</button>)}
+          {onToggleIntelligence && (<button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all ${isIntelligenceExpanded ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Zap className="w-2.5 h-2.5" />Intel</button>)}
           
           {showRoutePopup && (
             <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1200] transform-gpu`}>
@@ -374,10 +372,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         </div>
       )}
 
-      <div className="flex-none flex items-center justify-between mb-4 sm:mb-6">
+      <div className="flex-none flex items-center justify-between mb-3 sm:mb-4">
         <div className="flex flex-col relative">
           <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-all active:opacity-70 text-left">
-            <span className={`text-5xl sm:text-6xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{Math.round(condition?.temp ?? 0)}°</span><span className="text-xl font-bold text-slate-500 tracking-tighter ml-1">C</span>
+            <span className={`text-4xl sm:text-5xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{Math.round(condition?.temp ?? 0)}°</span><span className="text-lg font-bold text-slate-500 tracking-tighter ml-1">C</span>
           </button>
           {showTempDetails && (
             <div className={`absolute p-4 rounded-2xl border min-w-[150px] ${getPopupStyles()} ${popupBgClass}`}>
@@ -390,9 +388,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           )}
         </div>
         <div className="relative">
-          <button onClick={toggleLights} className={`rounded-[1.25rem] p-3 flex items-center gap-3.5 min-w-[120px] transition-all active:scale-[0.98] ${isDark ? 'bg-[#161920] border border-white/5 hover:bg-[#1c2029]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
-            <Lightbulb className={`w-6 h-6 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
-            <div className="flex flex-col text-left"><span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
+          <button onClick={toggleLights} className={`rounded-[1.25rem] p-2.5 flex items-center gap-3 min-w-[110px] transition-all active:scale-[0.98] ${isDark ? 'bg-[#161920] border border-white/5 hover:bg-[#1c2029]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+            <Lightbulb className={`w-5 h-5 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
+            <div className="flex flex-col text-left"><span className="text-[6px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[9px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
           </button>
           {showLightsDetails && (
             <div className={`absolute p-4 rounded-2xl border min-w-[160px] ${getPopupStyles(false, true)} ${popupBgClass}`}>
@@ -406,10 +404,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 flex-grow min-h-0">
-        <button onClick={toggleWind} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showWindDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-1"><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span></div>
-          <div className="flex items-center justify-between">{showRawWind ? (<span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-[10px] opacity-60">KM/H</span> {getCardinal(condition?.windDirection ?? 0)}</span>) : (<span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${wind.color}`}>{wind.label}</span>)}<div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div></div>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 flex-grow min-h-0">
+        <button onClick={toggleWind} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showWindDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span></div>
+          <div className="flex items-center justify-between">{showRawWind ? (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-[8px] opacity-60">KM/H</span> {getCardinal(condition?.windDirection ?? 0)}</span>) : (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${wind.color}`}>{wind.label}</span>)}<div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div></div>
           {showWindDetails && (
             <div className={`absolute shadow-2xl flex items-center justify-between p-3 rounded-2xl border ${getPopupStyles(true, false)} ${popupBgClass}`}>
               <div className="flex flex-col gap-1.5 flex-1"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Wind Details</span><p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>Speed: {Math.round(condition?.windSpeed ?? 0)} km/h<br/>Direction: {getCardinal(condition?.windDirection ?? 0)}</p></div>
@@ -418,19 +416,19 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           )}
         </button>
 
-        <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-1"><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span></div>
-          <div className="flex items-center justify-between"><span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span><div className={surface.color}>{surface.icon}</div></div>
+        <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SURFACE</span></div>
+          <div className="flex items-center justify-between"><span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${surface.color}`}>{surface.label}</span><div className={surface.color}>{surface.icon}</div></div>
         </button>
 
-        <button onClick={toggleIce} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showIceDetails ? 'ring-1 ring-red-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-1"><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span></div>
-          <div className="flex items-center justify-between"><span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${iceInfo.color}`}>{iceInfo.label}</span><div className={iceInfo.color}>{iceInfo.icon}</div></div>
+        <button onClick={toggleIce} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showIceDetails ? 'ring-1 ring-red-500/50' : ''} ${blockBgClass}`}>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">ICE RISK</span></div>
+          <div className="flex items-center justify-between"><span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${iceInfo.color}`}>{iceInfo.label}</span><div className={iceInfo.color}>{iceInfo.icon}</div></div>
         </button>
 
-        <button onClick={toggleScore} className={`text-left rounded-[1.25rem] px-4 py-3 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showScoreDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
-          <div className="flex items-center justify-between mb-1"><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span></div>
-          <div className="flex items-center justify-between"><span className={`text-xl sm:text-[1.8rem] font-black tracking-tighter ${scoreColor}`}>{Math.round(safetyScore ?? 0)}%</span><div className={scoreColor}><Bike className="w-5.5 h-5.5" /></div></div>
+        <button onClick={toggleScore} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showScoreDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
+          <div className="flex items-center justify-between mb-0.5"><span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">SCORE</span></div>
+          <div className="flex items-center justify-between"><span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${scoreColor}`}>{Math.round(safetyScore ?? 0)}%</span><div className={scoreColor}><Bike className="w-5.5 h-5.5" /></div></div>
         </button>
       </div>
     </div>

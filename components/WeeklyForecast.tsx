@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { ChevronRight, AlertTriangle, Droplets, ShieldCheck, Info, Loader2, X, BrainCircuit, Zap, ArrowRight, Sparkles } from 'lucide-react';
 
@@ -7,6 +6,7 @@ interface WeeklyForecastProps {
   loadingOffsets?: number[];
   onSelectDay: (offset: number) => void;
   theme?: 'dark' | 'light';
+  onToggleMode?: () => void;
 }
 
 const OFFSETS = [0, 1, 2, 3, 4, 5, 6];
@@ -36,7 +36,7 @@ const getScoreStyles = (score: number, hasPulse: boolean, isDark: boolean) => {
   };
 };
 
-export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, loadingOffsets = [], onSelectDay, theme = 'dark' }) => {
+export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, loadingOffsets = [], onSelectDay, theme = 'dark', onToggleMode }) => {
   const isDark = theme === 'dark';
   const [showOutlookInfo, setShowOutlookInfo] = useState(false);
 
@@ -133,18 +133,27 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, lo
   }, [pulseDataMap, loadingOffsets]);
 
   return (
-    <div className="h-full flex flex-col gap-2 pb-2 overflow-hidden">
-      {/* SCREEN TITLE AREA */}
-      <div className="flex items-center justify-between px-1 mb-0.5 flex-none">
+    <div className="h-full flex flex-col gap-3 pb-4 overflow-hidden">
+      {/* SCREEN TITLE AREA - Replaced with Toggle Switch */}
+      <div className="flex items-center justify-between px-1 flex-none">
+        <div className={`flex p-1 rounded-xl border ${isDark ? 'bg-black/40 border-white/10' : 'bg-slate-100 border-slate-200'}`}>
+          <button 
+            className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isDark ? 'bg-white/10 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm'}`}
+          >
+            Commute
+          </button>
+          <button 
+            onClick={onToggleMode}
+            className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Training
+          </button>
+        </div>
         <button 
           onClick={() => setShowOutlookInfo(true)}
-          className="flex items-center gap-2.5 group active:opacity-70 transition-opacity"
+          className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/5 text-slate-500 hover:text-blue-400' : 'hover:bg-slate-100 text-slate-400 hover:text-blue-700'}`}
         >
-          <div className={`p-1.5 rounded-lg border ${isDark ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-100 border-blue-300'}`}>
-            <Zap className="w-4 h-4 text-blue-600" />
-          </div>
-          <h2 className={`text-[13px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-white' : 'text-slate-900'}`}>7 day commute outlook</h2>
-          <Info className={`w-3.5 h-3.5 transition-opacity ${isDark ? 'text-slate-500 group-hover:text-blue-400' : 'text-slate-400 group-hover:text-blue-700'}`} />
+          <Info className="w-4 h-4" />
         </button>
       </div>
 

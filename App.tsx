@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
@@ -72,9 +71,8 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
-  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+  const [isPopupActive, setIsPopupActive] = useState(false);
 
-  // Derive last update time from cache
   const lastUpdateFromCache = useMemo(() => {
     const updates = Object.values(pulseDataMap).map((d: any) => d.lastUpdated).filter(Boolean);
     return updates.length > 0 ? Math.max(...updates) : undefined;
@@ -88,7 +86,6 @@ const App: React.FC = () => {
     lastWeatherUpdate: lastUpdateFromCache
   });
 
-  // Sync connection status timestamp when cache derives a new one
   useEffect(() => {
     if (lastUpdateFromCache) {
       setConnectionStatus(prev => ({ ...prev, lastWeatherUpdate: lastUpdateFromCache }));
@@ -105,7 +102,6 @@ const App: React.FC = () => {
       errorMessage: undefined
     }));
     
-    // 1. Open-Meteo Check
     try {
       await fetchRawWeatherData({ lat: 51.0, lng: 3.7 });
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'ok' }));
@@ -113,7 +109,6 @@ const App: React.FC = () => {
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'fail' }));
     }
 
-    // 2. Maps Check (Using explicit model for maps in service)
     try {
       await resolveAddress("Test Connectivity Check");
       setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'ok' }));
@@ -121,10 +116,8 @@ const App: React.FC = () => {
       setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'fail' }));
     }
 
-    // 3. Generic LLM Check (Robust Chain including Lite)
     try {
       const isConnected = await checkLLMConnectivity();
-      
       let llmStatus: 'ok' | 'fallback' | 'fail' = 'ok';
       let errorMsg = undefined;
 
@@ -215,6 +208,12 @@ const App: React.FC = () => {
   }, [settings.morningWindow, settings.eveningWindow, getTarget]);
 
   const [selectedDateOffset, setSelectedDateOffset] = useState<number>(nextCommuteInfo.offset);
+  
+  // Keep training sync with shared header date offset
+  useEffect(() => {
+    setTraining(prev => ({ ...prev, dateOffset: selectedDateOffset }));
+  }, [selectedDateOffset]);
+
   const [loading, setLoading] = useState(false);
   const [loadingOffsets, setLoadingOffsets] = useState<number[]>([]);
 
@@ -740,24 +739,24 @@ const App: React.FC = () => {
     return loadingOffsets.includes(selectedDateOffset);
   }, [loadingOffsets, selectedDateOffset]);
 
+  const isWeeklyMode = viewMode === 'weekly' || viewMode === 'training-weekly';
+
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
-      <Header 
-        onOpenInfo={() => setIsInfoOpen(true)}
-        viewMode={viewMode}
-        isDateDropdownOpen={isDateDropdownOpen}
-        setIsDateDropdownOpen={setIsDateDropdownOpen}
-        selectedDateOffset={selectedDateOffset}
-        setSelectedDateOffset={setSelectedDateOffset}
-        setViewMode={(m) => setViewMode(m)}
-        activeDayLabels={activeDayLabels}
-        loading={loading}
-        onSync={() => viewMode === 'training' ? syncTraining() : syncFullWeek(settings)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        isDark={isDark}
-      />
+      {!isWeeklyMode && (
+        <Header 
+          onOpenInfo={() => setIsInfoOpen(true)}
+          viewMode={viewMode}
+          selectedDateOffset={selectedDateOffset}
+          setSelectedDateOffset={setSelectedDateOffset}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          isDark={isDark}
+        />
+      )}
 
-      <main className="flex-1 px-5 pt-2 pb-3 flex flex-col gap-4 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative">
+      <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${
+        isWeeklyMode ? 'pt-[max(1.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'
+      } ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
         {viewMode === 'daily' && (
           <DailyView 
             activeLegIndex={activeLegIndex}
@@ -772,11 +771,18 @@ const App: React.FC = () => {
             isCurrentDayLoading={isCurrentDayLoading}
             isCurrentDayEnhanced={isCurrentDayEnhanced}
             isDark={isDark}
+            onPopupStateChange={setIsPopupActive}
           />
         )}
         {viewMode === 'weekly' && (
           <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
-            <WeeklyForecast pulseDataMap={pulseDataMap} loadingOffsets={loadingOffsets} theme={settings.theme} onSelectDay={(offset: number) => { setSelectedDateOffset(offset); setViewMode('daily'); }} />
+            <WeeklyForecast 
+              pulseDataMap={pulseDataMap} 
+              loadingOffsets={loadingOffsets} 
+              theme={settings.theme} 
+              onSelectDay={(offset: number) => { setSelectedDateOffset(offset); setViewMode('daily'); }}
+              onToggleMode={() => { syncTrainingWeek(); }}
+            />
           </div>
         )}
         {(viewMode === 'training' || viewMode === 'training-weekly') && (
@@ -795,7 +801,7 @@ const App: React.FC = () => {
             onSearchChange={(val) => { setTrainingSearch(val); setShowTrainingSuggestions(true); }}
             onSetToHome={handleSetTrainingToHome}
             onDateOffsetChange={(offset) => { 
-                setTraining(prev => ({...prev, dateOffset: offset})); 
+                setSelectedDateOffset(offset);
                 setManualStartHour(null); 
                 if (viewMode === 'training-weekly') setViewMode('training');
             }}
@@ -810,11 +816,13 @@ const App: React.FC = () => {
             weeklyData={trainingWeek}
             weeklyLoading={isTrainingWeekLoading}
             onSelectWeeklySlot={(offset, hour) => {
-               setTraining(prev => ({ ...prev, dateOffset: offset }));
+               setSelectedDateOffset(offset);
                setManualStartHour(hour);
                setViewMode('training');
             }}
             aiEnabled={!settings.disableAI}
+            onPopupStateChange={setIsPopupActive}
+            onToggleMode={() => setViewMode('weekly')}
           />
         )}
       </main>

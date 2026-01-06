@@ -32,7 +32,7 @@ const AccordionItem = ({ id, title, content, expandedInfoItem, setExpandedInfoIt
 );
 
 export const InfoModal: React.FC<InfoModalProps> = ({ isOpen, onClose, isDark, language }) => {
-  const [expandedInfoItem, setExpandedInfoItem] = useState<string | null>('quick-start');
+  const [expandedInfoItem, setExpandedInfoItem] = useState<string | null>(null);
   const t = TRANSLATIONS[language || 'en'];
 
   if (!isOpen) return null;
