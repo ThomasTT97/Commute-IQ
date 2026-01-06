@@ -143,7 +143,7 @@ export const WeeklyForecast: React.FC<WeeklyForecastProps> = ({ pulseDataMap, lo
           <div className={`p-1.5 rounded-lg border ${isDark ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-100 border-blue-300'}`}>
             <Zap className="w-4 h-4 text-blue-600" />
           </div>
-          <h2 className={`text-[13px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-white' : 'text-slate-900'}`}>7-Day Outlook</h2>
+          <h2 className={`text-[13px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-white' : 'text-slate-900'}`}>7 day commute outlook</h2>
           <Info className={`w-3.5 h-3.5 transition-opacity ${isDark ? 'text-slate-500 group-hover:text-blue-400' : 'text-slate-400 group-hover:text-blue-700'}`} />
         </button>
       </div>

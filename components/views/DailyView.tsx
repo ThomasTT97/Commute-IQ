@@ -79,17 +79,17 @@ export const DailyView: React.FC<DailyViewProps> = ({
     const defaultText = activeWeather?.surfaceReason || (isCurrentDayLoading ? "Connecting to weather satellite..." : "Processing telemetry for tactical riding advice...");
     
     if (settings.disableAI || (!isCurrentDayEnhanced && !isCurrentDayLoading)) {
-      return <p className={`text-[13px] font-medium leading-[1.5] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{defaultText}</p>;
+      return <p className={`text-[12px] font-medium leading-[1.4] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{defaultText}</p>;
     }
 
     if (isCurrentDayEnhanced) {
-      return <TypewriterText text={activeWeather?.surfaceReason || ""} speed={15} className={`text-[13px] font-medium leading-[1.5] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
+      return <TypewriterText text={activeWeather?.surfaceReason || ""} speed={15} className={`text-[12px] font-medium leading-[1.4] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
     }
 
     return (
-      <div className="flex items-center gap-2 py-1">
+      <div className="flex items-center gap-2 py-0.5">
          <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
-         <span className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Synthesizing route intelligence...</span>
+         <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Synthesizing route intelligence...</span>
       </div>
     );
   };
@@ -105,7 +105,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
   const activeLabel = activeLegIndex === 0 ? "Morning" : "Evening";
 
   return (
-    <div className="flex flex-col gap-4 flex-1 h-full overflow-hidden">
+    <div className="flex flex-col gap-3 flex-1 h-full overflow-hidden">
       {/* Morning Card */}
       <div 
         className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative ${
@@ -126,20 +126,20 @@ export const DailyView: React.FC<DailyViewProps> = ({
 
       {/* Intelligence Box */}
       <div 
-        className={`border rounded-[2rem] p-5 flex flex-col gap-3 transition-all duration-500 ease-in-out overflow-hidden shadow-xl z-10 ${
+        className={`border rounded-[1.75rem] flex flex-col transition-all duration-500 ease-in-out overflow-hidden shadow-xl z-10 ${
           isAdviceExpanded 
-            ? `flex-1 min-h-0 ${isDark ? 'bg-blue-600/5 border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'}`
-            : `flex-none cursor-pointer active:scale-[0.99] ${isDark ? 'bg-blue-600/5 border-blue-500/20 shadow-blue-500/5' : 'bg-white border-blue-100 shadow-sm'}`
+            ? `flex-1 min-h-0 p-5 gap-3 ${isDark ? 'bg-blue-600/5 border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'}`
+            : `flex-none cursor-pointer px-5 py-3 gap-2 active:scale-[0.99] ${isDark ? 'bg-blue-600/5 border-blue-500/20 shadow-blue-500/5' : 'bg-white border-blue-100 shadow-sm'}`
         }`}
         onClick={() => !isAdviceExpanded && setIsAdviceExpanded(true)}
       >
         <div className="flex items-center justify-between w-full flex-none">
           <div className="flex items-center gap-2">
-            <div className={`p-1.5 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
-              <Zap className="w-4 h-4" />
+            <div className={`p-1 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
+              <Zap className="w-3.5 h-3.5" />
             </div>
             <div className="flex flex-col">
-              <span className={`text-[11px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && !isCurrentDayEnhanced ? 'text-slate-600' : 'text-blue-600'}`}>
+              <span className={`text-[10px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && !isCurrentDayEnhanced ? 'text-slate-600' : 'text-blue-600'}`}>
                 {!settings.disableAI && !isCurrentDayEnhanced ? 'Deep Analysis...' : 'Commute Intelligence'}
               </span>
               {isAdviceExpanded && (

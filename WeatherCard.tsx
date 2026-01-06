@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { LocationSuggestion, WeatherCondition } from './types';
 import { BelgianLocation } from './locations';
@@ -250,8 +249,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
   const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
 
-  // COMPLETELY OPAQUE BACKGROUND COLORS
-  const popupBgClass = isDark ? 'bg-[#05070a] border-white/20 shadow-2xl backdrop-blur-3xl' : 'bg-white border-slate-300 shadow-2xl';
+  // COMPLETELY OPAQUE BACKGROUND COLORS - REMOVED BACKDROP BLUR TO FIX RENDERING ARTIFACTS/BLURRINESS
+  const popupBgClass = isDark ? 'bg-[#0a0c10] border-white/20 shadow-2xl' : 'bg-white border-slate-300 shadow-2xl';
   const blockBgClass = isDark ? 'bg-[#0f1115] border-white/5 hover:bg-[#14171d]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100';
 
   const getPopupStyles = (isLeftOffset = false, isRightOffset = false, isFullWidth = false) => {
@@ -259,7 +258,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     const horizontal = isFullWidth ? 'left-0 right-0' : (isRightOffset ? 'right-0' : (isLeftOffset ? 'left-0' : 'left-0 right-0'));
     const animation = popupDirection === 'up' ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2';
     const widthClass = isFullWidth ? 'w-full' : 'w-max max-w-[calc(100vw-3rem)] sm:max-w-[320px]';
-    return `${vertical} ${horizontal} animate-in fade-in ${animation} duration-200 ${widthClass} z-[1000]`;
+    // Added transform-gpu to ensure sharper text rendering
+    return `${vertical} ${horizontal} animate-in fade-in ${animation} duration-200 ${widthClass} z-[1100] transform-gpu`;
   };
 
   if (compact) {
@@ -288,13 +288,17 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     );
   }
 
+  const actionBtnClass = isDark 
+    ? 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]' 
+    : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 shadow-sm';
+
   return (
     <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-6 sm:pb-8 shadow-2xl transition-all relative ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
       
-      {/* LOCAL BACKDROP -catch clicks and block elements beneath card */}
+      {/* LOCAL BACKDROP */}
       {isAnyPopupOpen && (
         <div 
-          className="fixed inset-0 z-[900] bg-black/40 backdrop-blur-[2px] transition-all duration-300 cursor-default" 
+          className="fixed inset-0 z-[900] bg-black/60 transition-all duration-300 cursor-default" 
           onClick={(e) => { e.stopPropagation(); closeAllPopups(); }} 
         />
       )}
@@ -341,21 +345,30 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       </div>
 
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && locationAdvice.length > 0) || onToggleIntelligence) && (
-        <div className="flex-none mb-3 flex gap-2 relative z-[100]">
-          {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]'}`}><Sparkles className="w-3 h-3" />route</button>)}
-          {locationAdvice && locationAdvice.length > 0 && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]'}`}><MapIcon className="w-3 h-3" />location</button>)}
-          {onToggleIntelligence && (<button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${isIntelligenceExpanded ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]'}`}><Zap className="w-3 h-3" />Intelligence</button>)}
+        <div className="flex-none mb-3 flex gap-2 relative z-[1000]">
+          {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Sparkles className="w-3 h-3" />route</button>)}
+          {locationAdvice && locationAdvice.length > 0 && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><MapIcon className="w-3 h-3" />location</button>)}
+          {onToggleIntelligence && (<button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${isIntelligenceExpanded ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Zap className="w-3 h-3" />Intelligence</button>)}
           
           {showRoutePopup && (
-            <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1100]`}>
+            <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1200] transform-gpu`}>
               <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black uppercase text-blue-500">Suggested Points</span><button onClick={() => setShowRoutePopup(false)} className="p-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-2">{optimizationAdvice?.map((loc, idx) => (<div key={idx} className={`p-2 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5' : 'bg-slate-50 border-slate-200'}`}><span className="text-[11px] font-black uppercase text-white">{loc.name}</span></div>))}</div>
+              <div className="flex flex-col gap-2">{optimizationAdvice?.slice(0, 5).map((loc, idx) => (
+                <div key={idx} className={`p-2 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5' : 'bg-slate-100 border-slate-300'}`}>
+                  <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                </div>
+              ))}</div>
             </div>
           )}
           {showLocationPopup && (
-            <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1100]`}>
+            <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1200] transform-gpu`}>
               <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black uppercase text-blue-500">Alternatives</span><button onClick={() => setShowLocationPopup(false)} className="p-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-2">{locationAdvice?.map((loc, idx) => (<button key={idx} onClick={() => onSelectLocationAdvice?.(loc)} className={`p-2 rounded-xl border flex items-center justify-between transition-colors hover:bg-blue-500/10 ${isDark ? 'bg-black border-white/5' : 'bg-slate-50 border-slate-200'}`}><span className="text-[11px] font-black uppercase text-white">{loc.name}</span><MapIcon className="w-3 h-3 text-blue-500" /></button>))}</div>
+              <div className="flex flex-col gap-2">{locationAdvice?.slice(0, 5).map((loc, idx) => (
+                <button key={idx} onClick={() => onSelectLocationAdvice?.(loc)} className={`p-2 rounded-xl border flex items-center justify-between transition-colors ${isDark ? 'bg-black border-white/5 hover:bg-blue-500/10' : 'bg-slate-100 border-slate-300 hover:bg-blue-50'}`}>
+                  <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                  <MapIcon className="w-3 h-3 text-blue-500" />
+                </button>
+              ))}</div>
             </div>
           )}
         </div>

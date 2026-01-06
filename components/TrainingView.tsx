@@ -21,7 +21,10 @@ import {
   CalendarRange,
   Sparkles,
   Calculator,
-  CloudRain
+  CloudRain,
+  Info,
+  BrainCircuit,
+  Trophy
 } from 'lucide-react';
 import { TrainingState } from '../types';
 import { BelgianLocation } from '../locations';
@@ -91,6 +94,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const timePickerRef = useRef<HTMLDivElement>(null);
   const dayScrollRef = useRef<HTMLDivElement>(null);
   const [isIntelligenceExpanded, setIsIntelligenceExpanded] = useState(false);
+  const [showTrainingOutlookInfo, setShowTrainingOutlookInfo] = useState(false);
   const [typingStep, setTypingStep] = useState(0);
   const [isPopupActive, setIsPopupActive] = useState(false);
   
@@ -180,61 +184,121 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
 
   return (
     <div className="h-full flex flex-col gap-3 overflow-hidden pb-1 animate-in fade-in duration-300">
+      
+      {/* HEADER SECTION */}
       <div className={`flex-none flex items-center gap-2.5 px-1 relative z-50 transition-all duration-300 ${isPopupActive ? 'brightness-[0.4] opacity-50 scale-[0.98] pointer-events-none' : ''}`}>
-        <button 
-          onClick={onReturn}
-          className={`flex-none flex items-center gap-1.5 px-2.5 h-10 rounded-xl border transition-all ${
-            isDark ? 'bg-[#0f1115] border-white/5 text-slate-400 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-blue-700'
-          }`}
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span className="text-[8px] font-black uppercase tracking-widest leading-none">EXIT</span>
-        </button>
-
-        <div className={`flex-1 h-12 rounded-[1.25rem] border overflow-hidden relative ${isDark ? 'bg-black/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
-          <div className={`absolute inset-y-0 left-0 w-8 z-10 pointer-events-none bg-gradient-to-r ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
-          <div className={`absolute inset-y-0 right-0 w-8 z-10 pointer-events-none bg-gradient-to-l ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
-          
-          <div 
-            ref={dayScrollRef}
-            className="h-full flex items-center gap-3 overflow-x-auto hide-scrollbar scroll-smooth px-4"
-          >
+        {!isWeeklyView ? (
+          <>
             <button 
-              onClick={onShowWeekly}
-              className={`flex-none w-11 h-8 flex flex-col items-center justify-center transition-all z-30 rounded-lg ${
-                isWeeklyView 
-                  ? (isDark ? 'bg-blue-500/20 text-blue-400 scale-105' : 'bg-blue-100 text-blue-700 scale-105')
-                  : (isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')
+              onClick={onReturn}
+              className={`flex-none flex items-center gap-1.5 px-2.5 h-10 rounded-xl border transition-all ${
+                isDark ? 'bg-[#0f1115] border-white/5 text-slate-400 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-blue-700'
               }`}
             >
-              <CalendarRange className="w-3.5 h-3.5 mb-0.5" />
-              <span className="text-[7px] font-black uppercase leading-none">Week</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="text-[8px] font-black uppercase tracking-widest leading-none">EXIT</span>
             </button>
 
-            <div className={`w-px h-6 flex-none mx-1 ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
-
-            {dayOffsets.map(o => {
-              const l = getDayLabel(o);
-              const isActive = !isWeeklyView && training.dateOffset === o;
-              return (
+            <div className={`flex-1 h-12 rounded-[1.25rem] border overflow-hidden relative ${isDark ? 'bg-black/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+              <div className={`absolute inset-y-0 left-0 w-8 z-10 pointer-events-none bg-gradient-to-r ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
+              <div className={`absolute inset-y-0 right-0 w-8 z-10 pointer-events-none bg-gradient-to-l ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
+              
+              <div 
+                ref={dayScrollRef}
+                className="h-full flex items-center gap-3 overflow-x-auto hide-scrollbar scroll-smooth px-4"
+              >
                 <button 
-                  key={o} 
-                  data-offset={o}
-                  onClick={() => onDateOffsetChange(o)}
-                  className={`flex-none w-11 h-8 flex flex-col items-center justify-center transition-all z-30 ${
-                    isActive 
-                      ? (isDark ? 'text-blue-400 scale-110 font-black' : 'text-slate-950 scale-110 font-black')
-                      : (isDark ? 'text-slate-700 font-bold' : 'text-slate-400 font-bold')
+                  onClick={onShowWeekly}
+                  className={`flex-none w-11 h-8 flex flex-col items-center justify-center transition-all z-30 rounded-lg ${
+                    isWeeklyView 
+                      ? (isDark ? 'bg-blue-500/20 text-blue-400 scale-105' : 'bg-blue-100 text-blue-700 scale-105')
+                      : (isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')
                   }`}
                 >
-                  <span className="text-[6px] font-black uppercase leading-none mb-0.5">{l.name}</span>
-                  <span className="text-[14px] font-black leading-none">{l.num}</span>
+                  <CalendarRange className="w-3.5 h-3.5 mb-0.5" />
+                  <span className="text-[7px] font-black uppercase leading-none">Week</span>
                 </button>
-              );
-            })}
+
+                <div className={`w-px h-6 flex-none mx-1 ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
+
+                {dayOffsets.map(o => {
+                  const l = getDayLabel(o);
+                  const isActive = !isWeeklyView && training.dateOffset === o;
+                  return (
+                    <button 
+                      key={o} 
+                      data-offset={o}
+                      onClick={() => onDateOffsetChange(o)}
+                      className={`flex-none w-11 h-8 flex flex-col items-center justify-center transition-all z-30 ${
+                        isActive 
+                          ? (isDark ? 'text-blue-400 scale-110 font-black' : 'text-slate-950 scale-110 font-black')
+                          : (isDark ? 'text-slate-700 font-bold' : 'text-slate-400 font-bold')
+                      }`}
+                    >
+                      <span className="text-[6px] font-black uppercase leading-none mb-0.5">{l.name}</span>
+                      <span className="text-[14px] font-black leading-none">{l.num}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-between px-1 mb-0.5 animate-in slide-in-from-top-2 duration-300">
+            <button 
+              onClick={() => setShowTrainingOutlookInfo(true)}
+              className="flex items-center gap-2.5 group active:opacity-70 transition-opacity"
+            >
+              <div className={`p-1.5 rounded-lg border ${isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-100 border-orange-300'}`}>
+                <Trophy className="w-4 h-4 text-orange-600" />
+              </div>
+              <h2 className={`text-[13px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-white' : 'text-slate-900'}`}>7 day training outlook</h2>
+              <Info className={`w-3.5 h-3.5 transition-opacity ${isDark ? 'text-slate-500 group-hover:text-orange-400' : 'text-slate-400 group-hover:text-orange-700'}`} />
+            </button>
+            <button 
+              onClick={() => onDateOffsetChange(0)}
+              className={`p-1.5 rounded-full border transition-all ${isDark ? 'bg-[#1a1d24] border-white/5 text-slate-400' : 'bg-slate-100'}`}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* TRAINING OUTLOOK INFO POPUP */}
+      {showTrainingOutlookInfo && isWeeklyView && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowTrainingOutlookInfo(false)} />
+          <div className={`relative w-full max-w-xs border rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">Training Optimization Logic</span>
+              <button onClick={() => setShowTrainingOutlookInfo(false)} className="p-1 rounded-full hover:bg-white/10 text-slate-500"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <div className="flex-none"><Clock className="w-4 h-4 text-orange-500" /></div>
+                <div className="flex flex-col gap-1">
+                  <span className={`text-[10px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>Golden Window Selection</span>
+                  <p className="text-[11px] font-medium text-slate-400 leading-relaxed">We scan the 24h cycle to find the single best window where wind and temperature align for your workout.</p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-none"><BrainCircuit className="w-4 h-4 text-blue-500" /></div>
+                <div className="flex flex-col gap-1">
+                  <span className={`text-[10px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>Performance Weighting</span>
+                  <p className="text-[11px] font-medium text-slate-400 leading-relaxed">High scores represent peak conditions for interval training. Low scores suggest recovery or indoor efforts.</p>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowTrainingOutlookInfo(false)}
+              className={`w-full mt-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${isDark ? 'bg-slate-900 text-slate-400 border border-white/5 hover:text-white' : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}
+            >
+              Understand
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {isWeeklyView ? (
         <TrainingWeeklyForecast 

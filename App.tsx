@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
@@ -7,6 +8,7 @@ import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
 import { TrainingWeeklyForecast } from './components/TrainingWeeklyForecast';
 import { Header } from './components/layout/Header';
+import { BottomNav } from './components/layout/BottomNav';
 import { InfoModal } from './components/modals/InfoModal';
 import { ConnectivityModal } from './components/modals/ConnectivityModal';
 import { SettingsModal } from './components/modals/SettingsModal';
@@ -74,7 +76,6 @@ const App: React.FC = () => {
 
   // Derive last update time from cache
   const lastUpdateFromCache = useMemo(() => {
-    // Fix: Explicitly type 'd' as any to resolve "Property 'lastUpdated' does not exist on type 'unknown'" error.
     const updates = Object.values(pulseDataMap).map((d: any) => d.lastUpdated).filter(Boolean);
     return updates.length > 0 ? Math.max(...updates) : undefined;
   }, [pulseDataMap]);
@@ -343,8 +344,6 @@ const App: React.FC = () => {
     }
   }, [selectedDateOffset, viewMode, pulseDataMap, settings, syncFullWeek, loadingOffsets]);
 
-  // ON-DEMAND COMMUTE AI ENHANCEMENT
-  // Similar to training mode, if the current day has telemetry but NO AI advice, trigger Gemini specifically for this day.
   useEffect(() => {
     const currentPulse = pulseDataMap[selectedDateOffset];
     if (
@@ -573,7 +572,6 @@ const App: React.FC = () => {
   }, [viewMode, training.location, training.distance, training.dateOffset, syncTraining]);
 
   useEffect(() => {
-    // Only run if specific conditions are met, preventing infinite loops or missed updates
     if (
       viewMode === 'training' && 
       activeTrainingSlot && 
@@ -626,7 +624,6 @@ const App: React.FC = () => {
   ]);
 
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
-    // 1. Close Modal Immediately to improve perceived responsiveness
     setIsSettingsOpen(false);
     setLoading(true);
 
@@ -634,21 +631,17 @@ const App: React.FC = () => {
     const equipmentChanged = JSON.stringify(newSettings.equipment) !== JSON.stringify(settings.equipment);
     const aiChanged = newSettings.disableAI !== settings.disableAI;
     
-    // 2. Optimistic Update: Apply changes immediately
     let updatedSettings = { ...newSettings };
     setSettings(updatedSettings);
     localStorage.setItem('velo_settings', JSON.stringify(updatedSettings));
 
-    // 3. Perform heavy lifting in the background
     if (locationChanged) {
-      // Clear data immediately if location changed
       setPulseDataMap({}); 
       localStorage.removeItem(CACHE_KEY);
       
       try {
         const dist = await getCommuteRoadDistance(newSettings.homeLocation, newSettings.workLocation);
         if (dist) {
-          // Update local variable and state with new distance
           updatedSettings = { ...updatedSettings, roadDistance: dist };
           setSettings(updatedSettings); 
           localStorage.setItem('velo_settings', JSON.stringify(updatedSettings));
@@ -660,11 +653,9 @@ const App: React.FC = () => {
 
     if (locationChanged || aiChanged || equipmentChanged) {
       if (!locationChanged) {
-         // Even if location didn't change, equipment/AI change requires cache invalidation
          setPulseDataMap({});
          localStorage.removeItem(CACHE_KEY);
       }
-      // Re-fetch using the potentially updated settings (inc. new distance)
       await syncFullWeek(updatedSettings);
     } else {
       setLoading(false);
@@ -766,7 +757,7 @@ const App: React.FC = () => {
         isDark={isDark}
       />
 
-      <main className="flex-1 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3 max-w-md mx-auto w-full min-h-0 overflow-y-auto relative">
+      <main className="flex-1 px-5 flex flex-col gap-3 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative">
         {viewMode === 'daily' && (
           <DailyView 
             activeLegIndex={activeLegIndex}
@@ -827,6 +818,13 @@ const App: React.FC = () => {
           />
         )}
       </main>
+
+      <BottomNav 
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        onShowTrainingWeekly={syncTrainingWeek}
+        isDark={isDark}
+      />
 
       <SettingsModal 
         isOpen={isSettingsOpen}
