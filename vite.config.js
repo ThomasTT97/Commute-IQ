@@ -35,10 +35,7 @@ export default defineConfig(({ mode }) => {
         srcDir: '.',
         filename: 'sw.js',
         injectManifest: {
-          // Source is uniquely named to avoid collisions
           swSrc: 'service-worker-src.js',
-          // Built output will go to dist/sw.js
-          swDest: 'dist/sw.js',
           injectionPoint: 'self.__WB_MANIFEST',
         },
         registerType: 'autoUpdate',

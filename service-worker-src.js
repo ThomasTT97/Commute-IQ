@@ -5,11 +5,12 @@
 */
 
 // The injection point for the precache manifest.
-// We use it in a console log to ensure it's not stripped by the minifier 
-// before the Workbox injection phase occurs.
-console.log('Commute IQ Service Worker initializing...', self.__WB_MANIFEST);
+// We reference it explicitly to ensure the build tool identifies it as the injection target.
+const manifest = self.__WB_MANIFEST;
 
-const CACHE_NAME = 'commute-iq-v6';
+console.log('Commute IQ Service Worker initializing...', manifest);
+
+const CACHE_NAME = 'commute-iq-v7';
 const ASSETS = [
   '/',
   '/index.html',

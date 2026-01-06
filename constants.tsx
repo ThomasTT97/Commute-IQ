@@ -111,8 +111,6 @@ export const TRANSLATIONS: Record<Language, any> = {
     // Info Content
     purposeTitle: 'What is Commute IQ?',
     purposeContent: 'Commute IQ operates as your tactical cycling avionics. It ingests complex meteorological streams and synthesizes them into a single, actionable safety rating. No guesswork—just precise, data-driven mission planning.',
-    howToUseTitle: 'Mission Protocol',
-    howToUseContent: '1. GEO-SETUP: Define Home/Work coordinates in Settings. \n2. GARAGE: Add your bike profile for calibrated tire pressure and braking logic. \n3. ANALYSIS: The Pulse index (0-100) dictates route viability. Scores > 70 are optimal; < 50 suggest tactical reconsiderations. \n4. FORECAST: Use the 7-day outlook to plan your logistical week.',
     commuteScore: 'The Algorithm',
     commuteScoreContent: 'The Pulse is a 0-100 index of route viability. We start at perfection and apply weighted penalties for hazards: Ice (-70), Heavy Precipitation (-40), and Lateral Wind Shear. A score below 50 suggests rerouting or indoor training.',
     trainingMode: 'Training Mode',
@@ -162,8 +160,6 @@ export const TRANSLATIONS: Record<Language, any> = {
     // Info Content
     purposeTitle: 'C\'est quoi Commute IQ ?',
     purposeContent: 'Commute IQ est votre avionique tactique pour le vélo. Il ingère des flux météorologiques complexes pour générer un score de sécurité actionnable. Pas de devinettes, juste une planification de mission précise.',
-    howToUseTitle: 'Protocole de Mission',
-    howToUseContent: '1. CONFIG GEO : Définissez Domicile/Travail dans les Réglages. \n2. GARAGE : Ajoutez votre profil de vélo pour calibrer la pression et la logique de freinage. \n3. ANALYSE : L\'indice Pulse (0-100) dicte la viabilité. Un score > 70 est optimal ; < 50 suggère une reconsidération tactique. \n4. PRÉVISIONS : Utilisez l\'aperçu sur 7 jours pour planifier votre logistique hebdomadaire.',
     commuteScore: 'L\'Algorithme',
     commuteScoreContent: 'Le Pulse est un index de 0 à 100. Nous partons de la perfection et appliquons des pénalités : Verglas (-70), Fortes Pluies (-40) et Cisaillement du Vent. Un score sous 50 suggère la prudence ou l\'entraînement intérieur.',
     trainingMode: 'Mode Entraînement',
@@ -213,10 +209,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     // Info Content
     purposeTitle: 'Wat is Commute IQ?',
     purposeContent: 'Commute IQ fungeert als uw tactische fiets-avionica. Het verwerkt complexe meteorologische streams tot een actiegerichte veiligheidsscore. Geen gokwerk, maar precieze, datagestuurde missieplanning.',
-    howToUseTitle: 'Missie Protocol',
-    howToUseContent: '1. GEO-SETUP: Stel Thuis/Werk coördinaten in bij Instellingen. \n2. GARAGE: Voeg uw fietsprofiel toe voor gekalibreerde bandenspanning en rem-logica. \n3. ANALYSE: De Pulse index (0-100) bepaalt de haalbaarheid. Scores > 70 zijn optimaal; < 50 suggereert tactische heroverweging. \n4. FORECAST: Gebruik de 7-daagse outlook voor uw logistieke planning.',
     commuteScore: 'Het Algoritme',
-    commuteScoreContent: 'The Pulse is een index van 0-100. We beginnen bij perfectie en passen strafpunten toe voor gevaren: IJs (-70), Zware Neerslag (-40) en Windschering. Een score onder 50 suggereert voorzichtigheid of indoor training.',
+    commuteScoreContent: 'De Pulse is een index van 0-100. We beginnen bij perfectie en passen strafpunten toe voor gevaren: IJs (-70), Zware Neerslag (-40) en Windschering. Een score onder 50 suggereert voorzichtigheid of indoor training.',
     trainingMode: 'Trainingsmodus',
     trainingModeContent: 'Ontworpen voor prestaties. Het systeem scant 14-daagse horizons om het "Gouden Venster" te identificeren—tijdslots waar windassistentie en thermische regulatie uw fysiologische output maximaliseren.',
     generalSources: 'Hybride Intelligentie',

@@ -46,7 +46,6 @@ export const InfoModal: React.FC<InfoModalProps> = ({ isOpen, onClose, isDark, l
           <button onClick={onClose} className={`transition-colors ${isDark ? 'text-slate-600 hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}><X className="w-4 h-4" /></button>
         </div>
         <div className="space-y-2 mb-6 max-h-[60vh] overflow-y-auto hide-scrollbar px-1">
-          <AccordionItem id="how-to-use" title={t.howToUseTitle} content={t.howToUseContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
           <AccordionItem id="purpose" title={t.purposeTitle} content={t.purposeContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
           <AccordionItem id="score" title={t.commuteScore} content={t.commuteScoreContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
           <AccordionItem id="training-mode" title={t.trainingMode} content={t.trainingModeContent} expandedInfoItem={expandedInfoItem} setExpandedInfoItem={setExpandedInfoItem} isDark={isDark} />
