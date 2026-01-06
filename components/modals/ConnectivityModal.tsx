@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Activity, X, Server, BrainCircuit, MapPin, RefreshCw, Check, AlertCircle, Gauge, Timer } from 'lucide-react';
+import { Activity, X, Server, BrainCircuit, MapPin, RefreshCw, Check, AlertCircle, Gauge, Timer, Clock } from 'lucide-react';
 import { ConnectionStatusState } from '../../types';
 import { MODEL_CHAIN, getLlmUsageStats } from '../../services/geminiService';
 
@@ -19,6 +19,17 @@ const formatModelName = (model: string | null): string | null => {
   if (model.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
   if (model.includes('gemini-2.0-flash-lite')) return 'Gemini 2.0 Flash Lite';
   return model;
+};
+
+const formatTimestamp = (ts?: number) => {
+  if (!ts) return "Never";
+  const date = new Date(ts);
+  return date.toLocaleString(undefined, { 
+    month: 'short', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  }).toUpperCase();
 };
 
 export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, onClose, status, onCheckConnection, isDark }) => {
@@ -58,27 +69,37 @@ export const ConnectivityModal: React.FC<ConnectivityModalProps> = ({ isOpen, on
         </div>
         
         <div className="space-y-3 mb-6">
-          {Object.entries(status).filter(([name]) => name !== 'llmDetails' && name !== 'errorMessage').map(([name, stat]) => (
-            <div key={name} className={`flex items-center justify-between p-3.5 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-              <div className="flex items-center gap-3">
-                {name === 'Open-Meteo' ? <Server className="w-4 h-4 text-slate-500" /> : name === 'Gemini LLM' ? <BrainCircuit className="w-4 h-4 text-blue-500" /> : <MapPin className="w-4 h-4 text-emerald-500" />}
-                <span className={`text-xs font-bold uppercase tracking-tight ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{name}</span>
+          {Object.entries(status).filter(([name]) => name !== 'llmDetails' && name !== 'errorMessage' && name !== 'lastWeatherUpdate').map(([name, stat]) => (
+            <div key={name} className={`flex flex-col gap-2 p-3.5 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {name === 'Open-Meteo' ? <Server className="w-4 h-4 text-slate-500" /> : name === 'Gemini LLM' ? <BrainCircuit className="w-4 h-4 text-blue-500" /> : <MapPin className="w-4 h-4 text-emerald-500" />}
+                  <span className={`text-xs font-bold uppercase tracking-tight ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {stat === 'checking' ? (
+                    <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                  ) : (stat === 'ok' || stat === 'fallback') ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black uppercase tracking-widest">
+                      <Check className="w-2.5 h-2.5" />
+                      Online
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-[8px] font-black uppercase tracking-widest">
+                      <AlertCircle className="w-2.5 h-2.5" />
+                      Failed
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {stat === 'checking' ? (
-                  <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />
-                ) : (stat === 'ok' || stat === 'fallback') ? (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black uppercase tracking-widest">
-                    <Check className="w-2.5 h-2.5" />
-                    Online
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-[8px] font-black uppercase tracking-widest">
-                    <AlertCircle className="w-2.5 h-2.5" />
-                    Failed
-                  </div>
-                )}
-              </div>
+
+              {/* Added timestamp for Open-Meteo */}
+              {name === 'Open-Meteo' && status.lastWeatherUpdate && (
+                <div className="flex items-center gap-1.5 ml-7 px-1.5 py-0.5 rounded border border-dashed border-slate-500/20 w-fit">
+                   <Clock className="w-2.5 h-2.5 text-slate-500" />
+                   <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Last Sync: {formatTimestamp(status.lastWeatherUpdate)}</span>
+                </div>
+              )}
             </div>
           ))}
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { WeatherCard } from '../WeatherCard';
 import { Zap, RefreshCw, Compass, Bike, Shirt, ChevronDown, Loader2, Sparkles, Calculator, CloudRain, Activity, X } from 'lucide-react';
@@ -44,7 +45,6 @@ export const DailyView: React.FC<DailyViewProps> = ({
 }) => {
   const [typingStep, setTypingStep] = useState(0);
 
-  // Reset typing when expanded or when switching legs
   useEffect(() => {
     if (isAdviceExpanded) {
       setTypingStep(0);
@@ -66,6 +66,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
       return (
         <TypewriterText 
           text={text || fallback} 
+          speed={15}
           className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
           onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
         />
@@ -82,7 +83,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
     }
 
     if (isCurrentDayEnhanced) {
-      return <TypewriterText text={activeWeather?.surfaceReason || ""} className={`text-[13px] font-medium leading-[1.5] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
+      return <TypewriterText text={activeWeather?.surfaceReason || ""} speed={15} className={`text-[13px] font-medium leading-[1.5] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
     }
 
     return (
@@ -97,18 +98,19 @@ export const DailyView: React.FC<DailyViewProps> = ({
     if (activeLegIndex !== index) {
       setActiveLegIndex(index);
     } else {
-      if (isAdviceExpanded) setIsAdviceExpanded(false);
-      else setIsAdviceExpanded(true); 
+      setIsAdviceExpanded(!isAdviceExpanded); 
     }
   };
 
   const activeLabel = activeLegIndex === 0 ? "Morning" : "Evening";
 
   return (
-    <div className="flex flex-col gap-4 flex-1 h-full">
-      {/* Top Card */}
+    <div className="flex flex-col gap-4 flex-1 h-full overflow-hidden">
+      {/* Morning Card */}
       <div 
-        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative z-40 ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 0 ? 'flex-[3]' : 'flex-[1]')}`}
+        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative ${
+          isAdviceExpanded ? 'flex-none z-10' : (activeLegIndex === 0 ? 'flex-[3] z-40' : 'flex-[1] z-20')
+        }`}
         onClick={() => handleCardClick(0)}
       >
         <WeatherCard 
@@ -116,19 +118,20 @@ export const DailyView: React.FC<DailyViewProps> = ({
           distance={displayedDistance} 
           safetyScore={primaryData.score} 
           theme={settings.theme} 
-          compact={activeLegIndex !== 0 || isAdviceExpanded}
+          compact={isAdviceExpanded || activeLegIndex === 1}
           isActive={activeLegIndex === 0}
           popupDirection="down"
         />
       </div>
 
+      {/* Intelligence Box */}
       <div 
-        onClick={() => !isAdviceExpanded && setIsAdviceExpanded(true)}
         className={`border rounded-[2rem] p-5 flex flex-col gap-3 transition-all duration-500 ease-in-out overflow-hidden shadow-xl z-10 ${
           isAdviceExpanded 
             ? `flex-1 min-h-0 ${isDark ? 'bg-blue-600/5 border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'}`
-            : `flex-none cursor-pointer active:scale-[0.99] ${isDark ? 'bg-blue-500/5 border-blue-500/20 shadow-blue-500/5' : 'bg-white border-blue-100 shadow-sm'}`
+            : `flex-none cursor-pointer active:scale-[0.99] ${isDark ? 'bg-blue-600/5 border-blue-500/20 shadow-blue-500/5' : 'bg-white border-blue-100 shadow-sm'}`
         }`}
+        onClick={() => !isAdviceExpanded && setIsAdviceExpanded(true)}
       >
         <div className="flex items-center justify-between w-full flex-none">
           <div className="flex items-center gap-2">
@@ -252,8 +255,11 @@ export const DailyView: React.FC<DailyViewProps> = ({
         </div>
       </div>
 
+      {/* Evening Card */}
       <div 
-        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative z-30 ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 1 ? 'flex-[3]' : 'flex-[1]')}`}
+        className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative ${
+          isAdviceExpanded ? 'flex-none z-10' : (activeLegIndex === 1 ? 'flex-[3] z-40' : 'flex-[1] z-20')
+        }`}
         onClick={() => handleCardClick(1)}
       >
         <WeatherCard 
@@ -261,7 +267,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
           distance={displayedDistance} 
           safetyScore={secondaryData.score} 
           theme={settings.theme} 
-          compact={activeLegIndex !== 1 || isAdviceExpanded}
+          compact={isAdviceExpanded || activeLegIndex === 0}
           isActive={activeLegIndex === 1}
           popupDirection="up"
         />

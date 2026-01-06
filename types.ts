@@ -92,5 +92,6 @@ export interface ConnectionStatusState {
   'Gemini LLM': 'checking' | 'ok' | 'fail' | 'fallback';
   'Google Maps': 'checking' | 'ok' | 'fail' | 'fallback';
   llmDetails: { model: string | null; priority: string | null; alternatives: number | null };
+  lastWeatherUpdate?: number;
   errorMessage?: string;
 }

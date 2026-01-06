@@ -92,19 +92,18 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const dayScrollRef = useRef<HTMLDivElement>(null);
   const [isIntelligenceExpanded, setIsIntelligenceExpanded] = useState(false);
   const [typingStep, setTypingStep] = useState(0);
+  const [isPopupActive, setIsPopupActive] = useState(false);
   
   const distances = useMemo(() => Array.from({ length: 30 }, (_, i) => (i + 1) * 5), []); // 5 to 150km
   const hours = useMemo(() => Array.from({ length: 19 }, (_, i) => i + 3), []); // 03:00 to 21:00
   const dayOffsets = [0, 1, 2, 3, 4, 5, 6];
 
-  // Reset typing when intelligence opens
   useEffect(() => {
     if (isIntelligenceExpanded) {
       setTypingStep(0);
     }
   }, [isIntelligenceExpanded, trainingData]);
 
-  // Sync vertical distance picker scroll position
   useEffect(() => {
     const performSync = () => {
       if (!isIntelligenceExpanded && !isWeeklyView && verticalPickerRef.current) {
@@ -120,7 +119,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
     return () => clearTimeout(timer);
   }, [training.distance, isIntelligenceExpanded, isWeeklyView]);
 
-  // Sync horizontal time picker scroll position
   useEffect(() => {
     const performSync = () => {
       if (!isIntelligenceExpanded && !isWeeklyView && timePickerRef.current) {
@@ -139,7 +137,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
     return () => clearTimeout(timer);
   }, [manualStartHour, bestStartHour, isIntelligenceExpanded, isWeeklyView]);
 
-  // Sync horizontal day picker scroll position to match timing style
   useEffect(() => {
     const performSync = () => {
       if (dayScrollRef.current && !isWeeklyView) {
@@ -161,27 +158,20 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const isAIFailed = trainingData?.aiFailed;
 
   const shouldShowBlock = (index: number) => {
-    // If AI is disabled or FAILED, show everything immediately (fallbacks)
     if (!aiEnabled || isAIFailed) return true;
-    // If AI is enabled but not ready, show nothing (except loading)
     if (!isAIActive) return false;
-    // If AI is ready, show based on sequence
     return typingStep >= index;
   };
 
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
-    // Determine content to show: valid AI text or fallback
     const content = (isAIActive && text && text.length > 0) ? text : fallback;
-    
-    // If AI failed, disabled, or we are falling back (active but empty text), render static text immediately
     if (!aiEnabled || isAIFailed || (isAIActive && (!text || text.length === 0))) {
       return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{content}</span>;
     }
-    
-    // If AI is active and we have text, render typewriter
     return (
       <TypewriterText 
         text={content} 
+        speed={15}
         className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
         onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
       />
@@ -190,12 +180,11 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
 
   return (
     <div className="h-full flex flex-col gap-3 overflow-hidden pb-1 animate-in fade-in duration-300">
-      {/* HEADER: EXIT + DAY PICKER */}
-      <div className="flex-none flex items-center gap-2.5 px-1">
+      <div className={`flex-none flex items-center gap-2.5 px-1 relative z-50 transition-all duration-300 ${isPopupActive ? 'brightness-[0.4] opacity-50 scale-[0.98] pointer-events-none' : ''}`}>
         <button 
           onClick={onReturn}
           className={`flex-none flex items-center gap-1.5 px-2.5 h-10 rounded-xl border transition-all ${
-            isDark ? 'bg-slate-900/50 border-white/5 text-slate-400 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-blue-700'
+            isDark ? 'bg-[#0f1115] border-white/5 text-slate-400 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-blue-700'
           }`}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -210,7 +199,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
             ref={dayScrollRef}
             className="h-full flex items-center gap-3 overflow-x-auto hide-scrollbar scroll-smooth px-4"
           >
-            {/* 7-DAY FORECAST BUTTON - FIRST OPTION */}
             <button 
               onClick={onShowWeekly}
               className={`flex-none w-11 h-8 flex flex-col items-center justify-center transition-all z-30 rounded-lg ${
@@ -225,7 +213,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
 
             <div className={`w-px h-6 flex-none mx-1 ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
 
-            {/* DAY OFFSETS */}
             {dayOffsets.map(o => {
               const l = getDayLabel(o);
               const isActive = !isWeeklyView && training.dateOffset === o;
@@ -258,11 +245,10 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
         />
       ) : (
         <>
-          {/* TRAINING CONFIGURATION CARD */}
           {!isIntelligenceExpanded && (
-            <div className={`flex-none rounded-[2rem] border p-4 sm:p-5 flex flex-col gap-4 transition-all ${
+            <div className={`flex-none rounded-[2rem] border p-4 sm:p-5 flex flex-col gap-4 transition-all duration-300 ${
               isDark ? 'bg-[#0a0c10] border-white/5 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'
-            }`}>
+            } ${isPopupActive ? 'brightness-[0.4] opacity-50 scale-[0.98] pointer-events-none' : ''}`}>
               
               <div className="flex gap-4 items-end">
                 <div className="flex-1 flex flex-col gap-1.5 relative">
@@ -273,38 +259,22 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       type="text" value={trainingSearch} placeholder="CITY..."
                       onChange={(e) => onSearchChange(e.target.value)}
                       className={`w-full h-full rounded-xl pl-10 pr-10 text-[11px] font-black uppercase tracking-wider outline-none border transition-all ${
-                        isDark ? 'bg-black/40 border-white/10 text-white focus:border-blue-500/50' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-blue-600 shadow-inner'
+                        isDark ? 'bg-[#05070a] border-white/10 text-white focus:border-blue-500/50' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-blue-600 shadow-inner'
                       }`} 
                     />
                     <button 
                       onClick={onSetToHome} 
                       className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 active:scale-90 transition-all"
-                      title="Set to home location"
                     >
                       <Home className="w-4 h-4" />
                     </button>
                     {showTrainingSuggestions && (isSearching || suggestions.length > 0) && (
                       <div className={`absolute top-full left-0 right-0 mt-2 z-[210] border rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-top-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/10' : 'bg-white border-slate-300'}`}>
-                        {suggestions.map(loc => {
-                          const isGlobal = !BELGIAN_LOCATIONS.some(bl => bl.name === loc.name);
-                          return (
-                            <button key={loc.name} onClick={() => onSelectSuggestion(loc)} className={`w-full px-4 py-3 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wide border-b last:border-0 transition-colors ${isDark ? 'hover:bg-white/5 text-slate-300 border-white/5' : 'hover:bg-slate-50 text-slate-900 border-slate-100'}`}>
-                              <span>{loc.name}</span>
-                              {isGlobal && (
-                                <div className="flex items-center gap-1 text-[8px] font-bold text-blue-500/80">
-                                  <MapPin className="w-3 h-3" />
-                                  <span>MAPS</span>
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                        {isSearching && (
-                          <div className={`px-4 py-2.5 flex items-center gap-2 text-xs font-medium border-t ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
-                            <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
-                            <span className="text-blue-500/80">Searching via Google Maps...</span>
-                          </div>
-                        )}
+                        {suggestions.map(loc => (
+                          <button key={loc.name} onClick={() => onSelectSuggestion(loc)} className={`w-full px-4 py-3 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wide border-b last:border-0 transition-colors ${isDark ? 'hover:bg-white/5 text-slate-300 border-white/5' : 'hover:bg-slate-50 text-slate-900 border-slate-100'}`}>
+                            <span>{loc.name}</span>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -312,12 +282,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
 
                 <div className="w-20 sm:w-24 flex flex-col gap-1.5">
                    <label className={`text-[8px] font-black uppercase tracking-[0.2em] text-center ${isDark ? 'text-slate-500' : 'text-slate-700'}`}>Dist.</label>
-                   <div className={`h-12 rounded-xl border overflow-hidden relative ${isDark ? 'bg-black/40 border-white/10' : 'bg-slate-50 border-slate-300 shadow-inner'}`}>
-                      <div className={`absolute inset-x-0 top-0 h-3 bg-gradient-to-b ${isDark ? 'from-black/40' : 'from-slate-200/40'} to-transparent pointer-events-none z-10`} />
-                      <div className={`absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t ${isDark ? 'from-black/40' : 'from-slate-200/40'} to-transparent pointer-events-none z-10`} />
-                      
-                      <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-9 bg-white border-y border-slate-200 z-20 pointer-events-none opacity-100 ${isDark ? 'hidden' : 'block'}`} />
-
+                   <div className={`h-12 rounded-xl border overflow-hidden relative ${isDark ? 'bg-[#05070a] border-white/10' : 'bg-slate-50 border-slate-300 shadow-inner'}`}>
                       <div ref={verticalPickerRef} className="h-full overflow-y-auto hide-scrollbar scroll-smooth snap-y snap-mandatory py-1">
                          <div className="h-4" />
                          {distances.map(d => (
@@ -340,28 +305,15 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                      <Clock className="w-3 h-3" />
                      Optimal Window Search
                    </label>
-                   {manualStartHour !== null && manualStartHour !== bestStartHour && (
-                     <button 
-                       onClick={() => onManualHourChange(bestStartHour!)}
-                       className="text-[7px] font-black uppercase text-orange-600 border border-orange-500/30 px-1.5 py-0.5 rounded-md hover:bg-orange-50 active:scale-95 transition-all"
-                     >
-                       Reset to Best
-                     </button>
-                   )}
                 </div>
                 
-                <div className={`h-16 rounded-2xl border overflow-hidden relative ${isDark ? 'bg-black/40 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
-                   <div className={`absolute inset-y-0 left-0 w-12 z-10 pointer-events-none bg-gradient-to-r ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
-                   <div className={`absolute inset-y-0 right-0 w-12 z-10 pointer-events-none bg-gradient-to-l ${isDark ? 'from-black/60' : 'from-slate-100/60'} to-transparent`} />
-                   <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-12 rounded-xl border-2 pointer-events-none z-20 ${isDark ? 'border-blue-500/20 bg-blue-500/5' : 'border-blue-400 bg-white shadow-sm'}`} />
-
+                <div className={`h-16 rounded-2xl border overflow-hidden relative ${isDark ? 'bg-[#05070a] border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
                    <div 
                      ref={timePickerRef}
                      className="h-full flex items-center gap-4 overflow-x-auto hide-scrollbar scroll-smooth snap-x snap-mandatory px-[calc(50%-28px)]"
                    >
                       {hours.map(h => {
                         const isSelected = manualStartHour === h || (manualStartHour === null && bestStartHour === h);
-                        const isBest = bestStartHour === h;
                         return (
                           <button
                             key={h} data-hour={h} onClick={() => onManualHourChange(h)}
@@ -372,11 +324,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                             }`}
                           >
                             <span className="text-[15px] leading-none">{h.toString().padStart(2, '0')}<span className="text-[9px] ml-0.5 opacity-50">H</span></span>
-                            {isBest && (
-                              <div className="absolute -top-1">
-                                <Star className={`w-2.5 h-2.5 fill-current ${isSelected ? (isDark ? 'text-orange-400' : 'text-slate-950') : 'text-blue-500 opacity-40'}`} />
-                              </div>
-                            )}
                           </button>
                         );
                       })}
@@ -386,21 +333,13 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
             </div>
           )}
 
-          {/* INTELLIGENCE DASHBOARD */}
-          <div className="flex-1 min-h-0 flex flex-col gap-3">
+          <div className="flex-1 min-h-0 flex flex-col gap-3 relative z-[60]">
             {trainingLoading ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-in fade-in duration-300">
-                <div className="relative">
-                  <RefreshCw className="w-12 h-12 text-blue-600 animate-spin" />
-                  <Zap className="w-5 h-5 text-yellow-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[11px] font-black uppercase text-blue-600 tracking-[0.25em]">Scanning Atmos Vitals</span>
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Compiling recommended window...</span>
-                </div>
+                <RefreshCw className="w-12 h-12 text-blue-600 animate-spin" />
               </div>
             ) : trainingData ? (
-              <div className="flex flex-col gap-4 flex-1 min-h-0 relative z-10">
+              <div className="flex flex-col gap-4 flex-1 min-h-0 relative z-[70]">
                 <div 
                   onClick={() => isIntelligenceExpanded && setIsIntelligenceExpanded(false)}
                   className={`transition-all duration-500 ease-in-out ${isIntelligenceExpanded ? 'flex-none cursor-pointer' : 'flex-1 min-h-0'}`}
@@ -421,122 +360,44 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       onSelectLocationAdvice={onSelectSuggestion}
                       onToggleIntelligence={() => setIsIntelligenceExpanded(!isIntelligenceExpanded)}
                       isIntelligenceExpanded={isIntelligenceExpanded}
+                      onPopupStateChange={setIsPopupActive}
                     />
                 </div>
 
                 {isIntelligenceExpanded && (
                   <div 
                     className={`flex-1 border rounded-[2rem] p-5 sm:p-6 flex flex-col gap-6 overflow-y-auto hide-scrollbar animate-in fade-in slide-in-from-top-4 duration-500 shadow-xl ${
-                      isDark ? 'bg-blue-600/5 border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'
-                    }`}
+                      isDark ? 'bg-[#0a0c10] border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'
+                    } ${isPopupActive ? 'brightness-[0.4] opacity-50 pointer-events-none' : ''}`}
                   >
                     <div className="flex items-center justify-between w-full flex-none">
                       <div className="flex items-center gap-2">
-                        <div className={`p-1.5 rounded-lg transition-colors ${aiEnabled && !isAIActive && !isAIFailed ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
+                        <div className="p-1.5 rounded-lg bg-blue-600 text-white">
                           <Zap className="w-4 h-4" />
                         </div>
-                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${aiEnabled && !isAIActive && !isAIFailed ? 'text-slate-600' : 'text-blue-600'}`}>
-                          {aiEnabled && !isAIActive && !isAIFailed ? 'Deep Analysis...' : 'Training Intelligence'}
-                        </span>
+                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600">Training Intelligence</span>
                       </div>
-
-                      <button 
-                        onClick={() => setIsIntelligenceExpanded(false)}
-                        className={`p-1.5 rounded-full border transition-all ${
-                          isDark ? 'bg-slate-900 border-white/10 text-slate-400 hover:text-white' : 'bg-slate-100 border-slate-300 text-slate-700 hover:text-blue-600'
-                        }`}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <button onClick={() => setIsIntelligenceExpanded(false)} className={`p-1.5 rounded-full border transition-all ${isDark ? 'bg-[#1a1d24] border-white/10 text-slate-400' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
                     </div>
 
                     <div className="flex flex-col gap-6 flex-1 pb-2">
-                      {aiEnabled && !isAIActive && !isAIFailed && (
-                        <div className="flex items-center gap-2 py-1">
-                          <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
-                          <span className="text-[8px] font-black uppercase text-blue-600 tracking-widest">Generative Intelligence active...</span>
-                        </div>
-                      )}
-
                       {shouldShowBlock(0) && (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-2">
-                            <CloudRain className="w-4 h-4 text-blue-500" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Conditions Analysis</span>
-                          </div>
-                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.surfaceReason, "Standard atmospheric conditions. No specific hazards detected.", 0)}
-                          </div>
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Conditions Analysis</span>
+                          <div className="text-[13px] font-semibold text-left">{renderAdviceText(trainingData.condition.surfaceReason, "Standard atmospheric conditions.", 0)}</div>
                         </div>
                       )}
-
                       {shouldShowBlock(1) && (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-2">
-                            <Activity className="w-4 h-4 text-emerald-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
-                          </div>
-                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.performanceAdvice, "Conditions are within standard operating parameters. Monitor heart rate response and hydration.", 1)}
-                          </div>
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
+                          <div className="text-[13px] font-semibold text-left">{renderAdviceText(trainingData.condition.performanceAdvice, "Maintain standard protocols.", 1)}</div>
                         </div>
                       )}
-
-                      {shouldShowBlock(2) && (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-2">
-                            <Compass className="w-4 h-4 text-blue-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
-                          </div>
-                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.ridingStyleAdvice, "Maintain standard session protocols.", 2)}
-                          </div>
-                        </div>
-                      )}
-
-                      {shouldShowBlock(3) && (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-2">
-                            <Bike className="w-4 h-4 text-blue-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
-                          </div>
-                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.bikeSetupAdvice, "Check essential hardware and tire pressures.", 3)}
-                          </div>
-                        </div>
-                      )}
-
-                      {shouldShowBlock(4) && (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-2">
-                            <Shirt className="w-4 h-4 text-blue-600" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Clothing Advice</span>
-                          </div>
-                          <div className={`text-[13px] font-semibold leading-relaxed text-left`}>
-                            {renderAdviceText(trainingData.condition.clothingAdvice, "Standard training kit recommendation.", 4)}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* BOTTOM SOURCE INDICATOR - Subtle */}
-                      <div className="pt-4 mt-2 border-t border-dashed border-slate-500/20 flex justify-end">
-                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest opacity-40 ${
-                          isDark ? 'text-slate-300' : 'text-slate-600'
-                        }`}>
-                          {isAIActive ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
-                          <span>Source: {isAIActive ? 'Gemini 2.0 Flash' : 'Standard Algorithm'}</span>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 opacity-20">
-                <Target className="w-12 h-12" />
-                <span className="text-[10px] font-black uppercase tracking-[0.3em]">Initialize parameters</span>
-              </div>
-            )}
+            ) : null}
           </div>
         </>
       )}

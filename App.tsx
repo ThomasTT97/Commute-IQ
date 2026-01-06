@@ -72,21 +72,37 @@ const App: React.FC = () => {
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
 
+  // Derive last update time from cache
+  const lastUpdateFromCache = useMemo(() => {
+    // Fix: Explicitly type 'd' as any to resolve "Property 'lastUpdated' does not exist on type 'unknown'" error.
+    const updates = Object.values(pulseDataMap).map((d: any) => d.lastUpdated).filter(Boolean);
+    return updates.length > 0 ? Math.max(...updates) : undefined;
+  }, [pulseDataMap]);
+
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatusState>({
     'Open-Meteo': 'checking',
     'Gemini LLM': 'checking',
     'Google Maps': 'checking',
-    llmDetails: { model: null, priority: null, alternatives: null }
+    llmDetails: { model: null, priority: null, alternatives: null },
+    lastWeatherUpdate: lastUpdateFromCache
   });
 
+  // Sync connection status timestamp when cache derives a new one
+  useEffect(() => {
+    if (lastUpdateFromCache) {
+      setConnectionStatus(prev => ({ ...prev, lastWeatherUpdate: lastUpdateFromCache }));
+    }
+  }, [lastUpdateFromCache]);
+
   const checkConnections = useCallback(async () => {
-    setConnectionStatus({
+    setConnectionStatus(prev => ({
+      ...prev,
       'Open-Meteo': 'checking',
       'Gemini LLM': 'checking',
       'Google Maps': 'checking',
       llmDetails: { model: null, priority: null, alternatives: null },
       errorMessage: undefined
-    });
+    }));
     
     // 1. Open-Meteo Check
     try {
@@ -260,11 +276,14 @@ const App: React.FC = () => {
     setLoadingOffsets(prev => [...new Set([...prev, ...allOffsets])]);
     try {
       const telemetryBatch = await getTelemetryBatch(currentSettings, allOffsets);
+      const updateTime = Date.now();
       setPulseDataMap(prev => {
         const next = { ...prev, ...telemetryBatch };
         localStorage.setItem(CACHE_KEY, JSON.stringify(next));
         return next;
       });
+      setConnectionStatus(prev => ({ ...prev, lastWeatherUpdate: updateTime }));
+      
       if (!isSilent) setLoading(false);
       setLoadingOffsets(prev => prev.filter(o => !allOffsets.includes(o)));
       if (!currentSettings.disableAI) {
@@ -734,12 +753,12 @@ const App: React.FC = () => {
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       <Header 
         onOpenInfo={() => setIsInfoOpen(true)}
-        viewMode={viewMode as 'daily' | 'weekly' | 'training'}
+        viewMode={viewMode}
         isDateDropdownOpen={isDateDropdownOpen}
         setIsDateDropdownOpen={setIsDateDropdownOpen}
         selectedDateOffset={selectedDateOffset}
         setSelectedDateOffset={setSelectedDateOffset}
-        setViewMode={(m) => setViewMode(m as any)}
+        setViewMode={(m) => setViewMode(m)}
         activeDayLabels={activeDayLabels}
         loading={loading}
         onSync={() => viewMode === 'training' ? syncTraining() : syncFullWeek(settings)}
