@@ -421,7 +421,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       onSelectLocationAdvice={onSelectSuggestion}
                       onToggleIntelligence={() => setIsIntelligenceExpanded(!isIntelligenceExpanded)}
                       isIntelligenceExpanded={isIntelligenceExpanded}
-                      popupDirection="down"
                     />
                 </div>
 

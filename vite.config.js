@@ -10,15 +10,17 @@ export default defineConfig(({ mode }) => {
   const copyLogoPlugin = () => ({
     name: 'copy-logo',
     generateBundle() {
-      const logoPath = path.resolve('logo.png');
+      const logoPath = path.resolve(process.cwd(), 'logo.png');
       
       if (fs.existsSync(logoPath)) {
         const source = fs.readFileSync(logoPath);
         this.emitFile({
           type: 'asset',
-          fileName: 'logo.png',
+          fileName: 'icon-v4.png',
           source: source
         });
+      } else {
+        console.warn('Warning: logo.png not found in project root. PWA icon will be missing.');
       }
     }
   });
@@ -34,12 +36,12 @@ export default defineConfig(({ mode }) => {
         strategies: 'injectManifest',
         srcDir: '.',
         filename: 'sw.js',
-        injectManifest: {
-          swSrc: 'service-worker-src.js',
-          injectionPoint: 'self.__WB_MANIFEST',
-        },
         registerType: 'autoUpdate',
-        injectRegister: false,
+        injectRegister: 'auto',
+        devOptions: {
+          enabled: true, // Allow testing PWA features in development
+          type: 'module'
+        },
         manifest: {
           name: "Commute IQ",
           short_name: "Commute IQ",
@@ -47,26 +49,25 @@ export default defineConfig(({ mode }) => {
           theme_color: "#05070a",
           background_color: "#05070a",
           display: "standalone",
-          display_override: ["standalone", "window-controls-overlay"],
           orientation: "portrait",
           scope: "/",
           start_url: "/",
-          id: "com.commuteiq.app",
+          id: "com.commuteiq.pulse",
           icons: [
             {
-              "src": "/logo.png",
+              "src": "/icon-v4.png",
               "sizes": "192x192",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/logo.png",
+              "src": "/icon-v4.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/logo.png",
+              "src": "/icon-v4.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "maskable"

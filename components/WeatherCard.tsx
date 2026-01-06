@@ -47,7 +47,6 @@ interface WeatherCardProps {
   onToggleIntelligence?: () => void;
   isIntelligenceExpanded?: boolean;
   isActive?: boolean;
-  popupDirection?: 'up' | 'down';
 }
 
 const getCardinal = (angle: number): string => {
@@ -77,8 +76,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   onSelectLocationAdvice,
   onToggleIntelligence,
   isIntelligenceExpanded = false,
-  isActive = false,
-  popupDirection = 'up'
+  isActive = false
 }) => {
   const isDark = theme === 'dark';
   const [showWindDetails, setShowWindDetails] = useState(false);
@@ -143,8 +141,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   const iceRiskReason = useMemo(() => {
     if (!condition) return "";
-    const isFreezing = condition.temp <= 0 || (condition.minPastTemp !== undefined && condition.minPastTemp <= 0);
-    
     if (condition.iceRisk) {
       if (condition.activeFreezing) {
         return "Critical: Surface moisture has frozen solid. Air and ground temperatures have been at or below 0°C, creating a treacherous layer of ice.";
@@ -154,8 +150,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       }
       return "Surface Alert: Near-freezing air with high humidity is causing frost or 'black ice' to settle on the asphalt.";
     } else {
-      if (isFreezing) {
-        return "Dry Cold: While temperatures are below freezing, the lack of precipitation and low humidity means there is no moisture to form ice on the road surface. Traction remains standard.";
+      // Check if it's freezing but dry
+      if (condition.temp <= 0.5 || condition.minPastTemp <= 0) {
+        return "Dry Cold: Although temperatures are below freezing, extremely low atmospheric moisture and dry road surfaces have prevented the formation of ice.";
       }
       return "Safe: Air and ground temperatures have consistently remained above freezing, ensuring no latent ice remains.";
     }
@@ -237,15 +234,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (s >= 30) return 'text-orange-500';
     return 'text-red-500';
   }, [safetyScore]);
-
-  // DIRECTION LOGIC:
-  // Row 1 (Wind, Surface) respects popupDirection (can be down for top cards)
-  // Row 2 (Ice Risk, Score) ALWAYS opens UP (bottom-full) to avoid falling off the card footer
-  const row1PosClass = popupDirection === 'up' ? 'bottom-full mb-4' : 'top-full mt-4';
-  const row1AnimClass = popupDirection === 'up' ? 'animate-in fade-in slide-in-from-bottom-2' : 'animate-in fade-in slide-in-from-top-2';
-  
-  const row2PosClass = 'bottom-full mb-4';
-  const row2AnimClass = 'animate-in fade-in slide-in-from-bottom-2';
 
   if (compact) {
     return (
@@ -413,7 +401,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div>
           </div>
           {showWindDetails && (
-            <div className={`absolute ${row1PosClass} left-0 right-0 p-3 rounded-2xl border shadow-2xl z-[150] flex items-center justify-between ${row1AnimClass} duration-200 ${popupBgClass}`}>
+            <div className={`absolute bottom-full mb-3 left-0 right-0 p-3 rounded-2xl border shadow-2xl z-[150] flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-200 ${popupBgClass}`}>
               <div className="flex flex-col gap-1.5 flex-1"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Wind Details</span><p className={`text-[10px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>Speed: {Math.round(condition?.windSpeed ?? 0)} km/h<br/>Direction: {getCardinal(condition?.windDirection ?? 0)}</p></div>
               <button onClick={toggleWind} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button>
             </div>
@@ -432,7 +420,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           </div>
 
           {showSurfaceDetails && (
-            <div className={`absolute ${row1PosClass} left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 ${row1AnimClass} duration-200 ${popupBgClass}`}>
+            <div className={`absolute ${showRawWind ? 'bottom-full mb-3' : 'top-full mt-3'} left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in ${showRawWind ? 'slide-in-from-bottom-2' : 'slide-in-from-top-2'} duration-200 ${popupBgClass}`}>
               <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Surface Diagnostics</span><button onClick={toggleSurface} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {surfaceVitals.map((item, i) => (
@@ -475,7 +463,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className={iceInfo.color}>{iceInfo.icon}</div>
           </div>
           {showIceDetails && (
-            <div className={`absolute ${row2PosClass} left-0 right-[-100%] p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 ${row2AnimClass} duration-200 ${popupBgClass}`}>
+            <div className={`absolute bottom-full mb-3 left-0 right-[-100%] p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${popupBgClass}`}>
               <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk assessment</span><button onClick={toggleIce} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {iceVitals.map((item, i) => (
@@ -507,7 +495,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className={scoreColor}><Bike className="w-5.5 h-5.5" /></div>
           </div>
           {showScoreDetails && (
-            <div className={`absolute ${row2PosClass} left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 ${row2AnimClass} duration-200 ${popupBgClass}`}>
+            <div className={`absolute bottom-full mb-3 left-[-100%] right-0 p-4 rounded-2xl border shadow-2xl z-[150] flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${popupBgClass}`}>
               <div className="flex items-center justify-between"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Deduction Breakdown</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
               <div className="space-y-2">
                 {condition?.scoreBreakdown && condition.scoreBreakdown.length > 0 ? condition.scoreBreakdown.map((item: any, i: number) => (

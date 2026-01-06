@@ -6,20 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Commute IQ - Smart Cycling Intelligence</title>
     
-    <!-- PWA Configuration -->
+    <!-- PWA Configuration for iOS 18+ & Android -->
     <link rel="manifest" href="/manifest.json">
     
-    <!-- iOS Specific -->
+    <!-- iOS Capable Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commute IQ">
-    <link rel="apple-touch-icon" href="/logo.png">
     
-    <!-- Android/Standard -->
-    <meta name="mobile-web-app-capable" content="yes">
+    <!-- iOS Icon - Using new filename to force cache update -->
+    <link rel="apple-touch-icon" href="/icon-v4.png">
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-v4.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-v4.png">
+    
     <meta name="theme-color" content="#05070a">
-    <link rel="icon" type="image/png" sizes="192x192" href="/logo.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/logo.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,21 +30,43 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #05070a;
-            color: #f8fafc;
-            height: 100dvh;
-            width: 100vw;
-            position: fixed;
-            overflow: auto;
+            background-color: #05070a; /* Default dark background */
+            color: #f8fafc; /* Default text color */
+            height: 100dvh; /* Use dynamic viewport height */
+            width: 100vw; /* Use viewport width */
+            position: fixed; /* Keep it fixed for smooth scrolling of inner content */
+            overflow: auto; /* Allow body to scroll if content somehow overflows, but prefer inner elements to manage */
         }
         #root {
             height: 100%;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow: hidden; /* App component's outer div will manage its own overflow */
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        * {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            box-sizing: border-box;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        @keyframes slow-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: slow-spin 8s linear infinite;
         }
     </style>
-    <script type="importmap">
+<script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
@@ -53,7 +77,7 @@
     "vite": "https://esm.sh/vite@^7.3.0",
     "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0",
     "fs": "https://esm.sh/fs@^0.0.1-security",
-    "path": "https://esm.sh/path@^0.12.7"
+    "path": "https://esm.sh/path-browserify@^1.0.1"
   }
 }
 </script>
@@ -61,15 +85,5 @@
 <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-    <script>
-      // Service Worker Registration for Offline/PWA functionality
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then(reg => console.log('Commute IQ: SW registered'))
-            .catch(err => console.log('Commute IQ: SW registration failed', err));
-        });
-      }
-    </script>
 </body>
 </html>
