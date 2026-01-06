@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
 
@@ -40,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, [selectedDateOffset]);
 
   return (
-    <header className="flex-none px-4 py-3 flex items-center justify-between gap-3 z-[40] pt-[max(1rem,env(safe-area-inset-top))]">
+    <header className="flex-none px-4 py-2 flex items-center justify-between gap-3 z-[40] pt-[max(0.5rem,env(safe-area-inset-top))]">
       {/* App Full Title - Larger & Taking space */}
       <div className="flex-1 flex items-center select-none cursor-pointer group">
         <button 
