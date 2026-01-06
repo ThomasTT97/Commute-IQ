@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Bike, Trophy, CalendarDays } from 'lucide-react';
 
@@ -31,47 +32,46 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   };
 
   return (
-    <nav className={`flex-none w-full border-t z-[50] px-6 transition-colors duration-300 ${
+    <nav className={`flex-none w-full border-t z-[50] px-0 transition-colors duration-300 ${
       isDark 
         ? 'bg-[#05070a]/95 backdrop-blur-3xl border-white/5 shadow-[0_-8px_30px_rgba(0,0,0,0.6)]' 
         : 'bg-white/95 backdrop-blur-3xl border-slate-200 shadow-[0_-4px_15px_rgba(0,0,0,0.05)]'
     }`}>
-      {/* Increased height to h-14 and adjusted safe area padding for a more substantial look */}
-      <div className="max-w-md mx-auto flex items-center justify-between gap-1 h-14 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-md mx-auto flex items-center justify-between gap-0 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button 
           onClick={() => setViewMode('daily')}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-all active:scale-90 ${
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 transition-all active:scale-90 ${
             isCommuteGroup && !isWeeklyActive ? (isDark ? 'text-blue-400' : 'text-blue-600') : 'text-slate-500'
           }`}
         >
           <div className="relative">
-            <Bike className={`w-5.5 h-5.5 transition-all duration-300 ${isCommuteGroup && !isWeeklyActive ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]' : ''}`} />
+            <Bike className={`w-6 h-6 transition-all duration-300 ${isCommuteGroup && !isWeeklyActive ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]' : ''}`} />
           </div>
-          <span className="text-[9px] font-black uppercase tracking-widest leading-tight">Commute</span>
+          <span className="text-[10px] font-black uppercase tracking-widest leading-tight">Commute</span>
         </button>
 
         <button 
           onClick={() => setViewMode('training')}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-all active:scale-90 ${
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 transition-all active:scale-90 ${
             isTrainingGroup && !isWeeklyActive ? (isDark ? 'text-orange-400' : 'text-orange-600') : 'text-slate-500'
           }`}
         >
           <div className="relative">
-            <Trophy className={`w-5.5 h-5.5 transition-all duration-300 ${isTrainingGroup && !isWeeklyActive ? 'drop-shadow-[0_0_8px_rgba(249,115,22,0.4)]' : ''}`} />
+            <Trophy className={`w-6 h-6 transition-all duration-300 ${isTrainingGroup && !isWeeklyActive ? 'drop-shadow-[0_0_8px_rgba(249,115,22,0.4)]' : ''}`} />
           </div>
-          <span className="text-[9px] font-black uppercase tracking-widest leading-tight">Training</span>
+          <span className="text-[10px] font-black uppercase tracking-widest leading-tight">Training</span>
         </button>
 
         <button 
           onClick={handleWeeklyToggle}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-all active:scale-90 ${
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 transition-all active:scale-90 ${
             isWeeklyActive ? (isDark ? 'text-blue-400' : 'text-blue-600') : 'text-slate-500'
           }`}
         >
           <div className="relative">
-            <CalendarDays className={`w-5.5 h-5.5 transition-all duration-300 ${isWeeklyActive ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]' : ''}`} />
+            <CalendarDays className={`w-6 h-6 transition-all duration-300 ${isWeeklyActive ? 'drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]' : ''}`} />
           </div>
-          <span className="text-[9px] font-black uppercase tracking-widest leading-tight">7 Day</span>
+          <span className="text-[10px] font-black uppercase tracking-widest leading-tight">7 Day</span>
         </button>
       </div>
     </nav>
