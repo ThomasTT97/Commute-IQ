@@ -757,7 +757,7 @@ const App: React.FC = () => {
         isDark={isDark}
       />
 
-      <main className="flex-1 px-5 flex flex-col gap-3 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative">
+      <main className="flex-1 px-5 pt-2 pb-3 flex flex-col gap-4 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative">
         {viewMode === 'daily' && (
           <DailyView 
             activeLegIndex={activeLegIndex}
