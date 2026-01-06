@@ -13,6 +13,8 @@ export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
 export let isUsingFallbackModel = false; // Tracks if we have deviated from the primary model
 
+const USAGE_CACHE_KEY = 'commute_iq_usage_log';
+
 // Robust Model Chain: 
 // 1. Gemini 3.0 Flash Preview: Latest reasoning engine.
 // 2. Gemini 2.5 Flash: Stable, high-performance workhorse.
@@ -24,6 +26,31 @@ export const MODEL_CHAIN = [
   "gemini-flash-latest",                
   "gemini-flash-lite-latest" 
 ];
+
+// Helper to track and retrieve local usage stats
+export const getLlmUsageStats = () => {
+  try {
+    const raw = localStorage.getItem(USAGE_CACHE_KEY);
+    const log: number[] = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    const oneMinAgo = now - 60000;
+    const oneDayAgo = now - 86400000;
+    
+    const validLog = log.filter(t => t > oneDayAgo);
+    const rpm = validLog.filter(t => t > oneMinAgo).length;
+    const rpd = validLog.length;
+    
+    return { rpm, rpd, log: validLog };
+  } catch (e) {
+    return { rpm: 0, rpd: 0, log: [] };
+  }
+};
+
+const recordLlmRequest = () => {
+  const { log } = getLlmUsageStats();
+  log.push(Date.now());
+  localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify(log));
+};
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
   // Request 14 days of forecast + 1 past day for trend analysis
@@ -61,6 +88,7 @@ const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): st
     pressure = 2.0 + (riderWeight * 0.05) - ((tireWidth - 25) * 0.1);
     pressure = Math.max(3.5, Math.min(8.5, pressure));
   } else if (type === 'Gravel Bike') {
+    // Fixed: 'weight' was undefined, changed to 'riderWeight'
     pressure = 1.0 + (riderWeight * 0.03) - ((tireWidth - 35) * 0.05);
     pressure = Math.max(1.8, Math.min(4.5, pressure));
   } else {
@@ -224,6 +252,9 @@ const callWithRetry = async <T>(
         currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback Tier ${modelIndex}`;
         remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
         lastApiErrorMessage = null;
+        
+        // Record usage for tracking
+        recordLlmRequest();
         
         return { data: result, model: modelName };
       } catch (error: any) {
@@ -656,6 +687,49 @@ export const getAIInsights = async (
   } catch (error) {
     isAIFallingBack = true;
     console.error("AI Insight generation failed", error);
+    throw error;
+  }
+};
+
+export const getCommuteDayAIAdvice = async (
+  settings: CommuteSettings,
+  dayWeather: { morning: WeatherCondition, evening: WeatherCondition }
+): Promise<{ morning: any, evening: any }> => {
+  const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
+
+  const dataToProcess = {
+    m: { temp: dayWeather.morning.temp, cond: dayWeather.morning.condition, prec: dayWeather.morning.precipitation, ice: dayWeather.morning.iceRisk, wind: dayWeather.morning.windSpeed },
+    e: { temp: dayWeather.evening.temp, cond: dayWeather.evening.condition, prec: dayWeather.evening.precipitation, ice: dayWeather.evening.iceRisk, wind: dayWeather.evening.windSpeed }
+  };
+
+  try {
+    const { data } = await callWithRetry(async (aiInstance, modelName) => {
+      const response = await aiInstance.models.generateContent({
+        model: modelName,
+        contents: `Cycling Expert: Analyze telemetry for a daily commute (Morning/Evening). 
+        Language: ${settings.language}.
+        Bikes: ${equipmentContext}.
+        
+        Requirements:
+        - "s": Road condition analysis (max 15 words)
+        - "st": Technical riding style/handling (max 10 words)
+        - "se": Tire pressure/bike setup (max 10 words)
+        - "c": Layering/clothing list (max 10 words)
+        - "p": Physiological/effort strategy (max 15 words)
+
+        Data: ${JSON.stringify(dataToProcess)}.
+        Return JSON: { "mw": { "s": string, "st": string, "se": string, "c": string, "p": string }, "ew": { "s": string, "st": string, "se": string, "c": string, "p": string } }`,
+        config: { temperature: 0.8, responseMimeType: "application/json" }
+      });
+      return extractJson(response.text);
+    });
+
+    return {
+      morning: { summary: data.mw.s, style: data.mw.st, setup: data.mw.se, clothing: data.mw.c, performance: data.mw.p },
+      evening: { summary: data.ew.s, style: data.ew.st, setup: data.ew.se, clothing: data.ew.c, performance: data.ew.p }
+    };
+  } catch (error) {
+    console.error("Single-day commute AI failed", error);
     throw error;
   }
 };

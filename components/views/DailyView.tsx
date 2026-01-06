@@ -3,6 +3,7 @@ import { WeatherCard } from '../WeatherCard';
 import { Zap, RefreshCw, Compass, Bike, Shirt, ChevronDown, Loader2, Sparkles, Calculator, CloudRain, Activity, X } from 'lucide-react';
 import { WeatherCondition } from '../../types';
 import { TypewriterText } from '../TypewriterText';
+import { currentLLMModel } from '../../services/geminiService';
 
 interface DailyViewProps {
   activeLegIndex: number;
@@ -18,6 +19,14 @@ interface DailyViewProps {
   isCurrentDayEnhanced: boolean;
   isDark: boolean;
 }
+
+const formatModelName = (model: string | null): string => {
+  if (!model) return 'Gemini';
+  if (model.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
+  if (model.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
+  if (model.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
+  return 'Gemini AI';
+};
 
 export const DailyView: React.FC<DailyViewProps> = ({
   activeLegIndex,
@@ -44,12 +53,12 @@ export const DailyView: React.FC<DailyViewProps> = ({
   
   const shouldShowBlock = (index: number) => {
     if (settings.disableAI) return true;
-    if (!isCurrentDayEnhanced) return !isCurrentDayLoading;
+    if (!isCurrentDayEnhanced) return false;
     return typingStep >= index;
   };
 
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
-    if (settings.disableAI || (!isCurrentDayEnhanced && !isCurrentDayLoading)) {
+    if (settings.disableAI) {
       return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{text || fallback}</span>;
     }
     
@@ -62,7 +71,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
         />
       );
     }
-    return null;
+    return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{fallback}</span>;
   };
 
   const renderSurfaceReason = () => {
@@ -97,7 +106,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
 
   return (
     <div className="flex flex-col gap-4 flex-1 h-full">
-      {/* Top Card: Popups open DOWNWARDS to avoid being hidden by header */}
+      {/* Top Card */}
       <div 
         className={`min-h-0 transition-all duration-500 ease-in-out cursor-pointer relative z-40 ${isAdviceExpanded ? 'flex-none' : (activeLegIndex === 0 ? 'flex-[3]' : 'flex-[1]')}`}
         onClick={() => handleCardClick(0)}
@@ -123,12 +132,12 @@ export const DailyView: React.FC<DailyViewProps> = ({
       >
         <div className="flex items-center justify-between w-full flex-none">
           <div className="flex items-center gap-2">
-            <div className={`p-1.5 rounded-lg transition-colors ${!settings.disableAI && isCurrentDayLoading && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
+            <div className={`p-1.5 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
               <Zap className="w-4 h-4" />
             </div>
             <div className="flex flex-col">
-              <span className={`text-[11px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && isCurrentDayLoading && !isCurrentDayEnhanced ? 'text-slate-600' : 'text-blue-600'}`}>
-                {!settings.disableAI && isCurrentDayLoading && !isCurrentDayEnhanced ? 'Deep Analysis...' : 'Commute Intelligence'}
+              <span className={`text-[11px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && !isCurrentDayEnhanced ? 'text-slate-600' : 'text-blue-600'}`}>
+                {!settings.disableAI && !isCurrentDayEnhanced ? 'Deep Analysis...' : 'Commute Intelligence'}
               </span>
               {isAdviceExpanded && (
                 <span className={`text-[9px] font-bold uppercase tracking-wider mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -149,7 +158,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
                   <X className="w-4 h-4" />
                 </button>
             ) : (
-              !isCurrentDayEnhanced && !settings.disableAI && isCurrentDayLoading && (
+              !isCurrentDayEnhanced && !settings.disableAI && (
                 <div className="flex items-center gap-1.5">
                   <RefreshCw className="w-2.5 h-2.5 text-blue-400 animate-spin" />
                 </div>
@@ -163,14 +172,14 @@ export const DailyView: React.FC<DailyViewProps> = ({
             renderSurfaceReason()
           ) : (
             <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-top-2 duration-500 pb-2">
-              {!settings.disableAI && isCurrentDayLoading && !isCurrentDayEnhanced && (
-                <div className="flex items-center gap-2 py-1">
-                  <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
-                  <span className="text-[8px] font-black uppercase text-blue-600 tracking-widest">Generative Intelligence active...</span>
+              {!settings.disableAI && !isCurrentDayEnhanced && (
+                <div className="flex flex-col gap-3 items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                  <span className="text-[10px] font-black uppercase text-blue-600 tracking-[0.2em] animate-pulse">Running Tactical Inference...</span>
                 </div>
               )}
 
-              {shouldShowBlock(0) && (
+              {(shouldShowBlock(0) || settings.disableAI) && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-2">
                     <CloudRain className="w-4 h-4 text-blue-500" />
@@ -182,7 +191,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
                 </div>
               )}
 
-              {shouldShowBlock(1) && (
+              {(shouldShowBlock(1) || settings.disableAI) && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-2">
                     <Activity className="w-4 h-4 text-emerald-600" />
@@ -194,7 +203,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
                 </div>
               )}
 
-              {shouldShowBlock(2) && (
+              {(shouldShowBlock(2) || settings.disableAI) && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-2">
                     <Compass className="w-4 h-4 text-blue-600" />
@@ -206,7 +215,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
                 </div>
               )}
 
-              {shouldShowBlock(3) && (
+              {(shouldShowBlock(3) || settings.disableAI) && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-2">
                     <Bike className="w-4 h-4 text-blue-600" />
@@ -218,7 +227,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
                 </div>
               )}
 
-              {shouldShowBlock(4) && (
+              {(shouldShowBlock(4) || settings.disableAI) && (
                 <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-2">
                     <Shirt className="w-4 h-4 text-blue-600" />
@@ -235,7 +244,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
                   isDark ? 'text-slate-300' : 'text-slate-600'
                 }`}>
                   {isCurrentDayEnhanced ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
-                  <span>Source: {isCurrentDayEnhanced ? 'Gemini 2.0 Flash' : 'Standard Algorithm'}</span>
+                  <span>Source: {isCurrentDayEnhanced ? formatModelName(currentLLMModel) : 'Standard Algorithm'}</span>
                 </div>
               </div>
             </div>

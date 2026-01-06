@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
@@ -16,6 +15,7 @@ import { getLocality, shuffleArray, filterLocationsWithGlobal } from './utils/he
 import { 
   getTelemetryBatch,
   getAIInsights,
+  getCommuteDayAIAdvice,
   getTrainingSessionAIAdvice,
   getCommuteRoadDistance, 
   fetchRawWeatherData, 
@@ -324,6 +324,65 @@ const App: React.FC = () => {
     }
   }, [selectedDateOffset, viewMode, pulseDataMap, settings, syncFullWeek, loadingOffsets]);
 
+  // ON-DEMAND COMMUTE AI ENHANCEMENT
+  // Similar to training mode, if the current day has telemetry but NO AI advice, trigger Gemini specifically for this day.
+  useEffect(() => {
+    const currentPulse = pulseDataMap[selectedDateOffset];
+    if (
+      viewMode === 'daily' && 
+      currentPulse && 
+      !currentPulse.isEnhanced && 
+      !currentPulse.aiFailed && 
+      !settings.disableAI &&
+      !loadingOffsets.includes(selectedDateOffset)
+    ) {
+      const enhanceCurrentCommute = async () => {
+         try {
+           const aiAdvice = await getCommuteDayAIAdvice(settings, currentPulse.weather);
+           setPulseDataMap(prev => {
+              const next = { ...prev };
+              if (next[selectedDateOffset]) {
+                next[selectedDateOffset] = {
+                  ...next[selectedDateOffset],
+                  isEnhanced: true,
+                  weather: {
+                    morning: { 
+                      ...next[selectedDateOffset].weather.morning,
+                      surfaceReason: aiAdvice.morning.summary,
+                      ridingStyleAdvice: aiAdvice.morning.style,
+                      bikeSetupAdvice: aiAdvice.morning.setup,
+                      clothingAdvice: aiAdvice.morning.clothing,
+                      performanceAdvice: aiAdvice.morning.performance
+                    },
+                    evening: {
+                      ...next[selectedDateOffset].weather.evening,
+                      surfaceReason: aiAdvice.evening.summary,
+                      ridingStyleAdvice: aiAdvice.evening.style,
+                      bikeSetupAdvice: aiAdvice.evening.setup,
+                      clothingAdvice: aiAdvice.evening.clothing,
+                      performanceAdvice: aiAdvice.evening.performance
+                    }
+                  }
+                };
+              }
+              localStorage.setItem(CACHE_KEY, JSON.stringify(next));
+              return next;
+           });
+         } catch (e) {
+           console.warn("Targeted Commute AI failed", e);
+           setPulseDataMap(prev => {
+              const next = { ...prev };
+              if (next[selectedDateOffset]) next[selectedDateOffset].aiFailed = true;
+              return next;
+           });
+         }
+      };
+      
+      const timer = setTimeout(enhanceCurrentCommute, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedDateOffset, viewMode, pulseDataMap, settings.disableAI, loadingOffsets]);
+
   useEffect(() => {
     if (!initialSyncStarted.current) {
       initialSyncStarted.current = true;
@@ -537,7 +596,6 @@ const App: React.FC = () => {
       const timer = setTimeout(fetchAIAdvice, 800); 
       return () => clearTimeout(timer);
     }
-    // Updated dependency array: Rely on primitives where possible to ensure stability
   }, [
     activeTrainingSlot?.startHour, 
     activeTrainingSlot?.isAIEnhanced, 
@@ -545,7 +603,7 @@ const App: React.FC = () => {
     viewMode, 
     settings.disableAI, 
     training.distance, 
-    settings // kept settings, as it is state from App and stable
+    settings 
   ]);
 
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
