@@ -1,4 +1,8 @@
 
+// This is the injection point for the precache manifest
+// It must be present for the build to succeed in 'injectManifest' mode
+const manifest = self.__WB_MANIFEST;
+
 const CACHE_NAME = 'commute-iq-v4';
 const ASSETS = [
   '/',
