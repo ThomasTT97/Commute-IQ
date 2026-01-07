@@ -49,6 +49,8 @@ export interface ScoreDeduction {
 export interface LocationSuggestion extends BelgianLocation {
   distanceFromHome?: number;
   distanceFromTrainingCenter?: number;
+  // Fix: added distFromCenter to LocationSuggestion to satisfy WeatherCard usage
+  distFromCenter?: number;
   score?: number;
 }
 
@@ -65,12 +67,13 @@ export interface WeatherCondition {
   minTemp?: number;
   maxTemp?: number;
   score: number;
-  condition: 'Sunny' | 'Rainy' | 'Cloudy' | 'Windy' | 'Stormy';
+  condition: 'Sunny' | 'Rainy' | 'Cloudy' | 'Windy' | 'Stormy' | 'Snowy';
   precipitation: number;
   windSpeed: number;
   windDirection: number;
   humidity: number;
   isDark: boolean;
+  isSnowy: boolean;
   slipperyChance: number; 
   wetSurfaceChance: number; 
   headwindImpact: number;

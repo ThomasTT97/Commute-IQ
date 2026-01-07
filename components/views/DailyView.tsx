@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { WeatherCard } from '../WeatherCard';
 import { Zap, RefreshCw, Compass, Bike, Shirt, ChevronDown, Loader2, Sparkles, Calculator, CloudRain, Activity, X } from 'lucide-react';
@@ -23,9 +24,13 @@ interface DailyViewProps {
 
 const formatModelName = (model: string | null): string => {
   if (!model) return 'Gemini';
-  if (model.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
-  if (model.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
-  if (model.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
+  const m = model.toLowerCase();
+  if (m.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
+  if (m.includes('gemini-3-pro')) return 'Gemini 3.0 Pro';
+  if (m.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
+  if (m.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
+  if (m.includes('lite')) return 'Gemini Flash Lite';
+  if (m.includes('flash')) return 'Gemini Flash';
   return 'Gemini AI';
 };
 

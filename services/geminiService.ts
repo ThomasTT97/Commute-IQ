@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -7,19 +8,13 @@ export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
 export let isAIFallingBack = false;
 
-// New globals to track active LLM model information for UI feedback
 export let currentLLMModel: string | null = null;
 export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
-export let isUsingFallbackModel = false; // Tracks if we have deviated from the primary model
+export let isUsingFallbackModel = false;
 
 const USAGE_CACHE_KEY = 'commute_iq_usage_log';
 
-// Robust Model Chain: 
-// 1. Gemini 3.0 Flash Preview: Latest reasoning engine.
-// 2. Gemini 2.5 Flash: Stable, high-performance workhorse.
-// 3. Gemini Flash Latest: Reliable alias fallback.
-// 4. Gemini Flash Lite: Cost-efficient, high-throughput fallback.
 export const MODEL_CHAIN = [
   "gemini-3-flash-preview",
   "gemini-2.5-flash",          
@@ -27,7 +22,93 @@ export const MODEL_CHAIN = [
   "gemini-flash-lite-latest" 
 ];
 
-// Helper to track and retrieve local usage stats
+/**
+ * Direct Maps API (Nominatim) for ultra-fast, non-LLM lookups.
+ * Enabled for European-wide search with improved city/country formatting.
+ */
+export const getDirectLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
+  if (!query || query.length < 3) return [];
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=6`;
+    const res = await fetch(url, {
+      headers: { 'Accept-Language': 'nl,fr,en' }
+    });
+    if (!res.ok) throw new Error("Maps API unreachable");
+    const data = await res.json();
+    
+    return data.map((item: any) => {
+      const addr = item.address;
+      const type = item.addresstype || item.type;
+      
+      const houseNum = addr.house_number || "";
+      const street = addr.road || addr.pedestrian || addr.cycleway || addr.path || "";
+      const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || "";
+      const zip = addr.postcode || "";
+      const country = addr.country || "";
+      
+      let cleanName = "";
+
+      // Logic to handle City-level lookups differently from Address-level lookups
+      const isRegional = ['city', 'town', 'village', 'municipality', 'state', 'country', 'administrative'].includes(type) || !street;
+
+      if (isRegional) {
+        // Format: City, Country
+        const main = city || item.name || item.display_name.split(',')[0];
+        cleanName = country ? `${main}, ${country}` : main;
+      } else {
+        // Format: Street HouseNum, Zip City, Country
+        const addressPart = houseNum ? `${street} ${houseNum}` : street;
+        const localityPart = zip ? `${zip} ${city}` : city;
+        const parts = [addressPart, localityPart, country].filter(p => p && p.length > 0);
+        cleanName = parts.join(', ');
+      }
+
+      // Fallback to OSM's display name if construction failed
+      if (!cleanName || cleanName.length < 5) {
+        cleanName = item.display_name.split(',').slice(0, 3).join(', ');
+      }
+
+      return {
+        name: cleanName,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon)
+      };
+    });
+  } catch (e) {
+    return BELGIAN_LOCATIONS.filter(l => 
+      l.name.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 5);
+  }
+};
+
+export const reverseGeocodeDirect = async (coords: Coordinates): Promise<string> => {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json&addressdetails=1`;
+    const res = await fetch(url, {
+      headers: { 'Accept-Language': 'nl,fr,en' }
+    });
+    if (!res.ok) throw new Error("Reverse geocode failed");
+    const data = await res.json();
+    const addr = data.address;
+    
+    const houseNum = addr.house_number || "";
+    const street = addr.road || addr.pedestrian || addr.cycleway || "";
+    const city = addr.city || addr.town || addr.village || addr.suburb || addr.municipality || "Unknown City";
+    const zip = addr.postcode || "";
+    const country = addr.country || "";
+
+    if (!street) {
+      return country ? `${city}, ${country}` : city;
+    }
+
+    const addressLine = houseNum ? `${street} ${houseNum}` : street;
+    const localityLine = zip ? `${zip} ${city}` : city;
+    return `${addressLine}, ${localityLine}${country ? `, ${country}` : ''}`;
+  } catch (e) {
+    return `${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)}`;
+  }
+};
+
 export const getLlmUsageStats = () => {
   try {
     const raw = localStorage.getItem(USAGE_CACHE_KEY);
@@ -35,11 +116,9 @@ export const getLlmUsageStats = () => {
     const now = Date.now();
     const oneMinAgo = now - 60000;
     const oneDayAgo = now - 86400000;
-    
     const validLog = log.filter(t => t > oneDayAgo);
     const rpm = validLog.filter(t => t > oneMinAgo).length;
     const rpd = validLog.length;
-    
     return { rpm, rpd, log: validLog };
   } catch (e) {
     return { rpm: 0, rpd: 0, log: [] };
@@ -53,7 +132,9 @@ const recordLlmRequest = () => {
 };
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
-  // Request 14 days of forecast + 1 past day for trend analysis
+  if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+    throw new Error("Invalid coordinates");
+  }
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather telemetry failed");
@@ -63,14 +144,9 @@ export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => 
 export const sliceWeatherData = (hourly: any, window: [string, string], offset: number): any => {
   const startHour = parseInt(window[0].split(':')[0]);
   const endHour = parseInt(window[1].split(':')[0]);
-  
-  // API returns 1 past day (24 hours).
-  // Index 0-23 = Yesterday, 24-47 = Today (Offset 0), 48-71 = Tomorrow (Offset 1)
   const dayStartIdx = (offset + 1) * 24; 
-  
   const startIndex = dayStartIdx + startHour;
   const endIndex = dayStartIdx + endHour;
-  
   const slice: any = {};
   Object.keys(hourly).forEach(key => {
     if (Array.isArray(hourly[key])) {
@@ -83,25 +159,18 @@ export const sliceWeatherData = (hourly: any, window: [string, string], offset: 
 const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): string => {
   const { riderWeight, tireWidth, type } = equipment;
   let pressure = 0;
-
   if (type === 'Road Bike' || type === 'Speedpedelec') {
     pressure = 2.0 + (riderWeight * 0.05) - ((tireWidth - 25) * 0.1);
     pressure = Math.max(3.5, Math.min(8.5, pressure));
   } else if (type === 'Gravel Bike') {
-    // Fixed: 'weight' was undefined, changed to 'riderWeight'
     pressure = 1.0 + (riderWeight * 0.03) - ((tireWidth - 35) * 0.05);
     pressure = Math.max(1.8, Math.min(4.5, pressure));
   } else {
     pressure = 0.5 + (riderWeight * 0.02);
     pressure = Math.max(1.4, Math.min(3.0, pressure));
   }
-
-  if (w.iceRisk) {
-    pressure -= 0.5;
-  } else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) {
-    pressure -= 0.3;
-  }
-
+  if (w.isSnowy || w.iceRisk) pressure -= 0.6;
+  else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) pressure -= 0.3;
   return `${pressure.toFixed(1)} Bar`;
 };
 
@@ -112,17 +181,18 @@ export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment
   let clothing = "Short bibs and short sleeves. Standard kit.";
   let performance = "Optimal physiological conditions for threshold training and endurance improvement.";
 
-  if (w.temp < 5) {
-    clothing = "Thermal long bibs, winter jacket, heavy gloves, and neoprene overshoes required.";
-  } else if (w.temp < 10) {
-    clothing = "Long bibs (or leg warmers), long sleeve jersey, base layer, and full-finger gloves.";
-  } else if (w.temp < 15) {
-    clothing = "Short bibs with knee warmers, arm warmers, and a wind gilet. Light gloves recommended.";
-  } else if (w.temp < 20) {
-    clothing = "Short bibs, short sleeves. Carry a gilet or arm warmers for descent/stops.";
-  }
+  if (w.temp < 5) clothing = "Thermal long bibs, winter jacket, heavy gloves, and neoprene overshoes required.";
+  else if (w.temp < 10) clothing = "Long bibs (or leg warmers), long sleeve jersey, base layer, and full-finger gloves.";
+  else if (w.temp < 15) clothing = "Short bibs with knee warmers, arm warmers, and a wind gilet. Light gloves recommended.";
+  else if (w.temp < 20) clothing = "Short bibs, short sleeves. Carry a gilet or arm warmers for descent/stops.";
 
-  if (w.iceRisk) {
+  if (w.isSnowy) {
+    summary = "Snow active on route. Critical traction loss and visibility reduction.";
+    style = "Extreme caution. Maintain upright posture. Brake well in advance.";
+    setup = "Maximum tire width, minimum safe pressure. Use winter tires if available.";
+    clothing = "Waterproof hardshell, deep thermal layers, and insulated gloves essential.";
+    performance = "Low intensity only. Focus on survival and stability, not metrics.";
+  } else if (w.iceRisk) {
     summary = "High ice risk detected. Treacherous surfaces expected.";
     style = "Avoid leaning into turns. Brake only when upright and very gently.";
     setup = "Lowest safe tire pressure for maximum contact patch. Consider studded tires.";
@@ -154,68 +224,44 @@ export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment
     const pressure = calculateOptimalPressure(equipment, w);
     setup = `Set ${equipment.name} tires to ${pressure}. ${setup}`;
   }
-
   return { summary, style, setup, clothing, performance };
 };
 
 const extractJson = (text?: string): any => {
   if (!text) return {};
-  // 1. Remove markdown code blocks
   let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-  
-  // 2. Locate first { and last } to isolate JSON object if there's extra text
   const firstBrace = cleanText.indexOf('{');
   const lastBrace = cleanText.lastIndexOf('}');
-  
   if (firstBrace >= 0 && lastBrace > firstBrace) {
     cleanText = cleanText.substring(firstBrace, lastBrace + 1);
   } else {
-     // Try array if object failed
      const firstBracket = cleanText.indexOf('[');
      const lastBracket = cleanText.lastIndexOf(']');
      if (firstBracket >= 0 && lastBracket > firstBracket) {
         cleanText = cleanText.substring(firstBracket, lastBracket + 1);
      }
   }
-
-  try {
-    return JSON.parse(cleanText);
-  } catch (e) {
-    return {};
-  }
+  try { return JSON.parse(cleanText); } catch (e) { return {}; }
 };
 
 const cleanErrorMessage = (error: any): string => {
   try {
     let msg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
-    
-    // Parse nested JSON errors
     if (typeof msg === 'string' && (msg.startsWith('{') || msg.startsWith('['))) {
       try {
         const parsed = JSON.parse(msg);
         if (parsed.error?.message) msg = parsed.error.message;
         else if (parsed.message) msg = parsed.message;
-      } catch { /* ignore */ }
+      } catch { }
     }
-
-    // Clean common SDK prefixes
-    msg = msg
-      .replace(/^Error: /, '')
-      .replace(/^\[GoogleGenAI Error\]: /, '')
-      .replace(/GoogleGenerativeAI/gi, 'AI Service');
-
-    // Detect common status codes and map to user-friendly strings
+    msg = msg.replace(/^Error: /, '').replace(/^\[GoogleGenAI Error\]: /, '').replace(/GoogleGenerativeAI/gi, 'AI Service');
     if (msg.includes('429') || msg.includes('Quota exceeded')) return "Service Busy (Quota Exceeded)";
     if (msg.includes('503') || msg.includes('Overloaded')) return "Service Overloaded";
     if (msg.includes('400') || msg.includes('API key')) return "Invalid Configuration/Key";
     if (msg.includes('fetch failed')) return "Network Connection Lost";
-
-    // Truncate
     if (msg.length > 60) return msg.substring(0, 57) + "...";
     return msg;
-  } catch (e) {
-    return "Connection disrupted";
-  }
+  } catch (e) { return "Connection disrupted"; }
 };
 
 const callWithRetry = async <T>(
@@ -225,7 +271,6 @@ const callWithRetry = async <T>(
 ): Promise<{ data: T; model: string }> => {
   const apiKey = process.env.API_KEY;
   lastApiErrorMessage = null;
-  
   if (!apiKey || apiKey.length < 5) {
     isAIFallingBack = true;
     currentLLMModel = null;
@@ -244,30 +289,19 @@ const callWithRetry = async <T>(
     for (let i = 0; i <= maxRetriesPerModel; i++) {
       try {
         const result = await fn(ai, modelName);
-        
-        // Success Logic
         isAIFallingBack = false;
         currentLLMModel = modelName;
         isUsingFallbackModel = modelIndex > 0;
         currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback Tier ${modelIndex}`;
         remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
         lastApiErrorMessage = null;
-        
-        // Record usage for tracking
         recordLlmRequest();
-        
         return { data: result, model: modelName };
       } catch (error: any) {
         const status = error?.status || error?.statusCode;
         const cleanMsg = cleanErrorMessage(error);
-        
         collectedErrors.push(cleanMsg);
-        console.warn(`LLM Attempt failed for ${modelName} (retry ${i}):`, cleanMsg);
-        
-        // Fail fast on 400/404
         if (status === 400 || status === 404) break;
-
-        // Exponential backoff
         if (((status >= 500 && status <= 599) || status === 429) && i < maxRetriesPerModel) {
           const delay = 1000 * Math.pow(2, i);
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -278,7 +312,6 @@ const callWithRetry = async <T>(
     }
   }
   
-  // Total Failure Logic
   isAIFallingBack = true;
   isUsingFallbackModel = false;
   currentLLMModel = null;
@@ -291,17 +324,18 @@ const callWithRetry = async <T>(
 export const checkLLMConnectivity = async (): Promise<boolean> => {
   try {
     await callWithRetry(async (aiInstance, modelName) => {
-       await aiInstance.models.generateContent({
-        model: modelName,
-        contents: "Hello",
-        config: { maxOutputTokens: 5 }
-      });
+       await aiInstance.models.generateContent({ 
+         model: modelName, 
+         contents: "Hello", 
+         config: { 
+           maxOutputTokens: 10,
+           thinkingConfig: { thinkingBudget: 5 }
+         } 
+       });
       return true;
     }, undefined, 0); 
     return true;
-  } catch (e) {
-    return false;
-  }
+  } catch (e) { return false; }
 };
 
 export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
@@ -341,6 +375,7 @@ const getMinutes = (timeStr: string): number => {
 
 const resolveCondition = (code: number, windSpeed: number, precip: number): WeatherCondition['condition'] => {
   if (code >= 95) return 'Stormy';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snowy';
   if (code >= 51 || precip > 0.5) return 'Rainy';
   if (windSpeed > 35) return 'Windy';
   if (code <= 1) return 'Sunny';
@@ -349,23 +384,18 @@ const resolveCondition = (code: number, windSpeed: number, precip: number): Weat
 
 export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: boolean = false): ScoreDeduction[] => {
   const items: ScoreDeduction[] = [];
-  
-  if (w.iceRisk) {
-    items.push({ label: "Critical Ice Risk", val: -70 });
-  }
-  
-  if ((w.precipitation || 0) > 0) {
+  if (w.isSnowy) items.push({ label: "Active Snowfall", val: -60 });
+  if (w.iceRisk) items.push({ label: "Critical Ice Risk", val: -70 });
+  if (!w.isSnowy && (w.precipitation || 0) > 0) {
     const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 4);
     items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
-  } else if ((w.wetSurfaceChance || 0) > 50) {
+  } else if (!w.isSnowy && (w.wetSurfaceChance || 0) > 50) {
     items.push({ label: "Wet Roads", val: -10 });
   }
-  
   if ((w.windSpeed || 0) > 15) {
     const windDeduction = ((w.windSpeed || 0) - 15) * 1.5;
     items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
   }
-  
   if (!isTraining) {
     if ((w.headwindImpact || 0) > 20) {
       const headwindDeduction = (w.headwindImpact || 0) / 4;
@@ -374,9 +404,7 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
       items.push({ label: "Tailwind Boost", val: 5 });
     }
   }
-  
   const temp = w.temp || 0;
-
   if (isTraining) {
     if (temp < 10) {
       const coldDeduction = (10 - temp) * 2;
@@ -399,11 +427,7 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
       items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
     }
   }
-  
-  if (w.isDark) {
-    items.push({ label: "Darkness / Visibility", val: -5 });
-  }
-  
+  if (w.isDark) items.push({ label: "Darkness / Visibility", val: -5 });
   return items;
 };
 
@@ -437,9 +461,9 @@ export const aggregateRawWeather = (
   const avgHum = humidities.length ? humidities.reduce((a, b) => a + b, 0) / humidities.length : 50;
   const maxCode = codes.length ? Math.max(...codes) : 0;
 
+  const isSnowy = [71, 73, 75, 77, 85, 86].includes(maxCode);
   const condition = resolveCondition(maxCode, maxWind, totalPrecip);
   const headwindImpact = Math.round(calculateAverageWindImpact(heading, dirs));
-  
   const timeWindow = customWindow || (isMorning ? settings.morningWindow : settings.eveningWindow);
   
   let isDark = false;
@@ -468,53 +492,37 @@ export const aggregateRawWeather = (
     }
   }
 
-  // Dry Time Estimation Logic
   let estimatedDryTime: number | undefined;
   if ((totalPrecip > 0 || lastPrecipTime !== "None") && fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
     let stopIdx = -1;
-    // Find when it stops raining (Scan up to 48 hours forward from the session start or precip point)
     for (let i = 0; i < 48; i++) {
       const idx = sessionStartAbsoluteIdx + i;
       if (idx >= fullRawHourlyPrecip.length) break;
-      
-      // Look for a 3-hour window of no rain
       const rainAhead = fullRawHourlyPrecip.slice(idx, idx + 3);
       if (rainAhead.length >= 1 && rainAhead.every(v => v === 0)) {
         stopIdx = idx;
         break;
       }
     }
-
     if (stopIdx !== -1) {
-      // Base evaporation buffer
       let evaporationHours = 2;
-      
-      // Adjust based on humidity/temp at stop time if available
       const humAtStop = (fullRawHourlyHumidity?.[stopIdx] ?? avgHum);
       const tempAtStop = (fullRawHourlyTemp?.[stopIdx] ?? avgTemp);
-      
       if (humAtStop > 85) evaporationHours += 6;
       else if (humAtStop > 70) evaporationHours += 3;
-      
       if (tempAtStop < 5) evaporationHours += 4;
       else if (tempAtStop < 12) evaporationHours += 2;
-
-      // Calculate absolute timestamp
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 1);
       startDate.setHours(0, 0, 0, 0);
-      
       estimatedDryTime = startDate.getTime() + (stopIdx + evaporationHours) * 60 * 60 * 1000;
     }
   }
 
-  // SESSION START TIME in Absolute MS
   const absoluteSessionStartDate = new Date();
   absoluteSessionStartDate.setDate(absoluteSessionStartDate.getDate() - 1);
   absoluteSessionStartDate.setHours(0,0,0,0);
   const sessionStartAbsoluteMs = absoluteSessionStartDate.getTime() + (sessionStartAbsoluteIdx || 0) * 60 * 60 * 1000;
-
-  // CRITICAL CONSISTENCY CHECK: If the road will only be dry AFTER the session start, it is WET.
   const isWetFromPrecip = totalPrecip > 0 || lastPrecipTime !== "None";
   const isCurrentlyInDryingPhase = estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false;
   const isWet = isWetFromPrecip && (totalPrecip > 0 || isCurrentlyInDryingPhase);
@@ -523,7 +531,7 @@ export const aggregateRawWeather = (
   const nearFreezing = minTemp <= 3.5; 
   const overnightFreeze = minPastTemp <= 0;
   const humidityThreshold = overnightFreeze ? 60 : 75;
-  const hasMoisture = isWet || avgHum > humidityThreshold;
+  const hasMoisture = isWet || avgHum > humidityThreshold || isSnowy;
   const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && nearFreezing));
 
   const baseWeather: any = {
@@ -531,12 +539,13 @@ export const aggregateRawWeather = (
     minTemp: parseFloat(minTemp.toFixed(1)),
     maxTemp: parseFloat(maxTemp.toFixed(1)),
     condition,
+    isSnowy,
     precipitation: parseFloat(totalPrecip.toFixed(1)),
     windSpeed: parseFloat(maxWind.toFixed(1)),
     windDirection: Math.round(avgDir),
     humidity: Math.round(avgHum),
     isDark,
-    slipperyChance: isWet ? 60 : (avgTemp < 3 ? 40 : 10),
+    slipperyChance: isSnowy ? 90 : (isWet ? 60 : (avgTemp < 3 ? 40 : 10)),
     wetSurfaceChance: isWet ? 90 : 10,
     headwindImpact,
     iceRisk, 
@@ -562,335 +571,96 @@ export const aggregateRawWeather = (
   baseWeather.bikeSetupAdvice = basicAdvice.setup;
   baseWeather.clothingAdvice = basicAdvice.clothing;
   baseWeather.performanceAdvice = basicAdvice.performance;
-  if (selectedEquipment) {
-    baseWeather.optimalPressure = calculateOptimalPressure(selectedEquipment, baseWeather);
-  }
-  
+  if (selectedEquipment) baseWeather.optimalPressure = calculateOptimalPressure(selectedEquipment, baseWeather);
   return baseWeather as WeatherCondition;
 };
 
-export const getTelemetryBatch = async (
-  settings: CommuteSettings, 
-  offsets: number[]
-): Promise<Record<number, any>> => {
-  const home = settings.homeCoords || { lat: 0, lng: 0 };
-  const work = settings.workCoords || { lat: 0, lng: 0 };
-  const morningHeading = calculateBearing(home, work);
-  const eveningHeading = calculateBearing(work, home);
-
+export const getTelemetryBatch = async (settings: CommuteSettings, offsets: number[]): Promise<Record<number, any>> => {
+  if (!settings.homeCoords || !settings.workCoords) return {};
   const [homeRaw, workRaw] = await Promise.all([
-    fetchRawWeatherData(home),
-    fetchRawWeatherData(work)
+    fetchRawWeatherData(settings.homeCoords),
+    fetchRawWeatherData(settings.workCoords)
   ]);
-
   const batch: Record<number, any> = {};
-
-  offsets.forEach(offset => {
-    if (offset >= (homeRaw.daily?.sunrise?.length || 0)) return;
-
-    const mSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
-    const eSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
+  for (const offset of offsets) {
+    const dayStartIdx = (offset + 1) * 24;
+    const morningSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
+    const sunTimesMorning = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
+    const morningStartHour = parseInt(settings.morningWindow[0].split(':')[0]);
+    const morningIdx = dayStartIdx + morningStartHour;
+    const morningMinPast = homeRaw.hourly.temperature_2m.slice(Math.max(0, morningIdx - 6), morningIdx);
+    const morningMinPastVal = morningMinPast.length ? Math.min(...morningMinPast) : 10;
+    const morningWeather = aggregateRawWeather(morningSlice, calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesMorning, morningMinPastVal, undefined, homeRaw.hourly.precipitation, morningIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
     
-    const sunTimes = {
-      sunrise: homeRaw.daily?.sunrise?.[offset] || "07:00",
-      sunset: homeRaw.daily?.sunset?.[offset] || "20:00"
-    };
+    const eveningSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
+    const sunTimesEvening = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
+    const eveningStartHour = parseInt(settings.eveningWindow[0].split(':')[0]);
+    const eveningIdx = dayStartIdx + eveningStartHour;
+    const eveningMinPast = workRaw.hourly.temperature_2m.slice(Math.max(0, eveningIdx - 6), eveningIdx);
+    const eveningMinPastVal = eveningMinPast.length ? Math.min(...eveningMinPast) : 10;
+    const eveningWeather = aggregateRawWeather(eveningSlice, calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesEvening, eveningMinPastVal, undefined, workRaw.hourly.precipitation, eveningIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
 
-    const getAbsoluteIdx = (window: [string, string], offset: number) => {
-      return (offset + 1) * 24 + parseInt(window[0].split(':')[0]);
-    };
-
-    const getMinPastTemp = (raw: any, offset: number, window: [string, string]) => {
-      const idx = getAbsoluteIdx(window, offset);
-      const pastTemps = (raw.hourly.temperature_2m || []).slice(Math.max(0, idx - 6), idx);
-      return pastTemps.length ? Math.min(...pastTemps) : 10;
-    };
-
-    const morning = aggregateRawWeather(mSlice, morningHeading, true, settings, sunTimes, getMinPastTemp(homeRaw, offset, settings.morningWindow), undefined, homeRaw.hourly.precipitation, getAbsoluteIdx(settings.morningWindow, offset), false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
-    const evening = aggregateRawWeather(eSlice, eveningHeading, false, settings, sunTimes, getMinPastTemp(workRaw, offset, settings.eveningWindow), undefined, workRaw.hourly.precipitation, getAbsoluteIdx(settings.eveningWindow, offset), false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
-
-    batch[offset] = { 
-      offset, 
-      score: Math.min(morning.score, evening.score), 
-      summary: { 
-        isWet: (morning.wetSurfaceChance > 50) || (evening.wetSurfaceChance > 50),
-        isIcy: morning.iceRisk || evening.iceRisk
-      }, 
-      weather: { 
-        morning: { ...morning }, 
-        evening: { ...evening } 
-      },
+    batch[offset] = {
+      weather: { morning: morningWeather, evening: eveningWeather },
       lastUpdated: Date.now(),
-      isEnhanced: false
+      score: Math.min(morningWeather.score, eveningWeather.score),
+      summary: { isWet: morningWeather.wetSurfaceChance > 50 || eveningWeather.wetSurfaceChance > 50, isSnowy: morningWeather.isSnowy || eveningWeather.isSnowy, isIcy: morningWeather.iceRisk || eveningWeather.iceRisk }
     };
-  });
-
+  }
   return batch;
 };
 
-export const getAIInsights = async (
-  settings: CommuteSettings,
-  telemetryBatch: Record<number, any>
-): Promise<Record<number, { morning: any; evening: any }>> => {
-  const dataToProcess = Object.values(telemetryBatch).map(({offset, weather}) => ({
-    o: offset, 
-    m: { temp: weather.morning.temp, cond: weather.morning.condition, prec: weather.morning.precipitation, ice: weather.morning.iceRisk, wind: weather.morning.windSpeed }, 
-    e: { temp: weather.evening.temp, cond: weather.evening.condition, prec: weather.evening.precipitation, ice: weather.evening.iceRisk, wind: weather.evening.windSpeed }
-  }));
-
-  const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
-
-  // Commute Styles to add variance
-  const COMMUTE_FOCUS_THEMES = [
-    "Safety & Handling",
-    "Comfort & Warmth",
-    "Speed & Efficiency",
-    "Visibility & Awareness",
-    "Technical Road Surface Analysis"
-  ];
-  const theme = COMMUTE_FOCUS_THEMES[Math.floor(Math.random() * COMMUTE_FOCUS_THEMES.length)];
-
-  try {
-    const { data: parsedAIResults } = await callWithRetry(async (aiInstance, modelName) => {
-      const response = await aiInstance.models.generateContent({
-        model: modelName,
-        contents: `Cycling Expert: Provide detailed, highly technical, but EXTREMELY CONCISE (max 10 words per field) tactical advice.
-        Focus Theme for this batch: ${theme}.
-        Lang: ${settings.language}.
-        Available Bikes: ${equipmentContext}.
-        
-        Instructions:
-        - Ensure all descriptions are mathematically consistent with the provided telemetry (e.g., if temp is 0, do not describe it as 'sub-zero'). Use 'at or below freezing' instead.
-        - Avoid repetitive phrasing.
-        - Use varied vocabulary and specific cycling terminology.
-        - Ensure advice feels distinct from previous days.
-        - Context: For 'clothing' field, mention specific layers/accessories.
-        - Context: For 'setup' field, recommend tire pressure in Bar.
-
-        Data: ${JSON.stringify(dataToProcess)}. 
-        Return JSON array of objects: { "o": number, "mw": { "s": string, "st": string, "se": string, "c": string, "p": string }, "ew": { "s": string, "st": string, "se": string, "c": string, "p": string } } where s=summary, st=style, se=setup, c=clothing, p=performance.`,
-        config: { temperature: 0.9, responseMimeType: "application/json" }
-      });
-      return extractJson(response.text);
-    });
-
-    const result: Record<number, { morning: any; evening: any }> = {};
-    if (Array.isArray(parsedAIResults)) {
-      parsedAIResults.forEach((aiRes: any) => {
-        result[aiRes.o] = {
-          morning: { summary: aiRes.mw.s, style: aiRes.mw.st, setup: aiRes.mw.se, clothing: aiRes.mw.c, performance: aiRes.mw.p },
-          evening: { summary: aiRes.ew.s, style: aiRes.ew.st, setup: aiRes.ew.se, clothing: aiRes.ew.c, performance: aiRes.ew.p }
-        };
-      });
-    }
-    return result;
-  } catch (error) {
-    isAIFallingBack = true;
-    console.error("AI Insight generation failed", error);
-    throw error;
-  }
-};
-
-export const getCommuteDayAIAdvice = async (
-  settings: CommuteSettings,
-  dayWeather: { morning: WeatherCondition, evening: WeatherCondition }
-): Promise<{ morning: any, evening: any }> => {
-  const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
-
-  const dataToProcess = {
-    m: { temp: dayWeather.morning.temp, cond: dayWeather.morning.condition, prec: dayWeather.morning.precipitation, ice: dayWeather.morning.iceRisk, wind: dayWeather.morning.windSpeed },
-    e: { temp: dayWeather.evening.temp, cond: dayWeather.evening.condition, prec: dayWeather.evening.precipitation, ice: dayWeather.evening.iceRisk, wind: dayWeather.evening.windSpeed }
-  };
-
-  try {
-    const { data } = await callWithRetry(async (aiInstance, modelName) => {
-      const response = await aiInstance.models.generateContent({
-        model: modelName,
-        contents: `Cycling Expert: Analyze telemetry for a daily commute (Morning/Evening). 
-        Language: ${settings.language}.
-        Bikes: ${equipmentContext}.
-        
-        Requirements:
-        - "s": Road condition analysis (max 15 words)
-        - "st": Technical riding style/handling (max 10 words)
-        - "se": Tire pressure/bike setup (max 10 words)
-        - "c": Layering/clothing list (max 10 words)
-        - "p": Physiological/effort strategy (max 15 words)
-
-        Data: ${JSON.stringify(dataToProcess)}.
-        Return JSON: { "mw": { "s": string, "st": string, "se": string, "c": string, "p": string }, "ew": { "s": string, "st": string, "se": string, "c": string, "p": string } }`,
-        config: { temperature: 0.8, responseMimeType: "application/json" }
-      });
-      return extractJson(response.text);
-    });
-
-    return {
-      morning: { summary: data.mw.s, style: data.mw.st, setup: data.mw.se, clothing: data.mw.c, performance: data.mw.p },
-      evening: { summary: data.ew.s, style: data.ew.st, setup: data.ew.se, clothing: data.ew.c, performance: data.ew.p }
-    };
-  } catch (error) {
-    console.error("Single-day commute AI failed", error);
-    throw error;
-  }
-};
-
-export const getTrainingSessionAIAdvice = async (
-  settings: CommuteSettings,
-  weather: WeatherCondition,
-  distance: number
-): Promise<{ summary: string; style: string; setup: string; clothing: string; performance: string }> => {
-  const equipmentContext = settings.equipment?.map(e => `${e.name} (${e.type}, ${e.tireWidth}mm)`).join(", ") || "No specific bike profile";
-  const defaults = getStandardizedAdvice(weather);
-
-  // Training Personas to add variance
-  const PERSONAS = [
-    "World Tour Directer Sportif (Tactical Focus)",
-    "Exercise Physiologist (Body/Fuel Focus)",
-    "Veteran Flandrien (Grit/Toughness Focus)",
-    "Pro Team Mechanic (Equipment/Tire Focus)",
-    "Meteorologist (Wind/Weather Focus)"
-  ];
-  const persona = PERSONAS[Math.floor(Math.random() * PERSONAS.length)];
-
-  try {
-    const { data } = await callWithRetry(async (aiInstance, modelName) => {
-      const prompt = `Role: ${persona}. 
-      Task: Analyze forecast for a ${distance}km training ride.
-      Weather Data: ${JSON.stringify(weather)}.
-      Rider Equipment: ${equipmentContext}.
-      Language: ${settings.language}.
-
-      Requirements:
-      - Strictly adhere to numeric values; do not use 'sub-zero' or 'below zero' if temperature is 0°C. Use 'reached freezing' or 'at 0°C' instead.
-      - strictly JSON output.
-      - "summary": Analysis of road surface and atmospheric risks.
-      - "performance": Physiological strategy (heart rate, fueling, intensity).
-      - "style": Technical handling advice (braking, cornering).
-      - "setup": Specific tire pressure (Bar) and equipment choice.
-      - "clothing": Exact kit list (layers, gloves, overshoes).
-      - Style: Use professional cycling jargon. Vary sentence structure. Avoid generic advice.
-
-      Output JSON Structure:
-      { 
-        "summary": "string (max 20 words)", 
-        "performance": "string (max 20 words)",
-        "style": "string (max 15 words)", 
-        "setup": "string (max 15 words)", 
-        "clothing": "string (max 15 words)" 
-      }`;
-      
-      const response = await aiInstance.models.generateContent({
-        model: modelName,
-        contents: prompt,
-        config: { temperature: 0.9, responseMimeType: "application/json" }
-      });
-      return extractJson(response.text);
-    });
-    
-    // Merge valid AI data with defaults to ensure no empty fields
-    return {
-        summary: data.summary || defaults.summary,
-        style: data.style || defaults.style,
-        setup: data.setup || defaults.setup,
-        clothing: data.clothing || defaults.clothing,
-        performance: data.performance || defaults.performance
-    };
-  } catch (e) {
-    console.warn("AI Training Advice failed, falling back to algorithm:", e);
-    // CRITICAL FIX: Return standard algorithmic advice instead of throwing
-    // This ensures fields are always populated even if API is down
-    return defaults;
-  }
-};
-
-export const resolveAddress = async (query: string): Promise<{ address: string; coords: Coordinates; mapsUri?: string }> => {
-  const normalizedQuery = query.trim().toLowerCase();
-  
-  if (BELGIAN_CITIES[normalizedQuery]) {
-      return { address: normalizedQuery, coords: BELGIAN_CITIES[normalizedQuery] };
-  }
-  
-  const cityKey = Object.keys(BELGIAN_CITIES).find(k => k.toLowerCase() === normalizedQuery);
-  if (cityKey) {
-      return { address: cityKey, coords: BELGIAN_CITIES[cityKey] };
-  }
-
-  const locationMatch = BELGIAN_LOCATIONS.find(l => l.name.toLowerCase() === normalizedQuery);
-  if (locationMatch) {
-      return { address: locationMatch.name, coords: { lat: locationMatch.lat, lng: locationMatch.lng } };
-  }
-
-  try {
-    const { data } = await callWithRetry(async (aiInstance, modelName) => {
-        const response = await aiInstance.models.generateContent({
-        model: modelName, 
-        contents: `Find the precise geographic coordinates and full standardized address for: "${query}". 
-        If it's a specific street address, return that. If it's a city, return the city.
-        Include Country.
-        Return JSON: { "address": string, "lat": number, "lng": number }`,
-        config: { 
-            temperature: 0, 
-            tools: [{ googleMaps: {} }] 
-        },
-        });
-        
-        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        const mapsUri = groundingChunks.find((chunk: any) => chunk.maps?.uri)?.maps?.uri;
-        const parsed = extractJson(response.text);
-        return { ...parsed, mapsUri };
-    }, "gemini-2.5-flash", 2); 
-    
-    return { 
-        address: data.address || query, 
-        coords: { lat: data.lat, lng: data.lng },
-        mapsUri: data.mapsUri
-    };
-  } catch (e) {
-      console.warn("Address resolution failed:", e);
-      return { address: query, coords: { lat: 50.8503, lng: 4.3517 } };
-  }
-};
-
-export const getCommuteRoadDistance = async (origin: string, destination: string): Promise<number | null> => {
-  const { data } = await callWithRetry(async (aiInstance, modelName) => {
-    const response = await aiInstance.models.generateContent({
-      model: modelName,
-      contents: `Cycling distance KM between ${origin} and ${destination}. Only JSON: { "distance": number }`,
-      config: { 
-        temperature: 0, 
-        tools: [{ googleMaps: {} }] 
-      }
-    });
+export const getAIInsights = async (settings: CommuteSettings, telemetry: Record<number, any>): Promise<Record<number, any>> => {
+  const prompt = `Analyze cycling commute weather and provide tactical advice for each day. JSON keys: date offsets, values: { "morning": { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }, "evening": { ... } } Goal: ${settings.fitnessGoal} Data: ${JSON.stringify(telemetry)}`;
+  const { data } = await callWithRetry(async (ai, model) => {
+    const response = await ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json" } });
     return extractJson(response.text);
-  }, "gemini-2.5-flash", 2); 
-  
-  return data.distance || null;
+  });
+  return data;
+};
+
+export const getCommuteDayAIAdvice = async (settings: CommuteSettings, weather: any): Promise<any> => {
+  const prompt = `Analyze cycling commute day gear and tactics. Return JSON: { "morning": { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }, "evening": { ... } } Morning: ${JSON.stringify(weather.morning)} Evening: ${JSON.stringify(weather.evening)}`;
+  const { data } = await callWithRetry(async (ai, model) => {
+    const response = await ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json" } });
+    return extractJson(response.text);
+  });
+  return data;
+};
+
+export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, condition: WeatherCondition, distance: number): Promise<any> => {
+  const prompt = `Analyze training session (${distance}km): Weather: ${JSON.stringify(condition)} Return JSON: { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }`;
+  const { data } = await callWithRetry(async (ai, model) => {
+    const response = await ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json" } });
+    return extractJson(response.text);
+  });
+  return data;
+};
+
+export const getCommuteRoadDistance = async (home: string, work: string): Promise<number | null> => {
+  const prompt = `What is the cycling road distance (one way) between ${home} and ${work} in Belgium? Respond only with numerical value in km.`;
+  const { data } = await callWithRetry(async (ai, model) => {
+    const response = await ai.models.generateContent({ model: "gemini-3-flash-preview", contents: prompt, config: { tools: [{ googleSearch: {} }] } });
+    const text = response.text || "";
+    const match = text.match(/(\d+(\.\d+)?)/);
+    return match ? parseFloat(match[1]) : null;
+  });
+  return data;
 };
 
 export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
-  if (query.length < 3) return [];
+  return getDirectLocationSuggestions(query);
+};
 
-  const normalizedQuery = query.toLowerCase();
-  const localMatches = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(normalizedQuery)).slice(0, 5);
-  
-  if (localMatches.length > 0) {
-      return localMatches;
+export const resolveAddress = async (address: string): Promise<{ address: string; lat: number; lng: number }> => {
+  if (address.includes(',')) {
+    const [lat, lng] = address.split(',').map(v => parseFloat(v.trim()));
+    if (!isNaN(lat) && !isNaN(lng)) {
+      const resolved = await reverseGeocodeDirect({ lat, lng });
+      return { address: resolved, lat, lng };
+    }
   }
-
-  try {
-    const { data } = await callWithRetry(async (aiInstance, modelName) => {
-      const response = await aiInstance.models.generateContent({
-        model: modelName,
-        contents: `Find up to 5 real specific locations (cities, landmarks, or streets) matching "${query}" using Google Maps. Return a raw JSON array (no markdown code blocks) of objects with properties: name (string, format "Name, Country" or "Street, City, Country"), lat (number), lng (number).`,
-        config: { 
-          temperature: 0, 
-          tools: [{ googleMaps: {} }] 
-        }
-      });
-      return extractJson(response.text);
-    }, "gemini-2.5-flash", 2); 
-    return data;
-  } catch (e) {
-    return [];
-  }
+  const results = await getDirectLocationSuggestions(address);
+  if (results.length > 0) return { address: results[0].name, lat: results[0].lat, lng: results[0].lng };
+  throw new Error("Location not found");
 };

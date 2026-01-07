@@ -28,7 +28,9 @@ import {
   Sunrise,
   Sunset,
   Zap,
-  Timer
+  Timer,
+  Snowflake,
+  ChevronUp
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -53,8 +55,14 @@ interface WeatherCardProps {
 }
 
 const getCardinal = (angle: number): string => {
-  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return directions[Math.round(angle / 45) % 8];
+  const directions = [
+    'N', 'NNE', 'NE', 'ENE', 
+    'E', 'ESE', 'SE', 'SSE', 
+    'S', 'SSW', 'SW', 'WSW', 
+    'W', 'WNW', 'NW', 'NNW'
+  ];
+  // 360 / 16 = 22.5 degrees per segment
+  return directions[Math.round(angle / 22.5) % 16];
 };
 
 const formatTime = (isoString?: string): string => {
@@ -160,11 +168,12 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   }, [condition?.headwindImpact, condition?.windSpeed]);
 
   const surface = useMemo(() => {
+    if (condition?.isSnowy) return { label: 'SNOW', color: 'text-indigo-400', icon: <Snowflake className="w-5.5 h-5.5" /> };
     const isWet = (condition?.wetSurfaceChance ?? 0) > 50;
     return isWet 
       ? { label: 'WET', color: 'text-blue-500', icon: <AlertTriangle className="w-5.5 h-5.5" /> }
       : { label: 'DRY', color: 'text-emerald-500', icon: <ShieldCheck className="w-5.5 h-5.5" /> };
-  }, [condition?.wetSurfaceChance]);
+  }, [condition?.wetSurfaceChance, condition?.isSnowy]);
 
   const iceInfo = useMemo(() => {
     const isIcy = !!condition?.iceRisk;
@@ -195,6 +204,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
   const surfaceRiskReason = useMemo(() => {
     if (!condition) return "";
+    if (condition.isSnowy) return "Snow Cover: Active snowfall detected. Traction is compromised across all vectors. High risk of sliding.";
     const isWet = (condition.wetSurfaceChance ?? 0) > 50;
     const rainDuring = condition.precipDuringSession ?? condition.precipitation ?? 0;
     if (isWet) {
@@ -219,10 +229,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (!condition) return [];
     const rainDuring = condition.precipDuringSession ?? condition.precipitation ?? 0;
     return [
+      { label: "Condition", value: condition.isSnowy ? "Snow" : (condition.wetSurfaceChance > 50 ? "Wet" : "Dry"), icon: condition.isSnowy ? <Snowflake className="w-3.5 h-3.5 text-indigo-400" /> : <Droplets className="w-3.5 h-3.5 text-blue-500" /> },
       { label: "Rain During", value: rainDuring > 0 ? `${rainDuring} mm` : "None", icon: <CloudRain className="w-3.5 h-3.5 text-blue-500" /> },
       { label: "Last rain", value: condition.lastPrecipitationTime || "None", icon: <Clock className="w-3.5 h-3.5 text-slate-400" /> },
-      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3.5 h-3.5 text-blue-300" /> },
-      { label: "Saturation", value: `${condition.wetSurfaceChance}%`, icon: <Droplets className={`w-3.5 h-3.5 text-blue-500`} /> }
+      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3.5 h-3.5 text-blue-300" /> }
     ];
   }, [condition]);
 
@@ -236,6 +246,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const getBreakdownIcon = (label: string) => {
     switch (label) {
       case "Critical Ice Risk": return <AlertTriangle className="w-3.5 h-3.5 text-red-500" />;
+      case "Active Snowfall": return <Snowflake className="w-3.5 h-3.5 text-indigo-400" />;
       case "Active Precipitation": return <CloudRain className="w-3.5 h-3.5 text-blue-500" />;
       case "Wet Roads": return <AlertTriangle className="w-3.5 h-3.5 text-blue-400" />;
       case "Wind Intensity": return <Wind className="w-3.5 h-3.5 text-slate-400" />;
@@ -304,7 +315,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       {showSurfaceDetails && (
         <Modal onClose={() => setShowSurfaceDetails(false)} isDark={isDark}>
           <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Surface Diagnostics</span><button onClick={() => setShowSurfaceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
-          {condition?.estimatedDryTime && (condition?.wetSurfaceChance ?? 0) > 50 && (
+          {condition?.estimatedDryTime && (condition?.wetSurfaceChance ?? 0) > 50 && !condition?.isSnowy && (
             <div className={`p-3 rounded-xl border flex flex-col gap-1.5 mb-3 ${isDark ? 'bg-black border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}>
               <div className="flex justify-between items-center"><div className="flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 text-blue-500 animate-pulse" /><span className="text-[7px] font-black text-blue-500 uppercase tracking-widest">Time to dry</span></div><span className={`text-sm font-black font-mono tracking-tighter ${isDark ? 'text-white' : 'text-blue-700'}`}>{countdown}</span></div>
               <div className={`h-1 w-full rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.max(0, 100 - (condition.wetSurfaceChance || 0))}%` }} /></div>
@@ -339,13 +350,15 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           <div className="flex items-center justify-between mb-4"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Wind Analysis</span><button onClick={() => setShowWindDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4 text-slate-500" /></button></div>
           <div className="flex flex-col gap-4 items-center py-2">
              <div className={`p-4 rounded-full border-2 ${isDark ? 'border-white/10 bg-white/5' : 'border-slate-100 bg-slate-50'}`}>
-                <div style={{ transform: `rotate(${condition?.windDirection || 0}deg)` }} className="transition-transform duration-500">
-                   <Navigation className={`w-8 h-8 ${isDark ? 'text-white' : 'text-slate-900'}`} />
+                <div style={{ transform: `rotate(${(condition?.windDirection || 0) + 180}deg)` }} className="transition-transform duration-500">
+                   <ChevronUp className={`w-8 h-8 ${isDark ? 'text-white' : 'text-slate-900'}`} />
                 </div>
              </div>
              <div className="text-center">
                 <div className={`text-3xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-sm text-slate-500 font-bold">km/h</span></div>
-                <div className={`text-xs font-black uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>From {getCardinal(condition?.windDirection ?? 0)}</div>
+                <div className={`text-xs font-black uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {getCardinal(condition?.windDirection ?? 0)} ({Math.round(condition?.windDirection ?? 0)}°)
+                </div>
              </div>
           </div>
         </Modal>

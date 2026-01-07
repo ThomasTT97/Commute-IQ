@@ -1,8 +1,8 @@
-
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { 
   Search, 
   Home,
+  MapPin,
   RefreshCw, 
   Clock, 
   Zap, 
@@ -12,13 +12,20 @@ import {
   Trophy,
   Bike,
   Sparkles,
-  RotateCcw
+  RotateCcw,
+  Loader2,
+  CloudRain,
+  Activity,
+  Compass,
+  Shirt,
+  Calculator
 } from 'lucide-react';
 import { TrainingState } from '../types';
-import { BelgianLocation } from '../locations';
+import { BelgianLocation, BELGIAN_LOCATIONS } from '../locations';
 import { WeatherCard } from './WeatherCard';
 import { TrainingWeeklyForecast } from './TrainingWeeklyForecast';
 import { TypewriterText } from './TypewriterText';
+import { currentLLMModel } from '../services/geminiService';
 
 interface TrainingViewProps {
   isDark: boolean;
@@ -34,6 +41,7 @@ interface TrainingViewProps {
   onReturn: () => void;
   onSearchChange: (val: string) => void;
   onSetToHome: () => void;
+  onSetToCurrent: () => void;
   onDateOffsetChange: (offset: number) => void;
   onDistanceChange: (dist: number) => void;
   onManualHourChange: (hour: number) => void;
@@ -51,6 +59,18 @@ interface TrainingViewProps {
   onToggleMode?: () => void;
 }
 
+const formatModelName = (model: string | null): string => {
+  if (!model) return 'Gemini';
+  const m = model.toLowerCase();
+  if (m.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
+  if (m.includes('gemini-3-pro')) return 'Gemini 3.0 Pro';
+  if (m.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
+  if (m.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
+  if (m.includes('lite')) return 'Gemini Flash Lite';
+  if (m.includes('flash')) return 'Gemini Flash';
+  return 'Gemini AI';
+};
+
 export const TrainingView: React.FC<TrainingViewProps> = ({
   isDark,
   training,
@@ -65,6 +85,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   onReturn,
   onSearchChange,
   onSetToHome,
+  onSetToCurrent,
   onDateOffsetChange,
   onDistanceChange,
   onManualHourChange,
@@ -150,6 +171,25 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
     );
   };
 
+  const renderSurfaceReason = () => {
+    const defaultText = trainingData?.condition?.surfaceReason || (trainingLoading ? "Connecting to weather satellite..." : "Processing telemetry for tactical riding advice...");
+    
+    if (!aiEnabled || (!isAIActive && !trainingLoading)) {
+      return <p className={`text-[12.5px] font-semibold leading-[1.3] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{defaultText}</p>;
+    }
+
+    if (isAIActive) {
+      return <TypewriterText text={trainingData?.condition?.surfaceReason || ""} speed={15} className={`text-[12.5px] font-semibold leading-[1.3] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
+    }
+
+    return (
+      <div className="flex items-center gap-2 py-0.5">
+         <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+         <span className={`text-[10px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Synthesizing route intelligence...</span>
+      </div>
+    );
+  };
+
   const handlePopupStateChange = (isOpen: boolean) => {
     setIsInternalPopupActive(isOpen);
     onPopupStateChange?.(isOpen);
@@ -160,8 +200,6 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
 
   return (
     <div className="h-full flex flex-col gap-3 pb-1 animate-in fade-in duration-300">
-      {/* Note: Removed overflow-hidden from root container to allow weather popups to overflow visibly */}
-      
       {/* TRAINING OUTLOOK INFO POPUP */}
       {showTrainingOutlookInfo && isWeeklyView && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-6 animate-in fade-in duration-200">
@@ -233,25 +271,50 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                   <div className="relative h-10">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
                     <input 
-                      type="text" value={trainingSearch} placeholder="CITY..."
+                      type="text" value={trainingSearch} placeholder="STREET OR CITY..."
                       onChange={(e) => onSearchChange(e.target.value)}
-                      className={`w-full h-full rounded-xl pl-9 pr-9 text-[10px] font-black uppercase tracking-wider outline-none border transition-all ${
+                      className={`w-full h-full rounded-xl pl-9 pr-16 text-[10px] font-black uppercase tracking-wider outline-none border transition-all ${
                         isDark ? 'bg-[#05070a] border-white/10 text-white focus:border-blue-500/50' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-blue-600 shadow-inner'
                       }`} 
                     />
-                    <button 
-                      onClick={onSetToHome} 
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 active:scale-90 transition-all"
-                    >
-                      <Home className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <button 
+                        onClick={onSetToCurrent} 
+                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 active:scale-90 transition-all"
+                        title="Current Location"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={onSetToHome} 
+                        className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 active:scale-90 transition-all"
+                        title="Home Location"
+                      >
+                        <Home className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     {showTrainingSuggestions && (isSearching || suggestions.length > 0) && (
                       <div className={`absolute top-full left-0 right-0 mt-2 z-[210] border rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-top-2 duration-200 ${isDark ? 'bg-[#1a1d24] border-white/10' : 'bg-white border-slate-300'}`}>
-                        {suggestions.map(loc => (
-                          <button key={loc.name} onClick={() => onSelectSuggestion(loc)} className={`w-full px-4 py-3 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wide border-b last:border-0 transition-colors ${isDark ? 'hover:bg-white/5 text-slate-300 border-white/5' : 'hover:bg-slate-50 text-slate-900 border-slate-100'}`}>
-                            <span>{loc.name}</span>
-                          </button>
-                        ))}
+                        {suggestions.map(loc => {
+                          const isGlobal = !BELGIAN_LOCATIONS.some(bl => bl.name === loc.name);
+                          return (
+                            <button key={loc.name} onClick={() => onSelectSuggestion(loc)} className={`w-full px-4 py-3 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wide border-b last:border-0 transition-colors ${isDark ? 'hover:bg-white/5 text-slate-300 border-white/5' : 'hover:bg-slate-50 text-slate-900 border-slate-100'}`}>
+                              <span>{loc.name}</span>
+                              {isGlobal && (
+                                <div className="flex items-center gap-1 text-[8px] font-black text-blue-500/80">
+                                  <MapPin className="w-3 h-3" />
+                                  <span>MAPS</span>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                        {isSearching && (
+                          <div className={`px-4 py-3 flex items-center gap-3 text-[10px] font-black uppercase tracking-wide border-t ${isDark ? 'bg-black/20 border-white/5 text-blue-400' : 'bg-blue-50 border-slate-100 text-blue-600'}`}>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Resolving with Google Maps...</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -334,6 +397,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
             {trainingLoading ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-in fade-in duration-300">
                 <RefreshCw className="w-12 h-12 text-blue-600 animate-spin" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 animate-pulse">Synchronizing atmospheric data...</span>
               </div>
             ) : trainingData ? (
               <div className="flex flex-col gap-4 flex-1 min-h-0 relative z-[70]">
@@ -370,27 +434,90 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                   >
                     <div className="flex items-center justify-between w-full flex-none">
                       <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-blue-600 text-white">
+                        <div className={`p-1.5 rounded-lg transition-colors ${!aiEnabled || !isAIActive ? 'bg-slate-500 text-white' : 'bg-blue-600 text-white'}`}>
                           <Zap className="w-4 h-4" />
                         </div>
-                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600">Training Intelligence</span>
+                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${!aiEnabled || !isAIActive ? 'text-slate-500' : 'text-blue-600'}`}>Training Intelligence</span>
                       </div>
-                      <button onClick={() => setIsIntelligenceExpanded(false)} className={`p-1.5 rounded-full border transition-all ${isDark ? 'bg-[#1a1d24] border-white/10 text-slate-400' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
+                      <button onClick={() => setIsIntelligenceExpanded(false)} className={`p-1.5 rounded-full border transition-all ${isDark ? 'bg-[#1a1d24] border-white/10 text-slate-400 hover:text-white' : 'bg-slate-100 hover:bg-slate-200'}`}><X className="w-4 h-4" /></button>
                     </div>
 
                     <div className="flex flex-col gap-6 flex-1 pb-2">
-                      {shouldShowBlock(0) && (
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Conditions Analysis</span>
-                          <div className="text-[13px] font-semibold text-left">{renderAdviceText(trainingData.condition.surfaceReason, "Standard atmospheric conditions.", 0)}</div>
+                      {!aiEnabled || (!isAIActive && !trainingLoading) && (
+                        <div className="flex flex-col gap-3 items-center justify-center py-6">
+                          <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+                          <span className="text-[9px] font-black uppercase text-blue-600 tracking-[0.2em] animate-pulse">Running Tactical Inference...</span>
                         </div>
                       )}
-                      {shouldShowBlock(1) && (
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
-                          <div className="text-[13px] font-semibold text-left">{renderAdviceText(trainingData.condition.performanceAdvice, "Maintain standard protocols.", 1)}</div>
+
+                      {(shouldShowBlock(0) || !aiEnabled) && (
+                        <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-1.5">
+                            <CloudRain className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Conditions Analysis</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
+                            {renderAdviceText(trainingData.condition.surfaceReason, "Standard atmospheric conditions.", 0)}
+                          </div>
                         </div>
                       )}
+
+                      {(shouldShowBlock(1) || !aiEnabled) && (
+                        <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-1.5">
+                            <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
+                            {renderAdviceText(trainingData.condition.performanceAdvice, "Maintain standard protocols.", 1)}
+                          </div>
+                        </div>
+                      )}
+
+                      {(shouldShowBlock(2) || !aiEnabled) && (
+                        <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-1.5">
+                            <Compass className="w-3.5 h-3.5 text-blue-600" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
+                            {renderAdviceText(trainingData.condition.ridingStyleAdvice, "Standard handling protocols.", 2)}
+                          </div>
+                        </div>
+                      )}
+
+                      {(shouldShowBlock(3) || !aiEnabled) && (
+                        <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-1.5">
+                            <Bike className="w-3.5 h-3.5 text-blue-600" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
+                            {renderAdviceText(trainingData.condition.bikeSetupAdvice, "Check equipment parameters.", 3)}
+                          </div>
+                        </div>
+                      )}
+
+                      {(shouldShowBlock(4) || !aiEnabled) && (
+                        <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-1.5">
+                            <Shirt className="w-3.5 h-3.5 text-blue-600" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Clothing Advice</span>
+                          </div>
+                          <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
+                            {renderAdviceText(trainingData.condition.clothingAdvice, "Seasonal kit recommended.", 4)}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-3 mt-auto border-t border-dashed border-slate-500/20 flex justify-end">
+                        <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest opacity-40 ${
+                          isDark ? 'text-slate-300' : 'text-slate-600'
+                        }`}>
+                          {isAIActive ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
+                          <span>Source: {isAIActive ? formatModelName(currentLLMModel) : 'Standard Algorithm'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

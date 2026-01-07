@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ChevronRight, AlertTriangle, Droplets, ShieldCheck, Loader2, Clock } from 'lucide-react';
+import { ChevronRight, AlertTriangle, Droplets, ShieldCheck, Loader2, Clock, Snowflake } from 'lucide-react';
 
 interface TrainingWeeklyForecastProps {
   data: any[];
@@ -66,6 +66,7 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
           const score = bestSlot?.score || 0;
           const condition = bestSlot?.condition;
           
+          const isSnowy = condition?.isSnowy;
           const isWet = condition?.wetSurfaceChance > 50 || (condition?.precipitation || 0) > 0;
           const hasIce = condition?.iceRisk;
           const styles = getScoreStyles(score, false, isDark);
@@ -104,8 +105,9 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
               {/* Right Side: Risk Indicators (Grid) & Score */}
               <div className="flex items-center gap-4 z-10">
                 <div className="grid grid-cols-2 gap-2">
-                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600'}`}>
-                      {isWet ? 'WET' : 'DRY'}
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${isSnowy ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-500' : (isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600')}`}>
+                      {isSnowy ? <Snowflake className="w-3 h-3" /> : null}
+                      {isSnowy ? 'SNOW' : (isWet ? 'WET' : 'DRY')}
                     </div>
                     <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
                       {hasIce ? 'ICE' : 'NO ICE'}

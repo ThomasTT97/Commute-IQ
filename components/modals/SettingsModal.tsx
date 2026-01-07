@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommuteSettings, FitnessGoal } from '../../types';
 import { EquipmentManager } from '../EquipmentManager';
 import { BelgianLocation, BELGIAN_LOCATIONS } from '../../locations';
-import { getGlobalLocationSuggestions } from '../../services/geminiService';
+import { getDirectLocationSuggestions } from '../../services/geminiService';
 import { filterLocationsWithGlobal } from '../../utils/helpers';
 import { 
   X, 
@@ -54,7 +54,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [editSettings, setEditSettings] = useState<CommuteSettings>(currentSettings);
   const [currentView, setCurrentView] = useState<'main' | 'equipment' | 'personal'>('main');
   
-  // Search State
   const [homeSearch, setHomeSearch] = useState(currentSettings.homeLocation);
   const [workSearch, setWorkSearch] = useState(currentSettings.workLocation);
   const [showHomeSuggestions, setShowHomeSuggestions] = useState(false);
@@ -64,11 +63,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSearchingGlobal, setIsSearchingGlobal] = useState({ home: false, work: false });
   const [isSaving, setIsSaving] = useState(false);
 
-  // Constants
   const speedRange = useMemo(() => Array.from({ length: 31 }, (_, i) => i + 15), []); // 15 to 45 kph
   const speedPickerRef = useRef<HTMLDivElement>(null);
 
-  // Sync internal state when opened
   useEffect(() => {
     if (isOpen) {
       setEditSettings(currentSettings);
@@ -79,17 +76,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, currentSettings]);
 
-  // Global Search Logic
   useEffect(() => {
     if (homeSearch.length < 3) { setGlobalHomeResults([]); return; }
     const timer = setTimeout(async () => {
       setIsSearchingGlobal(prev => ({ ...prev, home: true }));
       try {
-        const results = await getGlobalLocationSuggestions(homeSearch);
+        const results = await getDirectLocationSuggestions(homeSearch);
         setGlobalHomeResults(results);
       } catch (e) { /* ignore */ } 
       finally { setIsSearchingGlobal(prev => ({ ...prev, home: false })); }
-    }, 500);
+    }, 400);
     return () => clearTimeout(timer);
   }, [homeSearch]);
 
@@ -98,15 +94,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const timer = setTimeout(async () => {
       setIsSearchingGlobal(prev => ({ ...prev, work: true }));
       try {
-        const results = await getGlobalLocationSuggestions(workSearch);
+        const results = await getDirectLocationSuggestions(workSearch);
         setGlobalWorkResults(results);
       } catch (e) { /* ignore */ } 
       finally { setIsSearchingGlobal(prev => ({ ...prev, work: false })); }
-    }, 500);
+    }, 400);
     return () => clearTimeout(timer);
   }, [workSearch]);
 
-  // Sync Speed Picker
   useEffect(() => {
     if (currentView === 'personal' && speedPickerRef.current && editSettings.averageSpeed) {
       const timer = setTimeout(() => {
@@ -139,8 +134,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSaveClick = async () => {
     setIsSaving(true);
     await onSave(editSettings);
-    // The modal will likely unmount here due to onSave logic in App.tsx
-    // But if not, we reset saving state
     if (isOpen) setIsSaving(false);
   };
 
@@ -203,8 +196,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-6 min-h-0">
-                  
-                  {/* Speed Configuration */}
                   <div className={`p-5 rounded-3xl border flex flex-col gap-3 flex-none ${isDark ? 'bg-[#05070a] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
                     <div className="flex justify-between items-end px-1">
                        <div className="flex items-center gap-2 text-slate-500">
@@ -242,7 +233,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Workdays Selector */}
                   <div className={`p-5 rounded-3xl border flex flex-col gap-4 flex-none ${isDark ? 'bg-[#05070a] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
                     <div className="flex items-center gap-2 text-slate-500 px-1">
                        <CalendarDays className="w-4 h-4" />
@@ -268,7 +258,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Goal Selection */}
                   <div className="flex flex-col gap-3 flex-none">
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Strategic Focus</label>
                     <div className="flex flex-col gap-2">
@@ -309,8 +298,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
              </div>
            ) : (
              <div className="flex flex-col gap-3 animate-in slide-in-from-left-4 duration-300">
-               
-               {/* Theme */}
                <div className="flex flex-col gap-1.5">
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">System Appearance</label>
                  <div className={`flex rounded-2xl p-1 border transition-all ${isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
@@ -319,69 +306,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  </div>
                </div>
 
-               {/* Profile Config */}
                <div className="flex flex-col gap-1.5">
-                 <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Profile Configuration</label>
+                 <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Location Management</label>
                  <div className="flex flex-col gap-1.5">
-                    {/* Home Search */}
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-                      <input type="text" placeholder="Home Location..." value={homeSearch} onFocus={() => setShowHomeSuggestions(true)} onChange={(e) => { setHomeSearch(e.target.value); setEditSettings(prev => ({...prev, homeLocation: e.target.value})); setShowHomeSuggestions(true); }} className={`w-full rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`} />
+                      <input type="text" placeholder="Search Home Address..." value={homeSearch} onFocus={() => setShowHomeSuggestions(true)} onChange={(e) => { setHomeSearch(e.target.value); setShowHomeSuggestions(true); }} className={`w-full rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`} />
                       {homeSearch && ( 
-                        <button onClick={() => { setHomeSearch(""); setEditSettings(prev => ({...prev, homeLocation: "", homeCoords: undefined})); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:text-white hover:bg-slate-700/50 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { setHomeSearch(""); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:text-white hover:bg-slate-700/50 transition-colors"><X className="w-3.5 h-3.5" /></button>
                       )}
-                      {showHomeSuggestions && (isSearchingGlobal.home || filterLocationsWithGlobal(homeSearch, globalHomeResults).length > 0) && (
+                      {showHomeSuggestions && (isSearchingGlobal.home || globalHomeResults.length > 0) && (
                         <div className={`absolute top-full left-0 right-0 mt-1 z-[210] border rounded-xl overflow-hidden shadow-2xl ${isDark ? 'bg-slate-900 border-white/10' : 'bg-white border-slate-200'}`}>
-                          {filterLocationsWithGlobal(homeSearch, globalHomeResults).map(loc => {
-                              const isGlobal = !BELGIAN_LOCATIONS.some(bl => bl.name === loc.name);
-                              return (
-                                <button key={loc.name} onClick={() => handleSelectSuggestion('home', loc)} className={`w-full px-4 py-2.5 flex items-center justify-between text-left text-xs font-medium border-b last:border-0 ${isDark ? 'border-white/5 text-slate-300 hover:bg-white/5' : 'border-slate-100 text-slate-700 hover:bg-slate-50'}`}>
-                                  <span>{loc.name}</span>
-                                  {isGlobal && (
-                                    <div className="flex items-center gap-1 text-[9px] font-bold text-blue-500/80">
-                                      <MapPin className="w-3 h-3" />
-                                      <span>MAPS</span>
-                                    </div>
-                                  )}
+                          {globalHomeResults.map(loc => (
+                                <button key={`${loc.name}-${loc.lat}`} onClick={() => handleSelectSuggestion('home', loc)} className={`w-full px-4 py-2.5 flex items-center justify-between text-left text-xs font-medium border-b last:border-0 ${isDark ? 'border-white/5 text-slate-300 hover:bg-white/5' : 'border-slate-100 text-slate-700 hover:bg-slate-50'}`}>
+                                  <span className="truncate pr-4">{loc.name}</span>
+                                  <div className="flex items-center gap-1 text-[8px] font-black text-blue-500/80 shrink-0">
+                                    <Globe className="w-2.5 h-2.5" />
+                                    <span>GPS</span>
+                                  </div>
                                 </button>
-                              );
-                          })}
+                          ))}
                           {isSearchingGlobal.home && (
                             <div className={`px-4 py-2.5 flex items-center gap-2 text-xs font-medium border-t ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
                               <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
-                              <span className="text-blue-500/80">Searching via Google Maps...</span>
+                              <span className="text-blue-500/80">Scanning Maps...</span>
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                    {/* Work Search */}
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-                      <input type="text" placeholder="Work Location..." value={workSearch} onFocus={() => setShowWorkSuggestions(true)} onChange={(e) => { setWorkSearch(e.target.value); setEditSettings(prev => ({...prev, workLocation: e.target.value})); setShowWorkSuggestions(true); }} className={`w-full rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`} />
+                      <input type="text" placeholder="Search Work Address..." value={workSearch} onFocus={() => setShowWorkSuggestions(true)} onChange={(e) => { setWorkSearch(e.target.value); setShowWorkSuggestions(true); }} className={`w-full rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 border transition-all ${isDark ? 'bg-slate-900/50 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`} />
                       {workSearch && ( 
-                        <button onClick={() => { setWorkSearch(""); setEditSettings(prev => ({...prev, workLocation: "", workCoords: undefined})); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:text-white hover:bg-slate-700/50 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { setWorkSearch(""); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:text-white hover:bg-slate-700/50 transition-colors"><X className="w-3.5 h-3.5" /></button>
                       )}
-                      {showWorkSuggestions && (isSearchingGlobal.work || filterLocationsWithGlobal(workSearch, globalWorkResults).length > 0) && (
+                      {showWorkSuggestions && (isSearchingGlobal.work || globalWorkResults.length > 0) && (
                         <div className={`absolute top-full left-0 right-0 mt-1 z-[210] border rounded-xl overflow-hidden shadow-2xl ${isDark ? 'bg-slate-900 border-white/10' : 'bg-white border-slate-200'}`}>
-                          {filterLocationsWithGlobal(workSearch, globalWorkResults).map(loc => {
-                              const isGlobal = !BELGIAN_LOCATIONS.some(bl => bl.name === loc.name);
-                              return (
-                                <button key={loc.name} onClick={() => handleSelectSuggestion('work', loc)} className={`w-full px-4 py-2.5 flex items-center justify-between text-left text-xs font-medium border-b last:border-0 ${isDark ? 'border-white/5 text-slate-300 hover:bg-white/5' : 'border-slate-100 text-slate-700 hover:bg-slate-50'}`}>
-                                  <span>{loc.name}</span>
-                                  {isGlobal && (
-                                    <div className="flex items-center gap-1 text-[9px] font-bold text-blue-500/80">
-                                      <MapPin className="w-3 h-3" />
-                                      <span>MAPS</span>
-                                    </div>
-                                  )}
+                          {globalWorkResults.map(loc => (
+                                <button key={`${loc.name}-${loc.lat}`} onClick={() => handleSelectSuggestion('work', loc)} className={`w-full px-4 py-2.5 flex items-center justify-between text-left text-xs font-medium border-b last:border-0 ${isDark ? 'border-white/5 text-slate-300 hover:bg-white/5' : 'border-slate-100 text-slate-700 hover:bg-slate-50'}`}>
+                                  <span className="truncate pr-4">{loc.name}</span>
+                                  <div className="flex items-center gap-1 text-[8px] font-black text-blue-500/80 shrink-0">
+                                    <Globe className="w-2.5 h-2.5" />
+                                    <span>GPS</span>
+                                  </div>
                                 </button>
-                              );
-                          })}
+                          ))}
                           {isSearchingGlobal.work && (
                             <div className={`px-4 py-2.5 flex items-center gap-2 text-xs font-medium border-t ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
                               <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
-                              <span className="text-blue-500/80">Searching via Google Maps...</span>
+                              <span className="text-blue-500/80">Scanning Maps...</span>
                             </div>
                           )}
                         </div>
@@ -390,7 +364,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  </div>
                </div>
 
-               {/* Schedule */}
                <div className="flex flex-col gap-1.5">
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Commute Schedule</label>
                  <div className="grid grid-cols-2 gap-2.5">
@@ -413,7 +386,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  </div>
                </div>
 
-               {/* Equipment */}
                <div className="flex flex-col gap-1.5">
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Equipment</label>
                  <button onClick={() => setCurrentView('equipment')} className={`w-full py-3 rounded-xl border flex items-center justify-between px-3.5 transition-all ${isDark ? 'bg-slate-900/50 border-white/5 hover:bg-white/5' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
@@ -428,7 +400,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  </button>
                </div>
 
-               {/* Intelligence */}
                <div className="flex flex-col gap-1.5">
                  <label className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">Intelligence</label>
                  <button onClick={() => setEditSettings(prev => ({...prev, disableAI: !prev.disableAI}))} className={`w-full py-3 rounded-xl border flex items-center justify-between px-3.5 transition-all ${!editSettings.disableAI ? 'bg-blue-600/10 border-blue-500/30' : isDark ? 'bg-slate-900/50 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
@@ -442,7 +413,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  </button>
                </div>
                
-               {/* Footer Buttons */}
                <div className="flex flex-col gap-2 mt-1 pb-4">
                  <button onClick={() => setCurrentView('personal')} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' : 'bg-orange-50 border-orange-200 text-orange-600'}`}>
                    <User className="w-4 h-4" />
