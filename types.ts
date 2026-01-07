@@ -18,7 +18,8 @@ export interface Equipment {
   type: EquipmentType;
   tireWidth: number; // mm
   riderWeight: number; // kg
-  tireSetup?: TireSetup; // Optional for backward compatibility
+  tireSetup: TireSetup;
+  surfacePreference: number; // 0 (Road) to 100 (Off-road)
   isSelected: boolean;
 }
 
@@ -49,7 +50,6 @@ export interface ScoreDeduction {
 export interface LocationSuggestion extends BelgianLocation {
   distanceFromHome?: number;
   distanceFromTrainingCenter?: number;
-  // Fix: added distFromCenter to LocationSuggestion to satisfy WeatherCard usage
   distFromCenter?: number;
   score?: number;
 }
@@ -64,6 +64,7 @@ export interface TrainingState {
 
 export interface WeatherCondition {
   temp: number;
+  feelsLike: number;
   minTemp?: number;
   maxTemp?: number;
   score: number;

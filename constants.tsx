@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: CommuteSettings = {
   theme: 'dark',
   disableAI: false,
   equipment: [],
-  averageSpeed: 25,
+  averageSpeed: 28, // Updated default speed
   fitnessGoal: 'active',
   workDays: [1, 2, 3, 4, 5]
 };
@@ -225,7 +225,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     surfaceCondition: 'Wegdekstatus',
     surfaceConditionContent: 'Op basis van neerslag en verdamping berekent het systeem de bodemvochtigheid. "Nat" duidt op verminderde wrijvingscoëfficiënten.',
     windCondition: 'Aerodynamische Impact',
-    windContent: 'Windweerstand wordt berekend ten opzichte van uw route. Tegenwind verlaagt de score, terwijl meewind een marginale bonus biedt.',
+    windContent: 'Windweerstand wordt berekend ten opzicate van uw route. Tegenwind verlaagt de score, terwijl meewind een marginale bonus biedt.',
     lightingCondition: 'Zichtbaarheidsprotocollen',
     lightingContent: 'Reistijden worden vergeleken met zonne-data. Bij weinig licht volgt een dwingend advies voor actieve verlichting.',
     equipmentLogic: 'Mechanische Kalibratie',

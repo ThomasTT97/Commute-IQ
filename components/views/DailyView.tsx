@@ -72,7 +72,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
       return (
         <TypewriterText 
           text={text || fallback} 
-          speed={15}
+          speed={10} // Increased speed for snappier feel
           className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
           onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
         />
@@ -89,7 +89,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
     }
 
     if (isCurrentDayEnhanced) {
-      return <TypewriterText text={activeWeather?.surfaceReason || ""} speed={15} className={`text-[12.5px] font-semibold leading-[1.3] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
+      return <TypewriterText text={activeWeather?.surfaceReason || ""} speed={10} className={`text-[12.5px] font-semibold leading-[1.3] text-left ${isDark ? 'text-slate-200' : 'text-slate-700'}`} />;
     }
 
     return (
@@ -142,12 +142,12 @@ export const DailyView: React.FC<DailyViewProps> = ({
       >
         <div className="flex items-center justify-between w-full flex-none">
           <div className="flex items-center gap-2">
-            <div className={`p-1 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600 text-white'}`}>
-              <Zap className="w-3 h-3" />
+            <div className={`flex items-center justify-center p-1 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600/10 text-blue-500'}`}>
+              <span className="text-[14px] font-black italic">IQ</span>
             </div>
             <div className="flex flex-col">
               <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && !isCurrentDayEnhanced ? 'text-slate-600' : 'text-blue-600'}`}>
-                {!settings.disableAI && !isCurrentDayEnhanced ? 'Deep Analysis...' : 'Commute Intelligence'}
+                {!settings.disableAI && !isCurrentDayEnhanced ? 'Deep Analysis...' : 'Commute IQ Intelligence'}
               </span>
               {isAdviceExpanded && (
                 <span className={`text-[8px] font-bold uppercase tracking-wider mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>

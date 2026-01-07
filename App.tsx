@@ -100,7 +100,6 @@ const App: React.FC = () => {
   const [activeLegIndex, setActiveLegIndex] = useState(0);
   const [isAdviceExpanded, setIsAdviceExpanded] = useState(false);
 
-  // Force morning leg (top) to be expanded when switching to daily view
   useEffect(() => {
     if (viewMode === 'daily') {
       setActiveLegIndex(0);
@@ -153,6 +152,10 @@ const App: React.FC = () => {
 
   const [selectedDateOffset, setSelectedDateOffset] = useState<number>(nextCommuteInfo.offset);
   const [loadingOffsets, setLoadingOffsets] = useState<number[]>([]);
+
+  useEffect(() => {
+    setTraining(prev => ({ ...prev, dateOffset: selectedDateOffset }));
+  }, [selectedDateOffset]);
 
   const displayedDistance = useMemo(() => {
     if (settings.roadDistance) return settings.roadDistance;
@@ -252,18 +255,83 @@ const App: React.FC = () => {
       const durationInt = Math.ceil(training.distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
       const sunTimes = { sunrise: raw.daily?.sunrise?.[training.dateOffset+1] || "07:00", sunset: raw.daily?.sunset?.[training.dateOffset+1] || "20:00" };
       const slots = [];
-      for (let h = 3; h <= 21; h++) {
+      const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
+
+      for (let h = 0; h <= 23; h++) {
         const slice: any = {};
         Object.keys(raw.hourly).forEach(k => { if (Array.isArray(raw.hourly[k])) slice[k] = raw.hourly[k].slice(dayIdx + h, dayIdx + h + durationInt + 1); });
         if (!slice.temperature_2m) continue;
         const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
-        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, [`${h}:00`, `${h+durationInt}:00`], undefined, undefined, true);
-        slots.push({ startHour: h, condition, window: [`${h}:00`, `${h+durationInt}:00`], score: condition.score });
+        const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
+        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, undefined, undefined, true);
+        
+        // Calculate tactical advice for this slot
+        const uniqueNames = new Set<string>();
+        const targetDist = training.distance * 0.4;
+        const windDir = condition.windDirection;
+        
+        const optAdvice = BELGIAN_LOCATIONS
+          .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
+          .filter(loc => loc.distFromCenter > targetDist * 0.8 && loc.distFromCenter < targetDist * 1.2)
+          .filter(loc => {
+            const bearing = calculateBearing(training.coords, loc);
+            const diff = Math.abs(bearing - windDir);
+            return diff < 30 || diff > 330; 
+          })
+          .sort((a, b) => Math.abs(a.distFromCenter - targetDist) - Math.abs(b.distFromCenter - targetDist))
+          .filter(loc => {
+            const normalized = loc.name.trim().toUpperCase();
+            if (uniqueNames.has(normalized)) return false;
+            uniqueNames.add(normalized);
+            return true;
+          })
+          .slice(0, 5);
+
+        const uniqueBaseNames = new Set<string>();
+        const locAdvice = condition.score < 50 ? BELGIAN_LOCATIONS
+          .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
+          .filter(loc => loc.distFromCenter >= 50 && loc.distFromCenter <= 60)
+          .sort((a, b) => a.distFromCenter - b.distFromCenter)
+          .filter(loc => {
+            const normalized = loc.name.trim().toUpperCase();
+            if (uniqueBaseNames.has(normalized)) return false;
+            uniqueBaseNames.add(normalized);
+            return true;
+          })
+          .slice(0, 5) : [];
+
+        slots.push({ startHour: h, condition, window: winHours, score: condition.score, optimizationAdvice: optAdvice, locationAdvice: locAdvice });
       }
+      
+      const targetHour = manualStartHour !== null ? manualStartHour : slots.reduce((p, c) => (c.score > p.score ? c : p), slots[0]).startHour;
+      if (manualStartHour === null) setManualStartHour(targetHour);
+
       setTrainingSlots(slots);
-      if (manualStartHour === null) setManualStartHour(slots.reduce((p, c) => (c.score > p.score ? c : p), slots[0]).startHour);
+      
+      if (!settings.disableAI) {
+        const targetSlot = slots.find(s => s.startHour === targetHour) || slots[0];
+        try {
+          const aiAdvice = await getTrainingSessionAIAdvice(settings, targetSlot.condition, training.distance);
+          if (aiAdvice) {
+            setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? {
+              ...s,
+              isAIEnhanced: true,
+              condition: {
+                ...s.condition,
+                surfaceReason: aiAdvice.summary,
+                ridingStyleAdvice: aiAdvice.style,
+                bikeSetupAdvice: aiAdvice.setup,
+                clothingAdvice: aiAdvice.clothing,
+                performanceAdvice: aiAdvice.performance
+              }
+            } : s));
+          }
+        } catch (err) {
+          setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? { ...s, aiFailed: true } : s));
+        }
+      }
     } catch (e) { } finally { setTrainingLoading(false); }
-  }, [training.coords, training.distance, training.dateOffset, settings]);
+  }, [training.coords, training.distance, training.dateOffset, settings, manualStartHour]);
 
   const syncTrainingWeek = useCallback(async () => {
     if (!training.coords || typeof training.coords.lat !== 'number') return;
@@ -272,17 +340,20 @@ const App: React.FC = () => {
       const raw = await fetchRawWeatherData(training.coords);
       const durationInt = Math.ceil(training.distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
       const weeklyResults = [];
+      const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
+
       for (let o = 0; o < 7; o++) {
          const dayIdx = (o + 1) * 24;
          const sun = { sunrise: raw.daily?.sunrise?.[o+1] || "07:00", sunset: raw.daily?.sunset?.[o+1] || "20:00" };
          let best = null;
-         for (let h = 5; h <= 20; h++) {
+         for (let h = 0; h <= 23; h++) {
             const slice: any = {};
             Object.keys(raw.hourly).forEach(k => { if (Array.isArray(raw.hourly[k])) slice[k] = raw.hourly[k].slice(dayIdx+h, dayIdx+h+durationInt+1); });
             if (!slice.temperature_2m) continue;
             const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
-            const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, [`${h}:00`, `${h+durationInt}:00`], undefined, undefined, true);
-            if (!best || condition.score > best.score) best = { score: condition.score, condition, startHour: h, window: [`${h}:00`, `${h+durationInt}:00`] };
+            const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
+            const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, undefined, undefined, true);
+            if (!best || condition.score > best.score) best = { score: condition.score, condition, startHour: h, window: winHours };
          }
          weeklyResults.push({ offset: o, bestSlot: best });
       }
@@ -290,7 +361,11 @@ const App: React.FC = () => {
     } catch (e) { } finally { setIsTrainingWeekLoading(false); }
   }, [training.coords, training.distance, settings]);
 
-  useEffect(() => { if (viewMode === 'training') syncTraining(); }, [viewMode, training.coords, training.distance, training.dateOffset, syncTraining]);
+  useEffect(() => { 
+    if (viewMode === 'training') {
+      syncTraining(); 
+    }
+  }, [viewMode, training.coords, training.distance, training.dateOffset, manualStartHour, syncTraining]);
 
   const handleSetTrainingToCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) return;
@@ -306,6 +381,7 @@ const App: React.FC = () => {
         setTrainingSearch(fallback);
       }
       setManualStartHour(null);
+      setShowTrainingSuggestions(false);
     });
   }, []);
 
@@ -356,7 +432,42 @@ const App: React.FC = () => {
           </div>
         )}
         {(viewMode === 'training' || viewMode === 'training-weekly') && (
-          <TrainingView isDark={isDark} training={training} trainingSearch={trainingSearch} showTrainingSuggestions={showTrainingSuggestions} isSearching={isSearchingGlobalTraining} trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} onReturn={() => setViewMode('daily')} onSearchChange={setTrainingSearch} onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); }} onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} onManualHourChange={setManualStartHour} onSelectSuggestion={loc => { setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}})); setTrainingSearch(loc.name); setShowTrainingSuggestions(false); setManualStartHour(null); }} onShowWeekly={syncTrainingWeek} filterLocations={filterLocationsWithGlobal} globalTrainingResults={globalTrainingResults} getDayLabel={getDayLabel} isWeeklyView={viewMode === 'training-weekly'} weeklyData={trainingWeek} weeklyLoading={isTrainingWeekLoading} aiEnabled={!settings.disableAI} onPopupStateChange={setIsPopupActive} onToggleMode={() => setViewMode('weekly')} />
+          <TrainingView 
+            isDark={isDark} 
+            training={training} 
+            trainingSearch={trainingSearch} 
+            showTrainingSuggestions={showTrainingSuggestions} 
+            setShowTrainingSuggestions={setShowTrainingSuggestions} 
+            isSearching={isSearchingGlobalTraining} 
+            trainingData={activeTrainingSlot} 
+            trainingLoading={trainingLoading} 
+            manualStartHour={manualStartHour} 
+            bestStartHour={bestStartHour} 
+            theme={settings.theme} 
+            onReturn={() => setViewMode('daily')} 
+            onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
+            onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
+            onSetToCurrent={handleSetTrainingToCurrentLocation} 
+            onDateOffsetChange={setSelectedDateOffset} 
+            onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
+            onManualHourChange={setManualStartHour} 
+            onSelectSuggestion={loc => { setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}})); setTrainingSearch(loc.name); setShowTrainingSuggestions(false); setManualStartHour(null); }} 
+            onShowWeekly={syncTrainingWeek} 
+            onSelectWeeklySlot={(offset, hour) => {
+              setSelectedDateOffset(offset);
+              setManualStartHour(hour);
+              setViewMode('training');
+            }}
+            filterLocations={filterLocationsWithGlobal} 
+            globalTrainingResults={globalTrainingResults} 
+            getDayLabel={getDayLabel} 
+            isWeeklyView={viewMode === 'training-weekly'} 
+            weeklyData={trainingWeek} 
+            weeklyLoading={isTrainingWeekLoading} 
+            aiEnabled={!settings.disableAI} 
+            onPopupStateChange={setIsPopupActive} 
+            onToggleMode={() => setViewMode('weekly')} 
+          />
         )}
       </main>
       <BottomNav viewMode={viewMode} setViewMode={setViewMode} onShowTrainingWeekly={syncTrainingWeek} isDark={isDark} />

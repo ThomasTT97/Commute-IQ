@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment } from "../types";
+import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
 import { BelgianLocation, BELGIAN_LOCATIONS } from "../locations";
 
@@ -22,10 +22,6 @@ export const MODEL_CHAIN = [
   "gemini-flash-lite-latest" 
 ];
 
-/**
- * Direct Maps API (Nominatim) for ultra-fast, non-LLM lookups.
- * Enabled for European-wide search with improved city/country formatting.
- */
 export const getDirectLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
   if (!query || query.length < 3) return [];
   try {
@@ -39,68 +35,45 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
     return data.map((item: any) => {
       const addr = item.address;
       const type = item.addresstype || item.type;
-      
       const houseNum = addr.house_number || "";
       const street = addr.road || addr.pedestrian || addr.cycleway || addr.path || "";
       const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || "";
       const zip = addr.postcode || "";
       const country = addr.country || "";
-      
       let cleanName = "";
-
-      // Logic to handle City-level lookups differently from Address-level lookups
       const isRegional = ['city', 'town', 'village', 'municipality', 'state', 'country', 'administrative'].includes(type) || !street;
-
       if (isRegional) {
-        // Format: City, Country
         const main = city || item.name || item.display_name.split(',')[0];
         cleanName = country ? `${main}, ${country}` : main;
       } else {
-        // Format: Street HouseNum, Zip City, Country
         const addressPart = houseNum ? `${street} ${houseNum}` : street;
         const localityPart = zip ? `${zip} ${city}` : city;
         const parts = [addressPart, localityPart, country].filter(p => p && p.length > 0);
         cleanName = parts.join(', ');
       }
-
-      // Fallback to OSM's display name if construction failed
       if (!cleanName || cleanName.length < 5) {
         cleanName = item.display_name.split(',').slice(0, 3).join(', ');
       }
-
-      return {
-        name: cleanName,
-        lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon)
-      };
+      return { name: cleanName, lat: parseFloat(item.lat), lng: parseFloat(item.lon) };
     });
   } catch (e) {
-    return BELGIAN_LOCATIONS.filter(l => 
-      l.name.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 5);
+    return BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5);
   }
 };
 
 export const reverseGeocodeDirect = async (coords: Coordinates): Promise<string> => {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json&addressdetails=1`;
-    const res = await fetch(url, {
-      headers: { 'Accept-Language': 'nl,fr,en' }
-    });
+    const res = await fetch(url, { headers: { 'Accept-Language': 'nl,fr,en' } });
     if (!res.ok) throw new Error("Reverse geocode failed");
     const data = await res.json();
     const addr = data.address;
-    
     const houseNum = addr.house_number || "";
     const street = addr.road || addr.pedestrian || addr.cycleway || "";
     const city = addr.city || addr.town || addr.village || addr.suburb || addr.municipality || "Unknown City";
     const zip = addr.postcode || "";
     const country = addr.country || "";
-
-    if (!street) {
-      return country ? `${city}, ${country}` : city;
-    }
-
+    if (!street) return country ? `${city}, ${country}` : city;
     const addressLine = houseNum ? `${street} ${houseNum}` : street;
     const localityLine = zip ? `${zip} ${city}` : city;
     return `${addressLine}, ${localityLine}${country ? `, ${country}` : ''}`;
@@ -114,15 +87,11 @@ export const getLlmUsageStats = () => {
     const raw = localStorage.getItem(USAGE_CACHE_KEY);
     const log: number[] = raw ? JSON.parse(raw) : [];
     const now = Date.now();
-    const oneMinAgo = now - 60000;
     const oneDayAgo = now - 86400000;
     const validLog = log.filter(t => t > oneDayAgo);
-    const rpm = validLog.filter(t => t > oneMinAgo).length;
-    const rpd = validLog.length;
-    return { rpm, rpd, log: validLog };
-  } catch (e) {
-    return { rpm: 0, rpd: 0, log: [] };
-  }
+    const rpm = validLog.filter(t => t > (now - 60000)).length;
+    return { rpm, rpd: validLog.length, log: validLog };
+  } catch (e) { return { rpm: 0, rpd: 0, log: [] }; }
 };
 
 const recordLlmRequest = () => {
@@ -132,10 +101,8 @@ const recordLlmRequest = () => {
 };
 
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
-  if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
-    throw new Error("Invalid coordinates");
-  }
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
+  if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') throw new Error("Invalid coordinates");
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather telemetry failed");
   return res.json();
@@ -144,34 +111,36 @@ export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => 
 export const sliceWeatherData = (hourly: any, window: [string, string], offset: number): any => {
   const startHour = parseInt(window[0].split(':')[0]);
   const endHour = parseInt(window[1].split(':')[0]);
-  const dayStartIdx = (offset + 1) * 24; 
-  const startIndex = dayStartIdx + startHour;
-  const endIndex = dayStartIdx + endHour;
+  const startIndex = (offset + 1) * 24 + startHour;
+  const endIndex = (offset + 1) * 24 + endHour;
   const slice: any = {};
-  Object.keys(hourly).forEach(key => {
-    if (Array.isArray(hourly[key])) {
-      slice[key] = hourly[key].slice(startIndex, endIndex + 1);
-    }
-  });
+  Object.keys(hourly).forEach(key => { if (Array.isArray(hourly[key])) slice[key] = hourly[key].slice(startIndex, endIndex + 1); });
   return slice;
 };
 
 const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): string => {
-  const { riderWeight, tireWidth, type } = equipment;
-  let pressure = 0;
-  if (type === 'Road Bike' || type === 'Speedpedelec') {
-    pressure = 2.0 + (riderWeight * 0.05) - ((tireWidth - 25) * 0.1);
-    pressure = Math.max(3.5, Math.min(8.5, pressure));
-  } else if (type === 'Gravel Bike') {
-    pressure = 1.0 + (riderWeight * 0.03) - ((tireWidth - 35) * 0.05);
-    pressure = Math.max(1.8, Math.min(4.5, pressure));
-  } else {
-    pressure = 0.5 + (riderWeight * 0.02);
-    pressure = Math.max(1.4, Math.min(3.0, pressure));
-  }
+  const { riderWeight, tireWidth, tireSetup, surfacePreference } = equipment;
+  
+  // Base formula logic: pressure increases with weight, decreases with width
+  let pressure = (riderWeight * 0.045) + 3.8 - ((tireWidth - 25) * 0.14);
+  
+  // Tire Setup Impact
+  if (tireSetup === 'Tubeless') pressure -= 0.6;
+  if (tireSetup === 'Clincher (TPU)' || tireSetup === 'Clincher (Latex)') pressure -= 0.2;
+  if (tireSetup === 'Tubular') pressure += 0.2;
+
+  // Surface Preference Impact (0% Road to 100% Off-road)
+  // Higher off-road percentage reduces pressure for traction
+  pressure -= (surfacePreference / 100) * 1.4;
+
+  // Final safety checks
+  pressure = Math.max(1.5, Math.min(8.5, pressure));
+  
+  // Environmental adjustments
   if (w.isSnowy || w.iceRisk) pressure -= 0.6;
   else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) pressure -= 0.3;
-  return `${pressure.toFixed(1)} Bar`;
+  
+  return `${Math.max(1.2, pressure).toFixed(1)} Bar`;
 };
 
 export const getStandardizedAdvice = (w: WeatherCondition, equipment?: Equipment): { summary: string; style: string; setup: string; clothing: string; performance: string } => {
@@ -232,110 +201,28 @@ const extractJson = (text?: string): any => {
   let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
   const firstBrace = cleanText.indexOf('{');
   const lastBrace = cleanText.lastIndexOf('}');
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    cleanText = cleanText.substring(firstBrace, lastBrace + 1);
-  } else {
-     const firstBracket = cleanText.indexOf('[');
-     const lastBracket = cleanText.lastIndexOf(']');
-     if (firstBracket >= 0 && lastBracket > firstBracket) {
-        cleanText = cleanText.substring(firstBracket, lastBracket + 1);
-     }
-  }
+  if (firstBrace >= 0 && lastBrace > firstBrace) cleanText = cleanText.substring(firstBrace, lastBrace + 1);
   try { return JSON.parse(cleanText); } catch (e) { return {}; }
 };
 
-const cleanErrorMessage = (error: any): string => {
-  try {
-    let msg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
-    if (typeof msg === 'string' && (msg.startsWith('{') || msg.startsWith('['))) {
-      try {
-        const parsed = JSON.parse(msg);
-        if (parsed.error?.message) msg = parsed.error.message;
-        else if (parsed.message) msg = parsed.message;
-      } catch { }
-    }
-    msg = msg.replace(/^Error: /, '').replace(/^\[GoogleGenAI Error\]: /, '').replace(/GoogleGenerativeAI/gi, 'AI Service');
-    if (msg.includes('429') || msg.includes('Quota exceeded')) return "Service Busy (Quota Exceeded)";
-    if (msg.includes('503') || msg.includes('Overloaded')) return "Service Overloaded";
-    if (msg.includes('400') || msg.includes('API key')) return "Invalid Configuration/Key";
-    if (msg.includes('fetch failed')) return "Network Connection Lost";
-    if (msg.length > 60) return msg.substring(0, 57) + "...";
-    return msg;
-  } catch (e) { return "Connection disrupted"; }
-};
-
-const callWithRetry = async <T>(
-  fn: (aiInstance: GoogleGenAI, modelName: string) => Promise<T>, 
-  specificModel?: string,
-  maxRetriesPerModel = 1
-): Promise<{ data: T; model: string }> => {
+const callWithRetry = async <T>(fn: (aiInstance: GoogleGenAI, modelName: string) => Promise<T>): Promise<{ data: T; model: string }> => {
   const apiKey = process.env.API_KEY;
-  lastApiErrorMessage = null;
-  if (!apiKey || apiKey.length < 5) {
-    isAIFallingBack = true;
-    currentLLMModel = null;
-    currentLLMModelPriorityLabel = "N/A (API Key Missing)";
-    remainingLLMAlternativesCount = MODEL_CHAIN.length;
-    lastApiErrorMessage = "API Key is missing.";
-    throw new Error("API Key is missing.");
-  }
-
+  if (!apiKey) throw new Error("API Key missing");
   const ai = new GoogleGenAI({ apiKey });
-  const modelsToTry = specificModel ? [specificModel] : MODEL_CHAIN;
-  const collectedErrors: string[] = [];
-
-  for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
-    const modelName = modelsToTry[modelIndex];
-    for (let i = 0; i <= maxRetriesPerModel; i++) {
-      try {
-        const result = await fn(ai, modelName);
-        isAIFallingBack = false;
-        currentLLMModel = modelName;
-        isUsingFallbackModel = modelIndex > 0;
-        currentLLMModelPriorityLabel = modelIndex === 0 ? "Primary" : `Fallback Tier ${modelIndex}`;
-        remainingLLMAlternativesCount = modelsToTry.length - (modelIndex + 1);
-        lastApiErrorMessage = null;
-        recordLlmRequest();
-        return { data: result, model: modelName };
-      } catch (error: any) {
-        const status = error?.status || error?.statusCode;
-        const cleanMsg = cleanErrorMessage(error);
-        collectedErrors.push(cleanMsg);
-        if (status === 400 || status === 404) break;
-        if (((status >= 500 && status <= 599) || status === 429) && i < maxRetriesPerModel) {
-          const delay = 1000 * Math.pow(2, i);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        break; 
-      }
-    }
+  for (let i = 0; i < MODEL_CHAIN.length; i++) {
+    try {
+      const res = await fn(ai, MODEL_CHAIN[i]);
+      currentLLMModel = MODEL_CHAIN[i];
+      isUsingFallbackModel = i > 0;
+      recordLlmRequest();
+      return { data: res, model: MODEL_CHAIN[i] };
+    } catch (e) { if (i === MODEL_CHAIN.length - 1) throw e; }
   }
-  
-  isAIFallingBack = true;
-  isUsingFallbackModel = false;
-  currentLLMModel = null;
-  currentLLMModelPriorityLabel = `All failed`;
-  remainingLLMAlternativesCount = 0;
-  lastApiErrorMessage = collectedErrors.length > 0 ? collectedErrors[collectedErrors.length - 1] : "Service unavailable";
-  throw new Error(`AI Service Unavailable: ${lastApiErrorMessage}`);
+  throw new Error("AI Chain Exhausted");
 };
 
 export const checkLLMConnectivity = async (): Promise<boolean> => {
-  try {
-    await callWithRetry(async (aiInstance, modelName) => {
-       await aiInstance.models.generateContent({ 
-         model: modelName, 
-         contents: "Hello", 
-         config: { 
-           maxOutputTokens: 10,
-           thinkingConfig: { thinkingBudget: 5 }
-         } 
-       });
-      return true;
-    }, undefined, 0); 
-    return true;
-  } catch (e) { return false; }
+  try { await callWithRetry(async (ai, model) => ai.models.generateContent({ model, contents: "Hi", config: { maxOutputTokens: 5 } })); return true; } catch (e) { return false; }
 };
 
 export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
@@ -361,25 +248,17 @@ export const calculateAverageWindImpact = (heading: number, directions: number[]
   if (!directions.length) return 0;
   const radHeading = (heading * Math.PI) / 180;
   let totalImpact = 0;
-  directions.forEach(dir => {
-    totalImpact += Math.cos(radHeading - (dir * Math.PI) / 180);
-  });
+  directions.forEach(dir => { totalImpact += Math.cos(radHeading - (dir * Math.PI) / 180); });
   return (totalImpact / directions.length) * 100;
 };
 
 const getMinutes = (timeStr: string): number => {
+  if (!timeStr) return 0;
   const t = timeStr.includes('T') ? timeStr.split('T')[1] : timeStr;
-  const [h, m] = t.split(':').map(Number);
+  const parts = t.split(':');
+  const h = parseInt(parts[0]);
+  const m = parseInt(parts[1]) || 0;
   return h * 60 + m;
-};
-
-const resolveCondition = (code: number, windSpeed: number, precip: number): WeatherCondition['condition'] => {
-  if (code >= 95) return 'Stormy';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snowy';
-  if (code >= 51 || precip > 0.5) return 'Rainy';
-  if (windSpeed > 35) return 'Windy';
-  if (code <= 1) return 'Sunny';
-  return 'Cloudy';
 };
 
 export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: boolean = false): ScoreDeduction[] => {
@@ -406,46 +285,28 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
   }
   const temp = w.temp || 0;
   if (isTraining) {
-    if (temp < 10) {
-      const coldDeduction = (10 - temp) * 2;
-      items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
-    } else if (temp > 15) {
-      if (temp > 28) {
-         const heatDeduction = (temp - 28) * 2;
-         items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
-      } else {
-         const surplus = (temp - 15);
-         items.push({ label: "Weather Surplus", val: Math.round(surplus) });
-      }
+    if (temp < 10) items.push({ label: "Cold Exposure", val: -Math.round((10 - temp) * 2) });
+    else if (temp > 15) {
+      if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2) });
+      else items.push({ label: "Weather Surplus", val: Math.round(temp - 15) });
     }
   } else {
-    if (temp < 5) {
-      const coldDeduction = (5 - temp) * 2;
-      items.push({ label: "Cold Exposure", val: -Math.round(coldDeduction) });
-    } else if (temp > 28) {
-      const heatDeduction = (temp - 28) * 2;
-      items.push({ label: "Heat Stress", val: -Math.round(heatDeduction) });
-    }
+    if (temp < 5) items.push({ label: "Cold Exposure", val: -Math.round((5 - temp) * 2) });
+    else if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2) });
   }
-  if (w.isDark) items.push({ label: "Darkness / Visibility", val: -5 });
+  if (w.isDark) items.push({ label: "Darkness / Visibility", val: -10 });
   return items;
 };
 
 export const aggregateRawWeather = (
-  rawSlice: any, 
-  heading: number, 
-  isMorning: boolean, 
-  settings: CommuteSettings,
-  sunTimes?: { sunrise: string, sunset: string },
-  minPastTemp: number = 99,
-  customWindow?: [string, string],
-  fullRawHourlyPrecip?: number[],
-  sessionStartAbsoluteIdx?: number,
-  isTraining: boolean = false,
-  fullRawHourlyHumidity?: number[],
-  fullRawHourlyTemp?: number[]
+  rawSlice: any, heading: number, isMorning: boolean, settings: CommuteSettings,
+  sunTimes?: { sunrise: string, sunset: string }, minPastTemp: number = 99,
+  customWindow?: [string, string], fullRawHourlyPrecip?: number[],
+  sessionStartAbsoluteIdx?: number, isTraining: boolean = false,
+  fullRawHourlyHumidity?: number[], fullRawHourlyTemp?: number[]
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
+  const apparentTemps = (rawSlice.apparent_temperature || []) as number[];
   const precips = (rawSlice.precipitation || []) as number[];
   const winds = (rawSlice.wind_speed_10m || []) as number[];
   const dirs = (rawSlice.wind_direction_10m || []) as number[];
@@ -453,6 +314,7 @@ export const aggregateRawWeather = (
   const humidities = (rawSlice.relative_humidity_2m || []) as number[];
 
   const avgTemp = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : 15;
+  const avgApparentTemp = apparentTemps.length ? apparentTemps.reduce((a, b) => a + b, 0) / apparentTemps.length : avgTemp;
   const minTemp = temps.length ? Math.min(...temps) : 15;
   const maxTemp = temps.length ? Math.max(...temps) : 15;
   const totalPrecip = precips.reduce((a, b) => a + b, 0);
@@ -462,20 +324,28 @@ export const aggregateRawWeather = (
   const maxCode = codes.length ? Math.max(...codes) : 0;
 
   const isSnowy = [71, 73, 75, 77, 85, 86].includes(maxCode);
-  const condition = resolveCondition(maxCode, maxWind, totalPrecip);
   const headwindImpact = Math.round(calculateAverageWindImpact(heading, dirs));
   const timeWindow = customWindow || (isMorning ? settings.morningWindow : settings.eveningWindow);
   
   let isDark = false;
   if (sunTimes) {
-    const sessionStart = getMinutes(timeWindow[0]);
-    const sessionEnd = getMinutes(timeWindow[1]);
-    const sunrise = getMinutes(sunTimes.sunrise);
-    const sunset = getMinutes(sunTimes.sunset);
-    isDark = sessionStart < sunrise || sessionEnd > sunset;
+    const startMin = getMinutes(timeWindow[0]);
+    const endMin = getMinutes(timeWindow[1]);
+    const sunriseMin = getMinutes(sunTimes.sunrise);
+    const sunsetMin = getMinutes(sunTimes.sunset);
+    
+    // Check for darkness including handling sessions that cross midnight
+    if (endMin < startMin) {
+      // Session crosses midnight (e.g. 23:00 to 01:00)
+      // It hits 00:00, which is always dark in Belgium.
+      isDark = true;
+    } else {
+      isDark = startMin < sunriseMin || endMin > sunsetMin;
+    }
   } else {
-    const startHour = parseInt(timeWindow[0].split(':')[0]);
-    isDark = startHour < 6 || startHour >= 21; 
+    const startH = parseInt(timeWindow[0].split(':')[0]);
+    const endH = parseInt(timeWindow[1].split(':')[0]);
+    isDark = startH < 6 || startH >= 21 || endH < startH; 
   }
 
   let lastPrecipTime = "None";
@@ -484,9 +354,7 @@ export const aggregateRawWeather = (
       const idx = sessionStartAbsoluteIdx - i;
       if (idx >= 0 && fullRawHourlyPrecip[idx] > 0) {
         const hour = idx % 24;
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const h12 = hour % 12 || 12;
-        lastPrecipTime = `${h12}${ampm}`;
+        lastPrecipTime = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
         break;
       }
     }
@@ -498,71 +366,40 @@ export const aggregateRawWeather = (
     for (let i = 0; i < 48; i++) {
       const idx = sessionStartAbsoluteIdx + i;
       if (idx >= fullRawHourlyPrecip.length) break;
-      const rainAhead = fullRawHourlyPrecip.slice(idx, idx + 3);
-      if (rainAhead.length >= 1 && rainAhead.every(v => v === 0)) {
-        stopIdx = idx;
-        break;
-      }
+      if (fullRawHourlyPrecip.slice(idx, idx + 3).every(v => v === 0)) { stopIdx = idx; break; }
     }
     if (stopIdx !== -1) {
-      let evaporationHours = 2;
-      const humAtStop = (fullRawHourlyHumidity?.[stopIdx] ?? avgHum);
-      const tempAtStop = (fullRawHourlyTemp?.[stopIdx] ?? avgTemp);
-      if (humAtStop > 85) evaporationHours += 6;
-      else if (humAtStop > 70) evaporationHours += 3;
-      if (tempAtStop < 5) evaporationHours += 4;
-      else if (tempAtStop < 12) evaporationHours += 2;
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 1);
-      startDate.setHours(0, 0, 0, 0);
-      estimatedDryTime = startDate.getTime() + (stopIdx + evaporationHours) * 60 * 60 * 1000;
+      let evap = 2;
+      if ((fullRawHourlyHumidity?.[stopIdx] ?? avgHum) > 85) evap += 6;
+      else if ((fullRawHourlyHumidity?.[stopIdx] ?? avgHum) > 70) evap += 3;
+      if ((fullRawHourlyTemp?.[stopIdx] ?? avgTemp) < 5) evap += 4;
+      const startDate = new Date(); startDate.setDate(startDate.getDate() - 1); startDate.setHours(0, 0, 0, 0);
+      estimatedDryTime = startDate.getTime() + (stopIdx + evap) * 3600000;
     }
   }
 
-  const absoluteSessionStartDate = new Date();
-  absoluteSessionStartDate.setDate(absoluteSessionStartDate.getDate() - 1);
-  absoluteSessionStartDate.setHours(0,0,0,0);
-  const sessionStartAbsoluteMs = absoluteSessionStartDate.getTime() + (sessionStartAbsoluteIdx || 0) * 60 * 60 * 1000;
-  const isWetFromPrecip = totalPrecip > 0 || lastPrecipTime !== "None";
-  const isCurrentlyInDryingPhase = estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false;
-  const isWet = isWetFromPrecip && (totalPrecip > 0 || isCurrentlyInDryingPhase);
+  const sessionStartAbsoluteMs = new Date().setHours(0,0,0,0) - 86400000 + (sessionStartAbsoluteIdx || 0) * 3600000;
+  const isWet = (totalPrecip > 0 || lastPrecipTime !== "None") && (totalPrecip > 0 || (estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false));
 
   const activeFreezing = minTemp <= 0.5; 
-  const nearFreezing = minTemp <= 3.5; 
   const overnightFreeze = minPastTemp <= 0;
-  const humidityThreshold = overnightFreeze ? 60 : 75;
-  const hasMoisture = isWet || avgHum > humidityThreshold || isSnowy;
-  const iceRisk = hasMoisture && (activeFreezing || (overnightFreeze && nearFreezing));
+  const iceRisk = (isWet || avgHum > (overnightFreeze ? 60 : 75) || isSnowy) && (activeFreezing || (overnightFreeze && minTemp <= 3.5));
 
   const baseWeather: any = {
-    temp: parseFloat(avgTemp.toFixed(1)),
-    minTemp: parseFloat(minTemp.toFixed(1)),
-    maxTemp: parseFloat(maxTemp.toFixed(1)),
-    condition,
-    isSnowy,
-    precipitation: parseFloat(totalPrecip.toFixed(1)),
-    windSpeed: parseFloat(maxWind.toFixed(1)),
-    windDirection: Math.round(avgDir),
-    humidity: Math.round(avgHum),
-    isDark,
-    slipperyChance: isSnowy ? 90 : (isWet ? 60 : (avgTemp < 3 ? 40 : 10)),
-    wetSurfaceChance: isWet ? 90 : 10,
-    headwindImpact,
-    iceRisk, 
-    activeFreezing,
-    overnightFreeze,
-    minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
-    lastPrecipitationTime: lastPrecipTime,
-    estimatedDryTime,
-    precipDuringSession: parseFloat(totalPrecip.toFixed(1)),
-    sunrise: sunTimes?.sunrise,
-    sunset: sunTimes?.sunset
+    temp: parseFloat(avgTemp.toFixed(1)), feelsLike: parseFloat(avgApparentTemp.toFixed(1)),
+    minTemp: parseFloat(minTemp.toFixed(1)), maxTemp: parseFloat(maxTemp.toFixed(1)),
+    condition: isSnowy ? 'Snowy' : (totalPrecip > 0.5 ? 'Rainy' : (maxWind > 35 ? 'Windy' : (maxCode <= 1 ? 'Sunny' : 'Cloudy'))),
+    isSnowy, precipitation: parseFloat(totalPrecip.toFixed(1)),
+    windSpeed: parseFloat(maxWind.toFixed(1)), windDirection: Math.round(avgDir), humidity: Math.round(avgHum),
+    isDark, wetSurfaceChance: isWet ? 90 : 10, headwindImpact, iceRisk, 
+    activeFreezing, overnightFreeze, minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
+    lastPrecipitationTime: lastPrecipTime, estimatedDryTime,
+    precipDuringSession: parseFloat(totalPrecip.toFixed(1)), sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
   };
 
   const breakdown = getScoreBreakdown(baseWeather, isTraining);
   baseWeather.scoreBreakdown = breakdown;
-  const totalDeductions = breakdown.reduce((acc: number, curr: ScoreDeduction) => acc + curr.val, 0);
-  baseWeather.score = Math.max(0, Math.min(100, 100 + totalDeductions));
+  baseWeather.score = Math.max(0, Math.min(100, 100 + breakdown.reduce((acc, curr) => acc + curr.val, 0)));
 
   const selectedEquipment = settings.equipment?.find(e => e.isSelected);
   const basicAdvice = getStandardizedAdvice(baseWeather as WeatherCondition, selectedEquipment);
@@ -577,88 +414,66 @@ export const aggregateRawWeather = (
 
 export const getTelemetryBatch = async (settings: CommuteSettings, offsets: number[]): Promise<Record<number, any>> => {
   if (!settings.homeCoords || !settings.workCoords) return {};
-  const [homeRaw, workRaw] = await Promise.all([
-    fetchRawWeatherData(settings.homeCoords),
-    fetchRawWeatherData(settings.workCoords)
-  ]);
+  const [homeRaw, workRaw] = await Promise.all([fetchRawWeatherData(settings.homeCoords), fetchRawWeatherData(settings.workCoords)]);
   const batch: Record<number, any> = {};
   for (const offset of offsets) {
     const dayStartIdx = (offset + 1) * 24;
-    const morningSlice = sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset);
-    const sunTimesMorning = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
-    const morningStartHour = parseInt(settings.morningWindow[0].split(':')[0]);
-    const morningIdx = dayStartIdx + morningStartHour;
-    const morningMinPast = homeRaw.hourly.temperature_2m.slice(Math.max(0, morningIdx - 6), morningIdx);
-    const morningMinPastVal = morningMinPast.length ? Math.min(...morningMinPast) : 10;
-    const morningWeather = aggregateRawWeather(morningSlice, calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesMorning, morningMinPastVal, undefined, homeRaw.hourly.precipitation, morningIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
+    const sunTimesM = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
+    const mIdx = dayStartIdx + parseInt(settings.morningWindow[0].split(':')[0]);
+    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx)), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
     
-    const eveningSlice = sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset);
-    const sunTimesEvening = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
-    const eveningStartHour = parseInt(settings.eveningWindow[0].split(':')[0]);
-    const eveningIdx = dayStartIdx + eveningStartHour;
-    const eveningMinPast = workRaw.hourly.temperature_2m.slice(Math.max(0, eveningIdx - 6), eveningIdx);
-    const eveningMinPastVal = eveningMinPast.length ? Math.min(...eveningMinPast) : 10;
-    const eveningWeather = aggregateRawWeather(eveningSlice, calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesEvening, eveningMinPastVal, undefined, workRaw.hourly.precipitation, eveningIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
+    const sunTimesE = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
+    const eIdx = dayStartIdx + parseInt(settings.eveningWindow[0].split(':')[0]);
+    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx)), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
 
     batch[offset] = {
-      weather: { morning: morningWeather, evening: eveningWeather },
-      lastUpdated: Date.now(),
-      score: Math.min(morningWeather.score, eveningWeather.score),
-      summary: { isWet: morningWeather.wetSurfaceChance > 50 || eveningWeather.wetSurfaceChance > 50, isSnowy: morningWeather.isSnowy || eveningWeather.isSnowy, isIcy: morningWeather.iceRisk || eveningWeather.iceRisk }
+      weather: { morning: mWeather, evening: eWeather }, lastUpdated: Date.now(),
+      score: Math.min(mWeather.score, eWeather.score),
+      summary: { isWet: mWeather.wetSurfaceChance > 50 || eWeather.wetSurfaceChance > 50, isSnowy: mWeather.isSnowy || eWeather.isSnowy, isIcy: mWeather.iceRisk || eWeather.iceRisk }
     };
   }
   return batch;
 };
 
 export const getAIInsights = async (settings: CommuteSettings, telemetry: Record<number, any>): Promise<Record<number, any>> => {
-  const prompt = `Analyze cycling commute weather and provide tactical advice for each day. JSON keys: date offsets, values: { "morning": { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }, "evening": { ... } } Goal: ${settings.fitnessGoal} Data: ${JSON.stringify(telemetry)}`;
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json" } });
+    const response = await ai.models.generateContent({ model, contents: `Tactical advice for cycling commute. Data: ${JSON.stringify(telemetry)}`, config: { responseMimeType: "application/json" } });
     return extractJson(response.text);
   });
   return data;
 };
 
 export const getCommuteDayAIAdvice = async (settings: CommuteSettings, weather: any): Promise<any> => {
-  const prompt = `Analyze cycling commute day gear and tactics. Return JSON: { "morning": { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }, "evening": { ... } } Morning: ${JSON.stringify(weather.morning)} Evening: ${JSON.stringify(weather.evening)}`;
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json" } });
+    const response = await ai.models.generateContent({ model, contents: `Gear/tactics for cycling commute. M: ${JSON.stringify(weather.morning)} E: ${JSON.stringify(weather.evening)}`, config: { responseMimeType: "application/json" } });
     return extractJson(response.text);
   });
   return data;
 };
 
 export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, condition: WeatherCondition, distance: number): Promise<any> => {
-  const prompt = `Analyze training session (${distance}km): Weather: ${JSON.stringify(condition)} Return JSON: { "summary": "...", "style": "...", "setup": "...", "clothing": "...", "performance": "..." }`;
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model, contents: prompt, config: { responseMimeType: "application/json" } });
+    const response = await ai.models.generateContent({ model, contents: `Tactical training advice. Weather: ${JSON.stringify(condition)}`, config: { responseMimeType: "application/json" } });
     return extractJson(response.text);
   });
   return data;
 };
 
 export const getCommuteRoadDistance = async (home: string, work: string): Promise<number | null> => {
-  const prompt = `What is the cycling road distance (one way) between ${home} and ${work} in Belgium? Respond only with numerical value in km.`;
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model: "gemini-3-flash-preview", contents: prompt, config: { tools: [{ googleSearch: {} }] } });
-    const text = response.text || "";
-    const match = text.match(/(\d+(\.\d+)?)/);
+    const response = await ai.models.generateContent({ model: "gemini-3-flash-preview", contents: `Cycling distance between ${home} and ${work} in km. Number only.`, config: { tools: [{ googleSearch: {} }] } });
+    const match = (response.text || "").match(/(\d+(\.\d+)?)/);
     return match ? parseFloat(match[1]) : null;
   });
   return data;
 };
 
-export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
-  return getDirectLocationSuggestions(query);
-};
+export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => getDirectLocationSuggestions(query);
 
 export const resolveAddress = async (address: string): Promise<{ address: string; lat: number; lng: number }> => {
   if (address.includes(',')) {
     const [lat, lng] = address.split(',').map(v => parseFloat(v.trim()));
-    if (!isNaN(lat) && !isNaN(lng)) {
-      const resolved = await reverseGeocodeDirect({ lat, lng });
-      return { address: resolved, lat, lng };
-    }
+    if (!isNaN(lat) && !isNaN(lng)) return { address: await reverseGeocodeDirect({ lat, lng }), lat, lng };
   }
   const results = await getDirectLocationSuggestions(address);
   if (results.length > 0) return { address: results[0].name, lat: results[0].lat, lng: results[0].lng };
