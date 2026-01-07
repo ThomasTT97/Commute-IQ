@@ -478,6 +478,7 @@ const App: React.FC = () => {
     setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}}));
     setTrainingSearch(loc.name);
     if (typeof loc.bestHour === 'number') { setManualStartHour(loc.bestHour); }
+    setShowTrainingSuggestions(false);
   }, []);
 
   return (

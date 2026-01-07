@@ -1,3 +1,4 @@
+
 import { BelgianLocation } from "../locations";
 import { BELGIAN_LOCATIONS } from "../locations";
 
@@ -24,25 +25,33 @@ export function shuffleArray<T>(array: T[]): T[] {
 
 /**
  * Merges internal Belgian registry with global European API results.
+ * Strictly avoids duplicates by normalizing names.
  */
 export const filterLocationsWithGlobal = (query: string, globalResults: BelgianLocation[]) => {
   if (query.length < 2) return [];
   
-  // Get unique results from internal Belgian list for speed
-  const local = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase()));
-  const uniqueLocal = local.filter((loc, index, self) =>
-    index === self.findIndex((t) => t.name === loc.name)
-  );
-  
-  // Combine with global API results (Europe)
-  const combined = [...globalResults];
-  
-  // Add local results if they aren't already in global set
-  uniqueLocal.forEach(l => {
-    if (!combined.some(g => g.name.toLowerCase() === l.name.toLowerCase())) {
-      combined.push(l);
-    }
-  });
+  const normalizedQuery = query.toLowerCase();
+  const seenNames = new Set<string>();
+  const finalResults: BelgianLocation[] = [];
 
-  return combined.slice(0, 8);
+  // Helper to add if name is unique (normalized)
+  const addIfUnique = (loc: BelgianLocation) => {
+    // Normalize name for comparison: take part before comma, trim, lowercase
+    const baseName = loc.name.split(',')[0].trim().toLowerCase();
+    if (!seenNames.has(baseName)) {
+      seenNames.add(baseName);
+      finalResults.push(loc);
+      return true;
+    }
+    return false;
+  };
+
+  // 1. Prioritize global results but check for duplicates
+  globalResults.forEach(addIfUnique);
+
+  // 2. Add local results from static database
+  const local = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(normalizedQuery));
+  local.forEach(addIfUnique);
+
+  return finalResults.slice(0, 8);
 };
