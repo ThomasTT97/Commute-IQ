@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
@@ -124,6 +123,12 @@ const App: React.FC = () => {
   const [trainingWeek, setTrainingWeek] = useState<any[]>([]);
   const [isTrainingWeekLoading, setIsTrainingWeekLoading] = useState(false);
 
+  // Alternative locations search state
+  const [isScanningAlternatives, setIsScanningAlternatives] = useState(false);
+  const [scanningProgress, setScanningProgress] = useState(0);
+  const [currentLocationAdvice, setCurrentLocationAdvice] = useState<any[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const bestStartHour = useMemo(() => {
     if (!trainingSlots.length) return null;
     return trainingSlots.reduce((prev, curr) => (curr.score > prev.score ? curr : prev), trainingSlots[0]).startHour;
@@ -132,8 +137,14 @@ const App: React.FC = () => {
   const activeTrainingSlot = useMemo(() => {
     if (!trainingSlots.length) return null;
     const hourToFind = manualStartHour !== null ? manualStartHour : bestStartHour;
-    return trainingSlots.find(s => s.startHour === hourToFind) || trainingSlots[0];
-  }, [trainingSlots, manualStartHour, bestStartHour]);
+    const slot = trainingSlots.find(s => s.startHour === hourToFind) || trainingSlots[0];
+    return {
+      ...slot,
+      locationAdvice: currentLocationAdvice,
+      isScanning: isScanningAlternatives,
+      scanningProgress
+    };
+  }, [trainingSlots, manualStartHour, bestStartHour, currentLocationAdvice, isScanningAlternatives, scanningProgress]);
 
   const [globalTrainingResults, setGlobalTrainingResults] = useState<BelgianLocation[]>([]);
   const [isSearchingGlobalTraining, setIsSearchingGlobalTraining] = useState(false);
@@ -246,9 +257,102 @@ const App: React.FC = () => {
     }
   }, [syncFullWeek, settings, pulseDataMap]);
 
+  const searchAlternativesProgressive = useCallback(async () => {
+    if (!activeTrainingSlot) return;
+    const baseScore = activeTrainingSlot.score;
+    const dateOffset = training.dateOffset;
+    const distance = training.distance;
+    const baseCoords = training.coords;
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+    
+    setIsScanningAlternatives(true);
+    setScanningProgress(0);
+    setCurrentLocationAdvice([]);
+    
+    const startTime = Date.now();
+    const TIMEOUT = 10000; 
+    const poolSize = 3; 
+    const foundLocations: any[] = [];
+    const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
+    const durationInt = Math.ceil(distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
+
+    try {
+      while (Date.now() - startTime < TIMEOUT) {
+        if (abortControllerRef.current.signal.aborted) return;
+        
+        const currentElapsed = Date.now() - startTime;
+        setScanningProgress(Math.round((currentElapsed / TIMEOUT) * 100));
+
+        const batch = shuffleArray([...BELGIAN_LOCATIONS]).slice(0, poolSize);
+        
+        const results = await Promise.all(batch.map(async (loc) => {
+          try {
+            const lRaw = await fetchRawWeatherData(loc);
+            const lDayIdx = (dateOffset + 1) * 24;
+            const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
+            let maxLScore = 0;
+            let lBestHour = 0;
+            
+            for (let h = 0; h <= 23; h++) {
+              const lSlice: any = {};
+              Object.keys(lRaw.hourly).forEach(k => { if (Array.isArray(lRaw.hourly[k])) lSlice[k] = lRaw.hourly[k].slice(lDayIdx + h, lDayIdx + h + durationInt + 1); });
+              if (!lSlice.temperature_2m) continue;
+              
+              const pastTemps = lRaw.hourly.temperature_2m.slice(Math.max(0, lDayIdx + h - 6), lDayIdx + h);
+              const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
+              
+              // CRITICAL: Synchronize with actual scoring engine to ensure accuracy
+              const lCond = aggregateRawWeather(
+                lSlice, 
+                0, 
+                true, 
+                settings, 
+                lSun, 
+                pastTemps.length ? Math.min(...pastTemps) : 10,
+                lWin, 
+                lRaw.hourly.precipitation, 
+                lDayIdx + h,
+                true,
+                lRaw.hourly.relative_humidity_2m,
+                lRaw.hourly.temperature_2m
+              );
+              
+              if (lCond.score > maxLScore) {
+                maxLScore = lCond.score;
+                lBestHour = h;
+              }
+            }
+            return { 
+              ...loc, 
+              score: maxLScore,
+              bestHour: lBestHour,
+              distanceFromTrainingCenter: calculateDistance(baseCoords, loc)
+            };
+          } catch (e) { return null; }
+        }));
+
+        results.forEach(r => { if (r) foundLocations.push(r); });
+
+        const betterOnes = foundLocations
+          .filter(l => l.score > baseScore)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10);
+        
+        setCurrentLocationAdvice(betterOnes);
+        await new Promise(res => setTimeout(res, 400));
+      }
+    } catch (e) { } finally {
+      setIsScanningAlternatives(false);
+      setScanningProgress(100);
+    }
+  }, [training.dateOffset, training.distance, training.coords, settings, activeTrainingSlot]);
+
   const syncTraining = useCallback(async () => {
     if (!training.coords || typeof training.coords.lat !== 'number') return;
     setTrainingLoading(true);
+    setCurrentLocationAdvice([]);
     try {
       const raw = await fetchRawWeatherData(training.coords);
       const dayIdx = (training.dateOffset + 1) * 24; 
@@ -263,53 +367,40 @@ const App: React.FC = () => {
         if (!slice.temperature_2m) continue;
         const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
         const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
-        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, undefined, undefined, true);
+        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
         
-        // Calculate tactical advice for this slot
-        const uniqueNames = new Set<string>();
-        const targetDist = training.distance * 0.4;
-        const windDir = condition.windDirection;
-        
-        const optAdvice = BELGIAN_LOCATIONS
-          .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
-          .filter(loc => loc.distFromCenter > targetDist * 0.8 && loc.distFromCenter < targetDist * 1.2)
-          .filter(loc => {
-            const bearing = calculateBearing(training.coords, loc);
-            const diff = Math.abs(bearing - windDir);
-            return diff < 30 || diff > 330; 
-          })
-          .sort((a, b) => Math.abs(a.distFromCenter - targetDist) - Math.abs(b.distFromCenter - targetDist))
-          .filter(loc => {
-            const normalized = loc.name.trim().toUpperCase();
-            if (uniqueNames.has(normalized)) return false;
-            uniqueNames.add(normalized);
-            return true;
-          })
-          .slice(0, 5);
-
-        const uniqueBaseNames = new Set<string>();
-        const locAdvice = condition.score < 50 ? BELGIAN_LOCATIONS
-          .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
-          .filter(loc => loc.distFromCenter >= 50 && loc.distFromCenter <= 60)
-          .sort((a, b) => a.distFromCenter - b.distFromCenter)
-          .filter(loc => {
-            const normalized = loc.name.trim().toUpperCase();
-            if (uniqueBaseNames.has(normalized)) return false;
-            uniqueBaseNames.add(normalized);
-            return true;
-          })
-          .slice(0, 5) : [];
-
-        slots.push({ startHour: h, condition, window: winHours, score: condition.score, optimizationAdvice: optAdvice, locationAdvice: locAdvice });
+        slots.push({ startHour: h, condition, window: winHours, score: condition.score });
       }
       
       const targetHour = manualStartHour !== null ? manualStartHour : slots.reduce((p, c) => (c.score > p.score ? c : p), slots[0]).startHour;
       if (manualStartHour === null) setManualStartHour(targetHour);
 
-      setTrainingSlots(slots);
+      const targetSlot = slots.find(s => s.startHour === targetHour) || slots[0];
+      
+      const uniqueNames = new Set<string>();
+      const targetDist = training.distance * 0.4;
+      const windDir = targetSlot.condition.windDirection;
+      
+      const optAdvice = BELGIAN_LOCATIONS
+        .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
+        .filter(loc => loc.distFromCenter > targetDist * 0.8 && loc.distFromCenter < targetDist * 1.2)
+        .filter(loc => {
+          const bearing = calculateBearing(training.coords, loc);
+          const diff = Math.abs(bearing - windDir);
+          return diff < 30 || diff > 330; 
+        })
+        .sort((a, b) => Math.abs(a.distFromCenter - targetDist) - Math.abs(b.distFromCenter - targetDist))
+        .filter(loc => {
+          const normalized = loc.name.trim().toUpperCase();
+          if (uniqueNames.has(normalized)) return false;
+          uniqueNames.add(normalized);
+          return true;
+        })
+        .slice(0, 5);
+
+      setTrainingSlots(slots.map(s => s.startHour === targetHour ? { ...s, optimizationAdvice: optAdvice } : s));
       
       if (!settings.disableAI) {
-        const targetSlot = slots.find(s => s.startHour === targetHour) || slots[0];
         try {
           const aiAdvice = await getTrainingSessionAIAdvice(settings, targetSlot.condition, training.distance);
           if (aiAdvice) {
@@ -352,7 +443,7 @@ const App: React.FC = () => {
             if (!slice.temperature_2m) continue;
             const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
             const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
-            const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, undefined, undefined, true);
+            const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
             if (!best || condition.score > best.score) best = { score: condition.score, condition, startHour: h, window: winHours };
          }
          weeklyResults.push({ offset: o, bestSlot: best });
@@ -417,6 +508,15 @@ const App: React.FC = () => {
   const primaryData = useMemo(() => mapLegData(commuteSequence.primary), [commuteSequence.primary, pulseDataMap, settings, t]);
   const secondaryData = useMemo(() => mapLegData(commuteSequence.secondary), [commuteSequence.secondary, pulseDataMap, settings, t]);
 
+  const handleSelectLocationAdvice = useCallback((loc: any) => {
+    setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}}));
+    setTrainingSearch(loc.name);
+    // Force consistency: set the specific hour that yielded the promised score
+    if (typeof loc.bestHour === 'number') {
+      setManualStartHour(loc.bestHour);
+    }
+  }, []);
+
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       {viewMode !== 'weekly' && viewMode !== 'training-weekly' && (
@@ -451,7 +551,7 @@ const App: React.FC = () => {
             onDateOffsetChange={setSelectedDateOffset} 
             onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
             onManualHourChange={setManualStartHour} 
-            onSelectSuggestion={loc => { setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}})); setTrainingSearch(loc.name); setShowTrainingSuggestions(false); setManualStartHour(null); }} 
+            onSelectSuggestion={handleSelectLocationAdvice} 
             onShowWeekly={syncTrainingWeek} 
             onSelectWeeklySlot={(offset, hour) => {
               setSelectedDateOffset(offset);
@@ -466,7 +566,8 @@ const App: React.FC = () => {
             weeklyLoading={isTrainingWeekLoading} 
             aiEnabled={!settings.disableAI} 
             onPopupStateChange={setIsPopupActive} 
-            onToggleMode={() => setViewMode('weekly')} 
+            onToggleMode={() => setViewMode('weekly')}
+            onTriggerAlternativesSearch={searchAlternativesProgressive}
           />
         )}
       </main>

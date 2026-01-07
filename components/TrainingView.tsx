@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { 
   Search, 
@@ -61,6 +60,7 @@ interface TrainingViewProps {
   aiEnabled: boolean;
   onPopupStateChange?: (isOpen: boolean) => void;
   onToggleMode?: () => void;
+  onTriggerAlternativesSearch: () => void;
 }
 
 const formatModelName = (model: string | null): string => {
@@ -105,7 +105,8 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   onSelectWeeklySlot,
   aiEnabled,
   onPopupStateChange,
-  onToggleMode
+  onToggleMode,
+  onTriggerAlternativesSearch
 }) => {
   const verticalPickerRef = useRef<HTMLDivElement>(null);
   const timePickerRef = useRef<HTMLDivElement>(null);
@@ -114,8 +115,8 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const [typingStep, setTypingStep] = useState(0);
   const [isInternalPopupActive, setIsInternalPopupActive] = useState(false);
   
-  const distances = useMemo(() => Array.from({ length: 30 }, (_, i) => (i + 1) * 5), []); // 5 to 150km
-  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []); // Full day: 00:00 to 23:00
+  const distances = useMemo(() => Array.from({ length: 30 }, (_, i) => (i + 1) * 5), []);
+  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
   useEffect(() => {
     if (isIntelligenceExpanded) {
@@ -156,24 +157,22 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const isAIFailed = trainingData?.aiFailed;
 
   const shouldShowBlock = (index: number) => {
-    if (!aiEnabled || isAIFailed) return true;
-    if (!isAIActive) return false;
+    if (!aiEnabled || isAIFailed || !isAIActive) return true;
     return typingStep >= index;
   };
 
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
-    const content = (isAIActive && text && text.length > 0) ? text : fallback;
-    if (!aiEnabled || isAIFailed || (isAIActive && (!text || text.length === 0))) {
-      return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{content}</span>;
+    if (isAIActive && !isAIFailed && text) {
+      return (
+        <TypewriterText 
+          text={text} 
+          speed={8} 
+          className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
+          onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
+        />
+      );
     }
-    return (
-      <TypewriterText 
-        text={content} 
-        speed={10} 
-        className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
-        onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
-      />
-    );
+    return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{fallback}</span>;
   };
 
   const handlePopupStateChange = (isOpen: boolean) => {
@@ -331,6 +330,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       isIntelligenceExpanded={isIntelligenceExpanded}
                       onPopupStateChange={handlePopupStateChange}
                       popupDirection="down"
+                      onTriggerAlternativesSearch={onTriggerAlternativesSearch}
                     />
                 </div>
 
@@ -338,61 +338,56 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                   <div className={`flex-1 border rounded-[2rem] p-5 flex flex-col gap-6 overflow-y-auto hide-scrollbar animate-in fade-in slide-in-from-top-4 duration-500 shadow-xl ${isDark ? 'bg-[#0a0c10] border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'} ${isInternalPopupActive ? 'brightness-[0.4] opacity-50 pointer-events-none' : ''}`}>
                     <div className="flex items-center justify-between w-full flex-none">
                       <div className="flex items-center gap-2">
-                        <div className={`flex items-center justify-center p-1 rounded-lg transition-colors ${!aiEnabled || (!isAIActive && !isAIFailed) ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600/10 text-blue-500'}`}>
+                        <div className={`flex items-center justify-center p-1 rounded-lg transition-colors ${aiEnabled && !isAIActive && !isAIFailed ? 'bg-blue-600/20 text-blue-500' : 'bg-blue-600/10 text-blue-500'}`}>
                           <span className="text-[16px] font-black italic">IQ</span>
                         </div>
-                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${!aiEnabled || (!isAIActive && !isAIFailed) ? 'text-slate-500' : 'text-blue-600'}`}>Tactical Intelligence</span>
+                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${aiEnabled && !isAIActive && !isAIFailed ? 'text-blue-600 animate-pulse' : 'text-blue-600'}`}>
+                          {aiEnabled && !isAIActive && !isAIFailed ? 'Enhancing Analytics...' : 'Tactical Intelligence'}
+                        </span>
                       </div>
                       <button onClick={() => setIsIntelligenceExpanded(false)} className={`p-1.5 rounded-full border transition-all ${isDark ? 'bg-[#1a1d24] border-white/10 text-slate-400 hover:text-white' : 'bg-slate-100 hover:bg-slate-200'}`}><X className="w-4 h-4" /></button>
                     </div>
 
                     <div className="flex flex-col gap-6 flex-1 pb-2">
-                      {aiEnabled && !isAIActive && !isAIFailed && !trainingLoading && (
-                        <div className="flex flex-col gap-3 items-center justify-center py-6">
-                          <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
-                          <span className="text-[9px] font-black uppercase text-blue-600 tracking-[0.2em] animate-pulse">Running Tactical Inference...</span>
-                        </div>
-                      )}
-
-                      {(shouldShowBlock(0) || !aiEnabled) && (
+                      {(shouldShowBlock(0)) && (
                         <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
                           <div className="flex items-center gap-1.5"><CloudRain className="w-3.5 h-3.5 text-blue-500" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Conditions</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.surfaceReason, "Normal atmosphere.", 0)}</div>
+                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.surfaceReason, trainingData.condition.surfaceReason || "Normal atmosphere.", 0)}</div>
                         </div>
                       )}
 
-                      {(shouldShowBlock(1) || !aiEnabled) && (
+                      {(shouldShowBlock(1)) && (
                         <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
                           <div className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-emerald-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Performance</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.performanceAdvice, "Maintain standard protocols.", 1)}</div>
+                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.performanceAdvice, trainingData.condition.performanceAdvice || "Maintain standard protocols.", 1)}</div>
                         </div>
                       )}
 
-                      {(shouldShowBlock(2) || !aiEnabled) && (
+                      {(shouldShowBlock(2)) && (
                         <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
                           <div className="flex items-center gap-1.5"><Compass className="w-3.5 h-3.5 text-blue-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Riding Style</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.ridingStyleAdvice, "Normal protocols.", 2)}</div>
+                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.ridingStyleAdvice, trainingData.condition.ridingStyleAdvice || "Normal protocols.", 2)}</div>
                         </div>
                       )}
 
-                      {(shouldShowBlock(3) || !aiEnabled) && (
+                      {(shouldShowBlock(3)) && (
                         <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
                           <div className="flex items-center gap-1.5"><Bike className="w-3.5 h-3.5 text-blue-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Bike Setup</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.bikeSetupAdvice, "Check equipment.", 3)}</div>
+                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.bikeSetupAdvice, trainingData.condition.bikeSetupAdvice || "Check equipment.", 3)}</div>
                         </div>
                       )}
 
-                      {(shouldShowBlock(4) || !aiEnabled) && (
+                      {(shouldShowBlock(4)) && (
                         <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
                           <div className="flex items-center gap-1.5"><Shirt className="w-3.5 h-3.5 text-blue-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Clothing</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.clothingAdvice, "Standard kit.", 4)}</div>
+                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.clothingAdvice, trainingData.condition.clothingAdvice || "Standard kit.", 4)}</div>
                         </div>
                       )}
 
                       <div className="pt-3 mt-auto border-t border-dashed border-slate-500/20 flex justify-end">
                         <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest opacity-40 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                          {isAIActive ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
-                          <span>Source: {isAIActive ? formatModelName(currentLLMModel) : 'Standard Algorithm'}</span>
+                          {isAIActive && !isAIFailed ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
+                          <span>Source: {isAIActive && !isAIFailed ? formatModelName(currentLLMModel) : 'Tactical Algorithm'}</span>
                         </div>
                       </div>
                     </div>

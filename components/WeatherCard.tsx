@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LocationSuggestion, WeatherCondition } from '../types';
@@ -30,7 +29,10 @@ import {
   Zap,
   Timer,
   Snowflake,
-  ArrowUp
+  ArrowUp,
+  RefreshCw,
+  Search,
+  Loader2
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -52,6 +54,7 @@ interface WeatherCardProps {
   isActive?: boolean;
   popupDirection?: 'up' | 'down';
   onPopupStateChange?: (isOpen: boolean) => void;
+  onTriggerAlternativesSearch?: () => void;
 }
 
 const getCardinal = (angle: number): string => {
@@ -103,7 +106,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   isIntelligenceExpanded = false,
   isActive = false,
   popupDirection = 'up',
-  onPopupStateChange
+  onPopupStateChange,
+  onTriggerAlternativesSearch
 }) => {
   const isDark = theme === 'dark';
   const [showWindDetails, setShowWindDetails] = useState(false);
@@ -255,6 +259,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       case "Cold Exposure": return <Thermometer className="w-3.5 h-3.5 text-blue-300" />;
       case "Heat Stress": return <Thermometer className="w-3.5 h-3.5 text-red-400" />;
       case "Darkness / Visibility": return <Moon className="w-3.5 h-3.5 text-indigo-400" />;
+      case "Sleep hours": return <Clock className="w-3.5 h-3.5 text-slate-500" />;
       default: return <Droplets className="w-3.5 h-3.5 text-slate-400" />;
     }
   };
@@ -274,12 +279,33 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const toggleTemp = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showTempDetails) setShowTempDetails(false); else { closeAllPopups(); setShowTempDetails(true); } };
   const toggleLights = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLightsDetails) setShowLightsDetails(false); else { closeAllPopups(); setShowLightsDetails(true); } };
   const toggleRoute = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showRoutePopup) setShowRoutePopup(false); else { closeAllPopups(); setShowRoutePopup(true); } };
-  const toggleLocation = (e?: React.MouseEvent) => { e?.preventDefault(); e?.stopPropagation(); if (showLocationPopup) setShowLocationPopup(false); else { closeAllPopups(); setShowLocationPopup(true); } };
+  
+  const toggleLocation = (e?: React.MouseEvent) => { 
+    e?.preventDefault(); 
+    e?.stopPropagation(); 
+    if (showLocationPopup) setShowLocationPopup(false); 
+    else { 
+      closeAllPopups(); 
+      setShowLocationPopup(true); 
+      if (onTriggerAlternativesSearch && (!locationAdvice || locationAdvice.length === 0)) {
+        onTriggerAlternativesSearch();
+      }
+    } 
+  };
 
   const blockBgClass = isDark ? 'bg-[#0f1115] border-white/5 hover:bg-[#14171d]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100';
   const actionBtnClass = isDark 
     ? 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]' 
     : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 shadow-sm';
+
+  const getSubScoreColor = (s: number) => {
+    if (s > 70) return 'text-emerald-500';
+    if (s >= 30) return 'text-orange-500';
+    return 'text-red-500';
+  };
+
+  const isScanning = !!condition?.isScanning;
+  const scanProgress = condition?.scanningProgress ?? 0;
 
   if (compact) {
     return (
@@ -426,6 +452,94 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         </Modal>
       )}
 
+      {showRoutePopup && (
+        <Modal onClose={() => setShowRoutePopup(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-[11px] font-black text-blue-500 uppercase tracking-widest leading-none">Suggested Points</span>
+            <button onClick={() => setShowRoutePopup(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {optimizationAdvice?.length ? optimizationAdvice.slice(0, 5).map((loc, idx) => (
+              <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200'}`}>
+                <span className={`text-[12px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                <Sparkles className="w-3.5 h-3.5 text-blue-500/50" />
+              </div>
+            )) : (
+              <div className="py-4 text-center text-slate-500 text-[11px] font-bold uppercase tracking-widest">No tactical points found.</div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {showLocationPopup && (
+        <Modal onClose={() => setShowLocationPopup(false)} isDark={isDark}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[12px] font-black text-blue-500 uppercase tracking-widest leading-none">ALTERNATIVE LOCATIONS</span>
+              {isScanning && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                  <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+                </div>
+              )}
+            </div>
+            <button onClick={() => setShowLocationPopup(false)} className="p-1 rounded-md hover:bg-white/10 transition-colors"><X className="w-4 h-4 text-slate-500" /></button>
+          </div>
+          
+          {isScanning && (
+            <div className="mb-4 space-y-2.5">
+               <div className={`h-1.5 w-full rounded-full overflow-hidden relative ${isDark ? 'bg-white/5' : 'bg-slate-200'}`}>
+                 <div 
+                   className="h-full bg-blue-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                   style={{ width: `${scanProgress}%` }} 
+                 />
+               </div>
+               <div className="flex justify-between items-center px-0.5">
+                  <div className="flex items-center gap-2">
+                    <Search className="w-3 h-3 text-blue-500 animate-pulse" />
+                    <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] animate-pulse">Scanning Belgian municipalities...</span>
+                  </div>
+                  <span className={`text-[9px] font-black font-mono ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>{scanProgress}%</span>
+               </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto hide-scrollbar mb-4">
+            {locationAdvice?.length ? locationAdvice.map((loc, idx) => (
+              <button key={idx} onClick={() => { onSelectLocationAdvice?.(loc); setShowLocationPopup(false); }} className={`group p-4 rounded-xl flex items-center justify-between transition-all active:scale-[0.98] ${isDark ? 'bg-black border border-white/5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5' : 'bg-slate-50 border border-slate-200 hover:bg-blue-50'}`}>
+                <div className="flex flex-col items-start gap-1.5">
+                  <span className={`text-[13px] font-black uppercase tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">MAX SCORE:</span>
+                      <span className={`text-[11px] font-black ${getSubScoreColor(loc.score || 0)}`}>{Math.round(loc.score || 0)}%</span>
+                    </div>
+                    {loc.distanceFromTrainingCenter !== undefined && (
+                      <div className="flex items-center gap-1">
+                         <span className={`text-[8px] font-black text-slate-500 uppercase tracking-widest`}>{Math.round(loc.distanceFromTrainingCenter)} KM AWAY</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <MapPin className="w-4 h-4 text-blue-500 transition-transform group-hover:scale-125" />
+              </button>
+            )) : (
+              !isScanning && <div className="py-12 text-center text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Search Window Empty</div>
+            )}
+          </div>
+
+          {!isScanning && onTriggerAlternativesSearch && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onTriggerAlternativesSearch(); }}
+              className={`w-full py-3.5 rounded-xl border font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${isDark ? 'bg-blue-600 border-blue-500 text-white shadow-xl shadow-blue-600/20 hover:bg-blue-500' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100'}`}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Scan for alternatives
+            </button>
+          )}
+        </Modal>
+      )}
+
       <div className="flex-none flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase mb-1.5">
         <div className="flex items-center gap-1.5"><Calendar className="w-3 h-3 text-blue-500/50" /><span>{dateLabel}</span><Clock className="w-3 h-3 text-slate-600 ml-1" /><span>{timeRange}</span></div>
       </div>
@@ -434,10 +548,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         {distance && (<div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 flex-none"><Navigation className="w-2.5 h-2.5 text-blue-500" /><span>{distance.toFixed(1)} KM</span></div>)}
       </div>
 
-      {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && locationAdvice.length > 0) || onToggleIntelligence) && (
+      {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && (locationAdvice.length > 0 || isScanning)) || onToggleIntelligence) && (
         <div className="flex-none mb-2 flex gap-1.5 relative z-10">
           {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Sparkles className="w-2.5 h-2.5" />route</button>)}
-          {locationAdvice && locationAdvice.length > 0 && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><MapIcon className="w-2.5 h-2.5" />location</button>)}
+          {(onTriggerAlternativesSearch || (locationAdvice && locationAdvice.length > 0)) && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}>{isScanning ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <MapIcon className="w-2.5 h-2.5" />}location</button>)}
           {onToggleIntelligence && (
             <button 
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} 

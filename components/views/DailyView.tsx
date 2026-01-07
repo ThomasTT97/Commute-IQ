@@ -58,26 +58,25 @@ export const DailyView: React.FC<DailyViewProps> = ({
   }, [isAdviceExpanded, activeLegIndex]); 
   
   const shouldShowBlock = (index: number) => {
-    if (settings.disableAI) return true;
-    if (!isCurrentDayEnhanced) return false;
+    // If AI is disabled or enhanced data exists, we show steps.
+    // If enhanced data doesn't exist, we immediately show all standardized blocks.
+    if (settings.disableAI || !isCurrentDayEnhanced) return true;
     return typingStep >= index;
   };
 
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
-    if (settings.disableAI) {
-      return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{text || fallback}</span>;
-    }
-    
-    if (isCurrentDayEnhanced) {
+    // If we have AI-enhanced text, typewriter it.
+    if (isCurrentDayEnhanced && !settings.disableAI && text) {
       return (
         <TypewriterText 
-          text={text || fallback} 
-          speed={10} // Increased speed for snappier feel
+          text={text} 
+          speed={8} 
           className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
           onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
         />
       );
     }
+    // Otherwise, show the fallback (standardized advice) instantly.
     return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{fallback}</span>;
   };
 
@@ -142,12 +141,12 @@ export const DailyView: React.FC<DailyViewProps> = ({
       >
         <div className="flex items-center justify-between w-full flex-none">
           <div className="flex items-center gap-2">
-            <div className={`flex items-center justify-center p-1 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-slate-500 text-white animate-pulse' : 'bg-blue-600/10 text-blue-500'}`}>
+            <div className={`flex items-center justify-center p-1 rounded-lg transition-colors ${!settings.disableAI && !isCurrentDayEnhanced ? 'bg-blue-600/20 text-blue-500' : 'bg-blue-600/10 text-blue-500'}`}>
               <span className="text-[14px] font-black italic">IQ</span>
             </div>
             <div className="flex flex-col">
-              <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && !isCurrentDayEnhanced ? 'text-slate-600' : 'text-blue-600'}`}>
-                {!settings.disableAI && !isCurrentDayEnhanced ? 'Deep Analysis...' : 'Commute IQ Intelligence'}
+              <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${!settings.disableAI && !isCurrentDayEnhanced ? 'text-blue-600 animate-pulse' : 'text-blue-600'}`}>
+                {!settings.disableAI && !isCurrentDayEnhanced ? 'Enhancing Analytics...' : 'Commute IQ Intelligence'}
               </span>
               {isAdviceExpanded && (
                 <span className={`text-[8px] font-bold uppercase tracking-wider mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -182,69 +181,62 @@ export const DailyView: React.FC<DailyViewProps> = ({
             renderSurfaceReason()
           ) : (
             <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-top-2 duration-500 pb-1">
-              {!settings.disableAI && !isCurrentDayEnhanced && (
-                <div className="flex flex-col gap-3 items-center justify-center py-6">
-                  <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
-                  <span className="text-[9px] font-black uppercase text-blue-600 tracking-[0.2em] animate-pulse">Running Tactical Inference...</span>
-                </div>
-              )}
-
-              {(shouldShowBlock(0) || settings.disableAI) && (
+              {(shouldShowBlock(0)) && (
                 <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-1.5">
                     <CloudRain className="w-3.5 h-3.5 text-blue-500" />
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Conditions Analysis</span>
                   </div>
                   <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
-                    {renderAdviceText(activeWeather?.surfaceReason, "Standard atmospheric conditions. No specific hazards detected.", 0)}
+                    {renderAdviceText(activeWeather?.surfaceReason, activeWeather?.surfaceReason || "Standard atmospheric conditions.", 0)}
                   </div>
                 </div>
               )}
 
-              {(shouldShowBlock(1) || settings.disableAI) && (
+              {(shouldShowBlock(1)) && (
                 <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-1.5">
                     <Activity className="w-3.5 h-3.5 text-emerald-600" />
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Performance Advice</span>
                   </div>
                   <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
-                    {renderAdviceText(activeWeather?.performanceAdvice, "Conditions are within standard operating parameters.", 1)}
+                    {renderAdviceText(activeWeather?.performanceAdvice, activeWeather?.performanceAdvice || "Optimal parameters for riding.", 1)}
                   </div>
                 </div>
               )}
 
-              {(shouldShowBlock(2) || settings.disableAI) && (
+              {(shouldShowBlock(2)) && (
                 <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-1.5">
                     <Compass className="w-3.5 h-3.5 text-blue-600" />
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Riding Style Advice</span>
                   </div>
                   <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
-                    {renderAdviceText(activeWeather?.ridingStyleAdvice, "Maintain standard defensive riding protocols.", 2)}
+                    {renderAdviceText(activeWeather?.ridingStyleAdvice, activeWeather?.ridingStyleAdvice || "Maintain standard defensive protocols.", 2)}
                   </div>
                 </div>
               )}
 
-              {(shouldShowBlock(3) || settings.disableAI) && (
+              {(shouldShowBlock(3)) && (
                 <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-1.5">
                     <Bike className="w-3.5 h-3.5 text-blue-600" />
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Bike Setup Advice</span>
                   </div>
                   <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
-                    {renderAdviceText(activeWeather?.bikeSetupAdvice, "Check essential hardware and tire pressures.", 3)}
+                    {renderAdviceText(activeWeather?.bikeSetupAdvice, activeWeather?.bikeSetupAdvice || "Check essential hardware.", 3)}
                   </div>
                 </div>
               )}
 
-              {(shouldShowBlock(4) || settings.disableAI) && (
+              {(shouldShowBlock(4)) && (
                 <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-center gap-1.5">
                     <Shirt className="w-3.5 h-3.5 text-blue-600" />
                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Clothing Advice</span>
                   </div>
                   <div className={`text-[13px] font-semibold leading-[1.4] text-left`}>
-                    {renderAdviceText(activeWeather?.clothingAdvice, "Standard seasonal cycling kit.", 4)}
+                    {renderAdviceText(activeWeather?.clothingAdvice, activeWeather?.clothingAdvice || "Standard seasonal cycling kit.", 4)}
                   </div>
                 </div>
               )}
@@ -253,8 +245,8 @@ export const DailyView: React.FC<DailyViewProps> = ({
                 <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest opacity-40 ${
                   isDark ? 'text-slate-300' : 'text-slate-600'
                 }`}>
-                  {isCurrentDayEnhanced ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
-                  <span>Source: {isCurrentDayEnhanced ? formatModelName(currentLLMModel) : 'Standard Algorithm'}</span>
+                  {isCurrentDayEnhanced && !settings.disableAI ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
+                  <span>Source: {isCurrentDayEnhanced && !settings.disableAI ? formatModelName(currentLLMModel) : 'Tactical Algorithm'}</span>
                 </div>
               </div>
             </div>

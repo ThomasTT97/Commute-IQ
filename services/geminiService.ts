@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -34,14 +33,13 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
     
     return data.map((item: any) => {
       const addr = item.address;
-      const type = item.addresstype || item.type;
       const houseNum = addr.house_number || "";
       const street = addr.road || addr.pedestrian || addr.cycleway || addr.path || "";
       const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || "";
       const zip = addr.postcode || "";
       const country = addr.country || "";
       let cleanName = "";
-      const isRegional = ['city', 'town', 'village', 'municipality', 'state', 'country', 'administrative'].includes(type) || !street;
+      const isRegional = !street;
       if (isRegional) {
         const main = city || item.name || item.display_name.split(',')[0];
         cleanName = country ? `${main}, ${country}` : main;
@@ -50,9 +48,6 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
         const localityPart = zip ? `${zip} ${city}` : city;
         const parts = [addressPart, localityPart, country].filter(p => p && p.length > 0);
         cleanName = parts.join(', ');
-      }
-      if (!cleanName || cleanName.length < 5) {
-        cleanName = item.display_name.split(',').slice(0, 3).join(', ');
       }
       return { name: cleanName, lat: parseFloat(item.lat), lng: parseFloat(item.lon) };
     });
@@ -120,26 +115,14 @@ export const sliceWeatherData = (hourly: any, window: [string, string], offset: 
 
 const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): string => {
   const { riderWeight, tireWidth, tireSetup, surfacePreference } = equipment;
-  
-  // Base formula logic: pressure increases with weight, decreases with width
   let pressure = (riderWeight * 0.045) + 3.8 - ((tireWidth - 25) * 0.14);
-  
-  // Tire Setup Impact
   if (tireSetup === 'Tubeless') pressure -= 0.6;
   if (tireSetup === 'Clincher (TPU)' || tireSetup === 'Clincher (Latex)') pressure -= 0.2;
   if (tireSetup === 'Tubular') pressure += 0.2;
-
-  // Surface Preference Impact (0% Road to 100% Off-road)
-  // Higher off-road percentage reduces pressure for traction
   pressure -= (surfacePreference / 100) * 1.4;
-
-  // Final safety checks
   pressure = Math.max(1.5, Math.min(8.5, pressure));
-  
-  // Environmental adjustments
   if (w.isSnowy || w.iceRisk) pressure -= 0.6;
   else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) pressure -= 0.3;
-  
   return `${Math.max(1.2, pressure).toFixed(1)} Bar`;
 };
 
@@ -261,7 +244,7 @@ const getMinutes = (timeStr: string): number => {
   return h * 60 + m;
 };
 
-export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: boolean = false): ScoreDeduction[] => {
+export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: boolean = false, startHour?: number): ScoreDeduction[] => {
   const items: ScoreDeduction[] = [];
   if (w.isSnowy) items.push({ label: "Active Snowfall", val: -60 });
   if (w.iceRisk) items.push({ label: "Critical Ice Risk", val: -70 });
@@ -289,6 +272,13 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
     else if (temp > 15) {
       if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2) });
       else items.push({ label: "Weather Surplus", val: Math.round(temp - 15) });
+    }
+    
+    // Sleep hours deduction: 23:00 to 05:00
+    if (startHour !== undefined) {
+      if (startHour >= 23 || startHour < 5) {
+        items.push({ label: "Sleep hours", val: -20 });
+      }
     }
   } else {
     if (temp < 5) items.push({ label: "Cold Exposure", val: -Math.round((5 - temp) * 2) });
@@ -333,19 +323,11 @@ export const aggregateRawWeather = (
     const endMin = getMinutes(timeWindow[1]);
     const sunriseMin = getMinutes(sunTimes.sunrise);
     const sunsetMin = getMinutes(sunTimes.sunset);
-    
-    // Check for darkness including handling sessions that cross midnight
-    if (endMin < startMin) {
-      // Session crosses midnight (e.g. 23:00 to 01:00)
-      // It hits 00:00, which is always dark in Belgium.
-      isDark = true;
-    } else {
-      isDark = startMin < sunriseMin || endMin > sunsetMin;
-    }
+    if (endMin < startMin) isDark = true;
+    else isDark = startMin < sunriseMin || endMin > sunsetMin;
   } else {
     const startH = parseInt(timeWindow[0].split(':')[0]);
-    const endH = parseInt(timeWindow[1].split(':')[0]);
-    isDark = startH < 6 || startH >= 21 || endH < startH; 
+    isDark = startH < 6 || startH >= 21; 
   }
 
   let lastPrecipTime = "None";
@@ -380,10 +362,11 @@ export const aggregateRawWeather = (
 
   const sessionStartAbsoluteMs = new Date().setHours(0,0,0,0) - 86400000 + (sessionStartAbsoluteIdx || 0) * 3600000;
   const isWet = (totalPrecip > 0 || lastPrecipTime !== "None") && (totalPrecip > 0 || (estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false));
-
   const activeFreezing = minTemp <= 0.5; 
   const overnightFreeze = minPastTemp <= 0;
   const iceRisk = (isWet || avgHum > (overnightFreeze ? 60 : 75) || isSnowy) && (activeFreezing || (overnightFreeze && minTemp <= 3.5));
+
+  const startHour = parseInt(timeWindow[0].split(':')[0]);
 
   const baseWeather: any = {
     temp: parseFloat(avgTemp.toFixed(1)), feelsLike: parseFloat(avgApparentTemp.toFixed(1)),
@@ -397,7 +380,7 @@ export const aggregateRawWeather = (
     precipDuringSession: parseFloat(totalPrecip.toFixed(1)), sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
   };
 
-  const breakdown = getScoreBreakdown(baseWeather, isTraining);
+  const breakdown = getScoreBreakdown(baseWeather, isTraining, startHour);
   baseWeather.scoreBreakdown = breakdown;
   baseWeather.score = Math.max(0, Math.min(100, 100 + breakdown.reduce((acc, curr) => acc + curr.val, 0)));
 
@@ -437,7 +420,11 @@ export const getTelemetryBatch = async (settings: CommuteSettings, offsets: numb
 
 export const getAIInsights = async (settings: CommuteSettings, telemetry: Record<number, any>): Promise<Record<number, any>> => {
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model, contents: `Tactical advice for cycling commute. Data: ${JSON.stringify(telemetry)}`, config: { responseMimeType: "application/json" } });
+    const response = await ai.models.generateContent({ 
+      model, 
+      contents: `Tactical advice for cycling commute. Data: ${JSON.stringify(telemetry)}. RETURN JSON format with numeric keys as strings representing offsets. Each object should have 'morning' and 'evening' sub-objects with these fields: 'summary', 'style', 'setup', 'clothing', 'performance'.`, 
+      config: { responseMimeType: "application/json" } 
+    });
     return extractJson(response.text);
   });
   return data;
@@ -445,7 +432,15 @@ export const getAIInsights = async (settings: CommuteSettings, telemetry: Record
 
 export const getCommuteDayAIAdvice = async (settings: CommuteSettings, weather: any): Promise<any> => {
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model, contents: `Gear/tactics for cycling commute. M: ${JSON.stringify(weather.morning)} E: ${JSON.stringify(weather.evening)}`, config: { responseMimeType: "application/json" } });
+    const response = await ai.models.generateContent({ 
+      model, 
+      contents: `Expert cycling tactical advice for commute. 
+      Morning Weather: ${JSON.stringify(weather.morning)}
+      Evening Weather: ${JSON.stringify(weather.evening)}
+      Goal: ${settings.fitnessGoal}
+      RETURN JSON with keys '0' for morning and '1' for evening. Each should contain 'summary', 'style', 'setup', 'clothing', 'performance'. Keep it concise.`, 
+      config: { responseMimeType: "application/json" } 
+    });
     return extractJson(response.text);
   });
   return data;
@@ -453,7 +448,14 @@ export const getCommuteDayAIAdvice = async (settings: CommuteSettings, weather: 
 
 export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, condition: WeatherCondition, distance: number): Promise<any> => {
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model, contents: `Tactical training advice. Weather: ${JSON.stringify(condition)}`, config: { responseMimeType: "application/json" } });
+    const response = await ai.models.generateContent({ 
+      model, 
+      contents: `Expert tactical training advice for a ${distance}km ride. 
+      Weather: ${JSON.stringify(condition)}
+      Equipment: ${JSON.stringify(settings.equipment.find(e => e.isSelected))}
+      RETURN JSON with 'summary', 'style', 'setup', 'clothing', 'performance'. Be specific and elite.`, 
+      config: { responseMimeType: "application/json" } 
+    });
     return extractJson(response.text);
   });
   return data;
