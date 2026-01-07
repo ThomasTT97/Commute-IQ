@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
@@ -39,7 +40,11 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<CommuteSettings>(() => {
     const saved = localStorage.getItem('velo_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    // Critical: Ensure coords exist if location is Gent/Deinze defaults or missing
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    if (!merged.homeCoords) merged.homeCoords = DEFAULT_SETTINGS.homeCoords;
+    if (!merged.workCoords) merged.workCoords = DEFAULT_SETTINGS.workCoords;
+    return merged;
   });
 
   const [pulseDataMap, setPulseDataMap] = useState<Record<number, any>>(() => {
@@ -107,11 +112,9 @@ const App: React.FC = () => {
   }, [viewMode]);
 
   const [training, setTraining] = useState<TrainingState>(() => {
-    const saved = localStorage.getItem('velo_settings');
-    const initialSettings = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
     return {
-      location: initialSettings.homeLocation || "Gent", 
-      coords: initialSettings.homeCoords || { lat: 51.0543, lng: 3.7174 }, 
+      location: settings.homeLocation || "Gent", 
+      coords: settings.homeCoords || { lat: 51.0543, lng: 3.7174 }, 
       distance: 50, dateOffset: 0, preferredDirection: 0
     };
   });
@@ -123,7 +126,6 @@ const App: React.FC = () => {
   const [trainingWeek, setTrainingWeek] = useState<any[]>([]);
   const [isTrainingWeekLoading, setIsTrainingWeekLoading] = useState(false);
 
-  // Alternative locations search state
   const [isScanningAlternatives, setIsScanningAlternatives] = useState(false);
   const [scanningProgress, setScanningProgress] = useState(0);
   const [currentLocationAdvice, setCurrentLocationAdvice] = useState<any[]>([]);
@@ -141,8 +143,11 @@ const App: React.FC = () => {
     return {
       ...slot,
       locationAdvice: currentLocationAdvice,
-      isScanning: isScanningAlternatives,
-      scanningProgress
+      condition: {
+        ...slot.condition,
+        isScanning: isScanningAlternatives,
+        scanningProgress: scanningProgress
+      }
     };
   }, [trainingSlots, manualStartHour, bestStartHour, currentLocationAdvice, isScanningAlternatives, scanningProgress]);
 
@@ -289,6 +294,9 @@ const App: React.FC = () => {
         
         const results = await Promise.all(batch.map(async (loc) => {
           try {
+            const dFromCenter = calculateDistance(baseCoords, loc);
+            if (dFromCenter < 40 || dFromCenter > 150) return null;
+
             const lRaw = await fetchRawWeatherData(loc);
             const lDayIdx = (dateOffset + 1) * 24;
             const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
@@ -303,50 +311,23 @@ const App: React.FC = () => {
               const pastTemps = lRaw.hourly.temperature_2m.slice(Math.max(0, lDayIdx + h - 6), lDayIdx + h);
               const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
               
-              // CRITICAL: Synchronize with actual scoring engine to ensure accuracy
-              const lCond = aggregateRawWeather(
-                lSlice, 
-                0, 
-                true, 
-                settings, 
-                lSun, 
-                pastTemps.length ? Math.min(...pastTemps) : 10,
-                lWin, 
-                lRaw.hourly.precipitation, 
-                lDayIdx + h,
-                true,
-                lRaw.hourly.relative_humidity_2m,
-                lRaw.hourly.temperature_2m
-              );
+              const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
               
               if (lCond.score > maxLScore) {
                 maxLScore = lCond.score;
                 lBestHour = h;
               }
             }
-            return { 
-              ...loc, 
-              score: maxLScore,
-              bestHour: lBestHour,
-              distanceFromTrainingCenter: calculateDistance(baseCoords, loc)
-            };
+            return { ...loc, score: maxLScore, bestHour: lBestHour, distanceFromTrainingCenter: dFromCenter };
           } catch (e) { return null; }
         }));
 
         results.forEach(r => { if (r) foundLocations.push(r); });
-
-        const betterOnes = foundLocations
-          .filter(l => l.score > baseScore)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 10);
-        
+        const betterOnes = foundLocations.filter(l => l.score > baseScore).sort((a, b) => b.score - a.score).slice(0, 10);
         setCurrentLocationAdvice(betterOnes);
         await new Promise(res => setTimeout(res, 400));
       }
-    } catch (e) { } finally {
-      setIsScanningAlternatives(false);
-      setScanningProgress(100);
-    }
+    } catch (e) { } finally { setIsScanningAlternatives(false); setScanningProgress(100); }
   }, [training.dateOffset, training.distance, training.coords, settings, activeTrainingSlot]);
 
   const syncTraining = useCallback(async () => {
@@ -368,7 +349,6 @@ const App: React.FC = () => {
         const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
         const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
         const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
-        
         slots.push({ startHour: h, condition, window: winHours, score: condition.score });
       }
       
@@ -376,7 +356,6 @@ const App: React.FC = () => {
       if (manualStartHour === null) setManualStartHour(targetHour);
 
       const targetSlot = slots.find(s => s.startHour === targetHour) || slots[0];
-      
       const uniqueNames = new Set<string>();
       const targetDist = training.distance * 0.4;
       const windDir = targetSlot.condition.windDirection;
@@ -405,21 +384,11 @@ const App: React.FC = () => {
           const aiAdvice = await getTrainingSessionAIAdvice(settings, targetSlot.condition, training.distance);
           if (aiAdvice) {
             setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? {
-              ...s,
-              isAIEnhanced: true,
-              condition: {
-                ...s.condition,
-                surfaceReason: aiAdvice.summary,
-                ridingStyleAdvice: aiAdvice.style,
-                bikeSetupAdvice: aiAdvice.setup,
-                clothingAdvice: aiAdvice.clothing,
-                performanceAdvice: aiAdvice.performance
-              }
+              ...s, isAIEnhanced: true,
+              condition: { ...s.condition, surfaceReason: aiAdvice.summary, ridingStyleAdvice: aiAdvice.style, bikeSetupAdvice: aiAdvice.setup, clothingAdvice: aiAdvice.clothing, performanceAdvice: aiAdvice.performance }
             } : s));
           }
-        } catch (err) {
-          setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? { ...s, aiFailed: true } : s));
-        }
+        } catch (err) { setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? { ...s, aiFailed: true } : s)); }
       }
     } catch (e) { } finally { setTrainingLoading(false); }
   }, [training.coords, training.distance, training.dateOffset, settings, manualStartHour]);
@@ -453,9 +422,7 @@ const App: React.FC = () => {
   }, [training.coords, training.distance, settings]);
 
   useEffect(() => { 
-    if (viewMode === 'training') {
-      syncTraining(); 
-    }
+    if (viewMode === 'training') { syncTraining(); }
   }, [viewMode, training.coords, training.distance, training.dateOffset, manualStartHour, syncTraining]);
 
   const handleSetTrainingToCurrentLocation = useCallback(() => {
@@ -471,8 +438,7 @@ const App: React.FC = () => {
         setTraining(prev => ({ ...prev, location: fallback, coords }));
         setTrainingSearch(fallback);
       }
-      setManualStartHour(null);
-      setShowTrainingSuggestions(false);
+      setManualStartHour(null); setShowTrainingSuggestions(false);
     });
   }, []);
 
@@ -511,10 +477,7 @@ const App: React.FC = () => {
   const handleSelectLocationAdvice = useCallback((loc: any) => {
     setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}}));
     setTrainingSearch(loc.name);
-    // Force consistency: set the specific hour that yielded the promised score
-    if (typeof loc.bestHour === 'number') {
-      setManualStartHour(loc.bestHour);
-    }
+    if (typeof loc.bestHour === 'number') { setManualStartHour(loc.bestHour); }
   }, []);
 
   return (
@@ -533,41 +496,16 @@ const App: React.FC = () => {
         )}
         {(viewMode === 'training' || viewMode === 'training-weekly') && (
           <TrainingView 
-            isDark={isDark} 
-            training={training} 
-            trainingSearch={trainingSearch} 
-            showTrainingSuggestions={showTrainingSuggestions} 
-            setShowTrainingSuggestions={setShowTrainingSuggestions} 
-            isSearching={isSearchingGlobalTraining} 
-            trainingData={activeTrainingSlot} 
-            trainingLoading={trainingLoading} 
-            manualStartHour={manualStartHour} 
-            bestStartHour={bestStartHour} 
-            theme={settings.theme} 
-            onReturn={() => setViewMode('daily')} 
-            onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
+            isDark={isDark} training={training} trainingSearch={trainingSearch} showTrainingSuggestions={showTrainingSuggestions} setShowTrainingSuggestions={setShowTrainingSuggestions} isSearching={isSearchingGlobalTraining} 
+            trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} 
+            onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
             onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
-            onSetToCurrent={handleSetTrainingToCurrentLocation} 
-            onDateOffsetChange={setSelectedDateOffset} 
-            onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
-            onManualHourChange={setManualStartHour} 
-            onSelectSuggestion={handleSelectLocationAdvice} 
-            onShowWeekly={syncTrainingWeek} 
-            onSelectWeeklySlot={(offset, hour) => {
-              setSelectedDateOffset(offset);
-              setManualStartHour(hour);
-              setViewMode('training');
-            }}
-            filterLocations={filterLocationsWithGlobal} 
-            globalTrainingResults={globalTrainingResults} 
-            getDayLabel={getDayLabel} 
-            isWeeklyView={viewMode === 'training-weekly'} 
-            weeklyData={trainingWeek} 
-            weeklyLoading={isTrainingWeekLoading} 
-            aiEnabled={!settings.disableAI} 
-            onPopupStateChange={setIsPopupActive} 
-            onToggleMode={() => setViewMode('weekly')}
-            onTriggerAlternativesSearch={searchAlternativesProgressive}
+            onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
+            onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
+            onSelectWeeklySlot={(offset, hour) => { setSelectedDateOffset(offset); setManualStartHour(hour); setViewMode('training'); }}
+            filterLocations={filterLocationsWithGlobal} globalTrainingResults={globalTrainingResults} getDayLabel={getDayLabel} 
+            isWeeklyView={viewMode === 'training-weekly'} weeklyData={trainingWeek} weeklyLoading={isTrainingWeekLoading} aiEnabled={!settings.disableAI} onPopupStateChange={setIsPopupActive} 
+            onToggleMode={() => setViewMode('weekly')} onTriggerAlternativesSearch={searchAlternativesProgressive}
           />
         )}
       </main>

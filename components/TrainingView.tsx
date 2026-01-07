@@ -249,6 +249,26 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       <button onClick={onSetToCurrent} className="p-1.5 rounded-lg text-emerald-600" title="Current"><MapPin className="w-3.5 h-3.5" /></button>
                       <button onClick={onSetToHome} className="p-1.5 rounded-lg text-blue-600" title="Home"><Home className="w-3.5 h-3.5" /></button>
                     </div>
+
+                    {showTrainingSuggestions && (isSearching || suggestions.length > 0) && (
+                      <div className={`absolute top-full left-0 right-0 mt-1 z-[210] border rounded-xl overflow-hidden shadow-2xl ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
+                        {suggestions.map(loc => (
+                              <button key={`${loc.name}-${loc.lat}`} onClick={() => onSelectSuggestion(loc)} className={`w-full px-4 py-2.5 flex items-center justify-between text-left text-[10px] font-black uppercase tracking-wider border-b last:border-0 ${isDark ? 'border-white/5 text-slate-300 hover:bg-white/5' : 'border-slate-100 text-slate-700 hover:bg-slate-50'}`}>
+                                <span className="truncate pr-4">{loc.name}</span>
+                                <div className="flex items-center gap-1 text-[8px] font-black text-blue-500/80 shrink-0">
+                                  <Globe className="w-2.5 h-2.5" />
+                                  <span>GPS</span>
+                                </div>
+                              </button>
+                        ))}
+                        {isSearching && (
+                          <div className={`px-4 py-2.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider border-t ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
+                            <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
+                            <span className="text-blue-500/80">Scanning Maps...</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="w-16 flex flex-col gap-1">
@@ -270,7 +290,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       onClick={() => onManualHourChange(null)}
                       className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/10 text-blue-500 text-[7px] font-black uppercase tracking-widest animate-in fade-in zoom-in duration-300"
                     >
-                      <RotateCcw className="w-2 h-2" />
+                      <RotateCcw className="w-2  booth" />
                       Reset to Optimal
                     </button>
                   )}

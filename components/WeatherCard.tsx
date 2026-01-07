@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LocationSuggestion, WeatherCondition } from '../types';
@@ -443,7 +444,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
       {showScoreDetails && (
         <Modal onClose={() => setShowScoreDetails(false)} isDark={isDark}>
-          <div className="flex items-center justify-between mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-widest leading-none">Score Breakdown</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4" /></button></div>
+          <div className="flex items-center justify-between mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-widest leading-none">SCORE</span><button onClick={() => setShowScoreDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4" /></button></div>
           <div className="space-y-3">
             {scoreBreakdown.length > 0 ? scoreBreakdown.map((item, i) => (
               <div key={i} className="flex items-center justify-between text-[11px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={item.val < 0 ? (isDark ? 'text-slate-300' : 'text-slate-600') : 'text-emerald-500'}>{item.label}</span></div><span className={item.val < 0 ? 'text-red-400' : 'text-emerald-500'}>{item.val > 0 ? `+${Math.round(item.val)}%` : `${Math.round(item.val)}%`}</span></div>
@@ -477,9 +478,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className="flex items-center gap-2.5">
               <span className="text-[12px] font-black text-blue-500 uppercase tracking-widest leading-none">ALTERNATIVE LOCATIONS</span>
               {isScanning && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
-                  <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+                <div className="relative flex items-center justify-center h-6 w-6">
+                  <div className="absolute inset-0 bg-blue-500/20 rounded-full animate-ping" />
+                  <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
                 </div>
               )}
             </div>
@@ -497,7 +498,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                <div className="flex justify-between items-center px-0.5">
                   <div className="flex items-center gap-2">
                     <Search className="w-3 h-3 text-blue-500 animate-pulse" />
-                    <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] animate-pulse">Scanning Belgian municipalities...</span>
+                    <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] animate-pulse">Scanning...</span>
                   </div>
                   <span className={`text-[9px] font-black font-mono ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>{scanProgress}%</span>
                </div>
@@ -517,6 +518,12 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                     {loc.distanceFromTrainingCenter !== undefined && (
                       <div className="flex items-center gap-1">
                          <span className={`text-[8px] font-black text-slate-500 uppercase tracking-widest`}>{Math.round(loc.distanceFromTrainingCenter)} KM AWAY</span>
+                      </div>
+                    )}
+                    {loc.bestHour !== undefined && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">START:</span>
+                        <span className={`text-[11px] font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{loc.bestHour.toString().padStart(2, '0')}:00</span>
                       </div>
                     )}
                   </div>
@@ -551,7 +558,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && (locationAdvice.length > 0 || isScanning)) || onToggleIntelligence) && (
         <div className="flex-none mb-2 flex gap-1.5 relative z-10">
           {optimizationAdvice && optimizationAdvice.length > 0 && (<button onClick={toggleRoute} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all ${showRoutePopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Sparkles className="w-2.5 h-2.5" />route</button>)}
-          {(onTriggerAlternativesSearch || (locationAdvice && locationAdvice.length > 0)) && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}>{isScanning ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <MapIcon className="w-2.5 h-2.5" />}location</button>)}
+          {(onTriggerAlternativesSearch || (locationAdvice && locationAdvice.length > 0)) && (<button onClick={toggleLocation} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all ${showLocationPopup ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : actionBtnClass}`}><Zap className="w-2.5 h-2.5" />{isScanning ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <MapIcon className="w-2.5 h-2.5" />}location</button>)}
           {onToggleIntelligence && (
             <button 
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleIntelligence(); }} 

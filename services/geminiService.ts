@@ -109,7 +109,11 @@ export const sliceWeatherData = (hourly: any, window: [string, string], offset: 
   const startIndex = (offset + 1) * 24 + startHour;
   const endIndex = (offset + 1) * 24 + endHour;
   const slice: any = {};
-  Object.keys(hourly).forEach(key => { if (Array.isArray(hourly[key])) slice[key] = hourly[key].slice(startIndex, endIndex + 1); });
+  Object.keys(hourly).forEach(key => { 
+    if (Array.isArray(hourly[key])) {
+      slice[key] = hourly[key].slice(startIndex, endIndex + 1); 
+    }
+  });
   return slice;
 };
 
@@ -307,7 +311,7 @@ export const aggregateRawWeather = (
   const avgApparentTemp = apparentTemps.length ? apparentTemps.reduce((a, b) => a + b, 0) / apparentTemps.length : avgTemp;
   const minTemp = temps.length ? Math.min(...temps) : 15;
   const maxTemp = temps.length ? Math.max(...temps) : 15;
-  const totalPrecip = precips.reduce((a, b) => a + b, 0);
+  const totalPrecip = precips.length ? precips.reduce((a, b) => a + b, 0) : 0;
   const maxWind = winds.length ? Math.max(...winds) : 10;
   const avgDir = dirs.length ? dirs.reduce((a, b) => a + b, 0) / dirs.length : 0;
   const avgHum = humidities.length ? humidities.reduce((a, b) => a + b, 0) / humidities.length : 50;
@@ -375,7 +379,7 @@ export const aggregateRawWeather = (
     isSnowy, precipitation: parseFloat(totalPrecip.toFixed(1)),
     windSpeed: parseFloat(maxWind.toFixed(1)), windDirection: Math.round(avgDir), humidity: Math.round(avgHum),
     isDark, wetSurfaceChance: isWet ? 90 : 10, headwindImpact, iceRisk, 
-    activeFreezing, overnightFreeze, minPastTemp: parseFloat(minPastTemp.toFixed(1)), 
+    activeFreezing, overnightFreeze, minPastTemp: minPastTemp === 99 ? avgTemp : parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime, estimatedDryTime,
     precipDuringSession: parseFloat(totalPrecip.toFixed(1)), sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
   };
@@ -399,15 +403,21 @@ export const getTelemetryBatch = async (settings: CommuteSettings, offsets: numb
   if (!settings.homeCoords || !settings.workCoords) return {};
   const [homeRaw, workRaw] = await Promise.all([fetchRawWeatherData(settings.homeCoords), fetchRawWeatherData(settings.workCoords)]);
   const batch: Record<number, any> = {};
+
+  // Fix: Defined avgTemp for historical fallback calculation on lines 412 and 416
+  const avgTemp = 15;
+
   for (const offset of offsets) {
     const dayStartIdx = (offset + 1) * 24;
     const sunTimesM = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const mIdx = dayStartIdx + parseInt(settings.morningWindow[0].split(':')[0]);
-    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx)), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
+    // Fix: Using defined avgTemp variable
+    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...(homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx) || [avgTemp])), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
     
     const sunTimesE = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const eIdx = dayStartIdx + parseInt(settings.eveningWindow[0].split(':')[0]);
-    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx)), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
+    // Fix: Using defined avgTemp variable
+    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...(workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx) || [avgTemp])), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
 
     batch[offset] = {
       weather: { morning: mWeather, evening: eWeather }, lastUpdated: Date.now(),
@@ -463,7 +473,11 @@ export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, cond
 
 export const getCommuteRoadDistance = async (home: string, work: string): Promise<number | null> => {
   const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ model: "gemini-3-flash-preview", contents: `Cycling distance between ${home} and ${work} in km. Number only.`, config: { tools: [{ googleSearch: {} }] } });
+    const response = await ai.models.generateContent({ 
+      model, 
+      contents: `Cycling distance between ${home} and ${work} in km. Number only.`, 
+      config: { tools: [{ googleSearch: {} }] } 
+    });
     const match = (response.text || "").match(/(\d+(\.\d+)?)/);
     return match ? parseFloat(match[1]) : null;
   });

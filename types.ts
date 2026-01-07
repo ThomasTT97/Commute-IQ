@@ -52,6 +52,7 @@ export interface LocationSuggestion extends BelgianLocation {
   distanceFromTrainingCenter?: number;
   distFromCenter?: number;
   score?: number;
+  bestHour?: number;
 }
 
 export interface TrainingState {
