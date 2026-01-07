@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { LocationSuggestion, WeatherCondition } from '../types';
+import { LocationSuggestion, WeatherCondition, SearchCriteria } from '../types';
 import { BelgianLocation } from '../locations';
 import { 
   Wind, 
@@ -56,6 +56,8 @@ interface WeatherCardProps {
   popupDirection?: 'up' | 'down';
   onPopupStateChange?: (isOpen: boolean) => void;
   onTriggerAlternativesSearch?: () => void;
+  searchCriteria?: SearchCriteria;
+  setSearchCriteria?: (val: SearchCriteria) => void;
 }
 
 const getCardinal = (angle: number): string => {
@@ -74,12 +76,13 @@ const formatTime = (isoString?: string): string => {
   return timePart.substring(0, 5);
 };
 
-const Modal = ({ children, onClose, isDark }: { children?: React.ReactNode, onClose: () => void, isDark: boolean }) => {
+const Modal = ({ children, onClose, isDark, size = 'md' }: { children?: React.ReactNode, onClose: () => void, isDark: boolean, size?: 'md' | 'lg' }) => {
+  const maxWidth = size === 'lg' ? 'max-w-[400px]' : 'max-w-[340px]';
   return createPortal(
     <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={(e) => { e.stopPropagation(); onClose(); }} />
       <div 
-        className={`relative w-full max-w-[320px] rounded-[1.5rem] shadow-2xl p-5 border animate-in zoom-in-95 fade-in duration-200 ${isDark ? 'bg-[#0f1115] border-white/20' : 'bg-white border-slate-200'}`}
+        className={`relative w-full ${maxWidth} max-h-[90dvh] rounded-[1.75rem] shadow-2xl p-6 border animate-in zoom-in-95 fade-in duration-200 flex flex-col ${isDark ? 'bg-[#0f1115] border-white/20' : 'bg-white border-slate-200'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -108,7 +111,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   isActive = false,
   popupDirection = 'up',
   onPopupStateChange,
-  onTriggerAlternativesSearch
+  onTriggerAlternativesSearch,
+  searchCriteria,
+  setSearchCriteria
 }) => {
   const isDark = theme === 'dark';
   const [showWindDetails, setShowWindDetails] = useState(false);
@@ -308,6 +313,15 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const isScanning = !!condition?.isScanning;
   const scanProgress = condition?.scanningProgress ?? 0;
 
+  const toggleCriterion = (key: keyof SearchCriteria) => {
+    if (setSearchCriteria && searchCriteria) {
+      setSearchCriteria({
+        ...searchCriteria,
+        [key]: !searchCriteria[key]
+      });
+    }
+  };
+
   if (compact) {
     return (
       <div className={`w-full rounded-[1.5rem] p-3 sm:p-4 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500 bg-[#0a0c10]' : 'border-blue-300 bg-blue-50') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
@@ -463,7 +477,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             {optimizationAdvice?.length ? optimizationAdvice.slice(0, 5).map((loc, idx) => (
               <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200'}`}>
                 <span className={`text-[12px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                <Sparkles className="w-3.5 h-3.5 text-blue-500/50" />
+                {/* Fixed: Replaced invalid 'item' tag with MapPin icon */}
+                <MapPin className="w-3.5 h-3.5 text-blue-500/50" />
               </div>
             )) : (
               <div className="py-4 text-center text-slate-500 text-[11px] font-bold uppercase tracking-widest">No tactical points found.</div>
@@ -473,10 +488,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       )}
 
       {showLocationPopup && (
-        <Modal onClose={() => setShowLocationPopup(false)} isDark={isDark}>
-          <div className="flex items-center justify-between mb-2">
+        <Modal onClose={() => setShowLocationPopup(false)} isDark={isDark} size="lg">
+          <div className="flex items-center justify-between mb-4 flex-none">
             <div className="flex items-center gap-2.5">
-              <span className="text-[12px] font-black text-blue-500 uppercase tracking-widest leading-none">ALTERNATIVE LOCATIONS</span>
+              <span className="text-[14px] font-black text-blue-500 uppercase tracking-widest leading-none">ALTERNATIVE LOCATIONS</span>
               {isScanning && (
                 <div className="relative flex items-center justify-center h-6 w-6">
                   <div className="absolute inset-0 bg-blue-500/20 rounded-full animate-ping" />
@@ -484,12 +499,39 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                 </div>
               )}
             </div>
-            <button onClick={() => setShowLocationPopup(false)} className="p-1 rounded-md hover:bg-white/10 transition-colors"><X className="w-4 h-4 text-slate-500" /></button>
+            <button onClick={() => setShowLocationPopup(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+          </div>
+
+          <div className="mb-6 flex-none">
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em] block mb-3 px-1">Search Priorities</span>
+            <div className="flex flex-wrap gap-2">
+              <button 
+                onClick={() => toggleCriterion('betterScore')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.95] ${searchCriteria?.betterScore ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : isDark ? 'bg-black border-white/10 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Score
+              </button>
+              <button 
+                onClick={() => toggleCriterion('drySurface')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.95] ${searchCriteria?.drySurface ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : isDark ? 'bg-black border-white/10 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
+              >
+                <Droplets className="w-3.5 h-3.5" />
+                Dry
+              </button>
+              <button 
+                onClick={() => toggleCriterion('noIce')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.95] ${searchCriteria?.noIce ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : isDark ? 'bg-black border-white/10 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
+              >
+                <Snowflake className="w-3.5 h-3.5" />
+                No Ice
+              </button>
+            </div>
           </div>
           
           {isScanning && (
-            <div className="mb-4 space-y-2.5">
-               <div className={`h-1.5 w-full rounded-full overflow-hidden relative ${isDark ? 'bg-white/5' : 'bg-slate-200'}`}>
+            <div className="mb-6 space-y-2.5 flex-none">
+               <div className={`h-2 w-full rounded-full overflow-hidden relative ${isDark ? 'bg-white/5 shadow-inner' : 'bg-slate-200'}`}>
                  <div 
                    className="h-full bg-blue-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
                    style={{ width: `${scanProgress}%` }} 
@@ -497,50 +539,55 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                </div>
                <div className="flex justify-between items-center px-0.5">
                   <div className="flex items-center gap-2">
-                    <Search className="w-3 h-3 text-blue-500 animate-pulse" />
-                    <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] animate-pulse">Scanning...</span>
+                    <Search className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] animate-pulse">Scanning Grid...</span>
                   </div>
-                  <span className={`text-[9px] font-black font-mono ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>{scanProgress}%</span>
+                  <span className={`text-[10px] font-black font-mono ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>{scanProgress}%</span>
                </div>
             </div>
           )}
 
-          <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto hide-scrollbar mb-4">
+          <div className="flex-1 overflow-y-auto hide-scrollbar mb-4 flex flex-col gap-2.5 px-0.5">
             {locationAdvice?.length ? locationAdvice.map((loc, idx) => (
-              <button key={idx} onClick={() => { onSelectLocationAdvice?.(loc); setShowLocationPopup(false); }} className={`group p-4 rounded-xl flex items-center justify-between transition-all active:scale-[0.98] ${isDark ? 'bg-black border border-white/5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5' : 'bg-slate-50 border border-slate-200 hover:bg-blue-50'}`}>
+              <button key={idx} onClick={() => { onSelectLocationAdvice?.(loc); setShowLocationPopup(false); }} className={`group p-4 rounded-2xl flex items-center justify-between transition-all active:scale-[0.98] border ${isDark ? 'bg-black border-white/5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5' : 'bg-slate-50 border-slate-200 hover:bg-blue-50'}`}>
                 <div className="flex flex-col items-start gap-1.5">
-                  <span className={`text-[13px] font-black uppercase tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">MAX SCORE:</span>
-                      <span className={`text-[11px] font-black ${getSubScoreColor(loc.score || 0)}`}>{Math.round(loc.score || 0)}%</span>
-                    </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className={`text-[14px] font-black uppercase tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
                     {loc.distanceFromTrainingCenter !== undefined && (
-                      <div className="flex items-center gap-1">
-                         <span className={`text-[8px] font-black text-slate-500 uppercase tracking-widest`}>{Math.round(loc.distanceFromTrainingCenter)} KM AWAY</span>
-                      </div>
+                      <span className={`px-1.5 py-0.5 rounded bg-blue-500/10 text-[8px] font-black uppercase tracking-widest whitespace-nowrap ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                        {Math.round(loc.distanceFromTrainingCenter)} KM
+                      </span>
                     )}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">SCORE:</span>
+                      <span className={`text-[12px] font-black ${getSubScoreColor(loc.score || 0)}`}>{Math.round(loc.score || 0)}%</span>
+                    </div>
                     {loc.bestHour !== undefined && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">START:</span>
-                        <span className={`text-[11px] font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{loc.bestHour.toString().padStart(2, '0')}:00</span>
+                        <span className={`text-[12px] font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{loc.bestHour.toString().padStart(2, '0')}:00</span>
                       </div>
                     )}
                   </div>
                 </div>
-                <MapPin className="w-4 h-4 text-blue-500 transition-transform group-hover:scale-125" />
+                <MapPin className="w-4.5 h-4.5 text-blue-500 transition-transform group-hover:scale-125" />
               </button>
             )) : (
-              !isScanning && <div className="py-12 text-center text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Search Window Empty</div>
+              !isScanning && <div className="py-16 text-center text-slate-500 text-[11px] font-black uppercase tracking-[0.3em] opacity-30 flex flex-col items-center gap-4">
+                <MapIcon className="w-8 h-8 mb-2" />
+                Registry Empty
+              </div>
             )}
           </div>
 
           {!isScanning && onTriggerAlternativesSearch && (
             <button 
               onClick={(e) => { e.stopPropagation(); onTriggerAlternativesSearch(); }}
-              className={`w-full py-3.5 rounded-xl border font-black uppercase text-[10px] tracking-[0.2em] transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${isDark ? 'bg-blue-600 border-blue-500 text-white shadow-xl shadow-blue-600/20 hover:bg-blue-500' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100'}`}
+              className={`w-full py-4 rounded-2xl border font-black uppercase text-[11px] tracking-[0.2em] transition-all flex items-center justify-center gap-3 active:scale-[0.98] flex-none ${isDark ? 'bg-blue-600 border-blue-500 text-white shadow-2xl shadow-blue-600/30 hover:bg-blue-500' : 'bg-blue-600 border-blue-500 text-white shadow-xl'}`}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-4 h-4" />
               Scan for alternatives
             </button>
           )}

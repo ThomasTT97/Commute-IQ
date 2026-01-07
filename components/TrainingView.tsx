@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { 
   Search, 
@@ -23,7 +24,6 @@ import {
   Star
 } from 'lucide-react';
 import { TrainingState } from '../types';
-// Fixed: Removed BELGIAN_LOCATIONS as it is not exported from locations.ts
 import { BelgianLocation } from '../locations';
 import { WeatherCard } from './WeatherCard';
 import { TrainingWeeklyForecast } from './TrainingWeeklyForecast';
@@ -291,7 +291,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       onClick={() => onManualHourChange(null)}
                       className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/10 text-blue-500 text-[7px] font-black uppercase tracking-widest animate-in fade-in zoom-in duration-300"
                     >
-                      <RotateCcw className="w-2  booth" />
+                      <RotateCcw className="w-2 h-2" />
                       Reset to Optimal
                     </button>
                   )}
@@ -415,7 +415,12 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                   </div>
                 )}
               </div>
-            ) : null}
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+                <MapPin className="w-10 h-10 text-slate-500 opacity-20 mb-4" />
+                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Awaiting location resolution...</span>
+              </div>
+            )}
           </div>
         </>
       )}

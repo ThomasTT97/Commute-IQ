@@ -486,6 +486,19 @@ export const getCommuteRoadDistance = async (home: string, work: string): Promis
   return data;
 };
 
+export const getNearbyCyclingHubs = async (coords: Coordinates): Promise<BelgianLocation[]> => {
+  const { data } = await callWithRetry(async (ai, model) => {
+    const response = await ai.models.generateContent({
+      model,
+      contents: `You are a cycling geography expert. Identify 15-20 significant towns or cities with active cycling communities within a 250km radius of these coordinates: Lat ${coords.lat}, Lng ${coords.lng}. 
+      RETURN JSON ONLY in this format: { "hubs": [{ "name": "City Name, Region", "lat": 1.23, "lng": 4.56 }] }`,
+      config: { responseMimeType: "application/json" }
+    });
+    return extractJson(response.text);
+  });
+  return data.hubs || [];
+};
+
 export const getGlobalLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => getDirectLocationSuggestions(query);
 
 export const resolveAddress = async (address: string): Promise<{ address: string; lat: number; lng: number }> => {

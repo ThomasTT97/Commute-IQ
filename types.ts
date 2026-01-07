@@ -47,6 +47,12 @@ export interface ScoreDeduction {
   val: number;
 }
 
+export interface SearchCriteria {
+  betterScore: boolean;
+  drySurface: boolean;
+  noIce: boolean;
+}
+
 export interface LocationSuggestion extends BelgianLocation {
   distanceFromHome?: number;
   distanceFromTrainingCenter?: number;

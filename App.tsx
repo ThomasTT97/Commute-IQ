@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
+import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState, SearchCriteria, LocationSuggestion } from './types'; 
 import { BelgianLocation } from './locations';
 import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAINING_SPEED } from './constants';
 import { REGIONAL_LOCATIONS } from './locations';
@@ -33,14 +33,14 @@ import {
   currentLLMModel,           
   currentLLMModelPriorityLabel, 
   remainingLLMAlternativesCount,
-  lastApiErrorMessage 
+  lastApiErrorMessage,
+  getNearbyCyclingHubs
 } from './services/geminiService';
 
 const App: React.FC = () => {
   const [settings, setSettings] = useState<CommuteSettings>(() => {
     const saved = localStorage.getItem('velo_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-    // Critical: Ensure coords exist if location is Gent/Deinze defaults or missing
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (!merged.homeCoords) merged.homeCoords = DEFAULT_SETTINGS.homeCoords;
     if (!merged.workCoords) merged.workCoords = DEFAULT_SETTINGS.workCoords;
@@ -129,11 +129,18 @@ const App: React.FC = () => {
   const [isScanningAlternatives, setIsScanningAlternatives] = useState(false);
   const [scanningProgress, setScanningProgress] = useState(0);
   const [currentLocationAdvice, setCurrentLocationAdvice] = useState<any[]>([]);
+  const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
+    betterScore: true,
+    drySurface: false,
+    noIce: false
+  });
+  const [dynamicPool, setDynamicPool] = useState<BelgianLocation[]>([]);
+  const lastDiscoveryBase = useRef<string>("");
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const bestStartHour = useMemo(() => {
     if (!trainingSlots.length) return null;
-    return trainingSlots.reduce((prev, curr) => (curr.score > prev.score ? curr : prev), trainingSlots[0]).startHour;
+    return trainingSlots.reduce((prev, curr) => (curr.effectiveScore > prev.effectiveScore ? curr : prev), trainingSlots[0]).startHour;
   }, [trainingSlots]);
 
   const activeTrainingSlot = useMemo(() => {
@@ -143,13 +150,112 @@ const App: React.FC = () => {
     return {
       ...slot,
       locationAdvice: currentLocationAdvice,
+      searchCriteria,
+      setSearchCriteria,
       condition: {
         ...slot.condition,
         isScanning: isScanningAlternatives,
         scanningProgress: scanningProgress
       }
     };
-  }, [trainingSlots, manualStartHour, bestStartHour, currentLocationAdvice, isScanningAlternatives, scanningProgress]);
+  }, [trainingSlots, manualStartHour, bestStartHour, currentLocationAdvice, isScanningAlternatives, scanningProgress, searchCriteria]);
+
+  const searchAlternativesProgressive = useCallback(async () => {
+    if (trainingLoading) return;
+    const dateOffset = training.dateOffset;
+    const distance = training.distance;
+    const baseCoords = training.coords;
+    const baseLocationName = training.location;
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+    
+    setIsScanningAlternatives(true);
+    setScanningProgress(0);
+    setCurrentLocationAdvice([]);
+
+    let activePool = [...REGIONAL_LOCATIONS];
+    if (lastDiscoveryBase.current !== baseLocationName) {
+      const isRegistryFar = REGIONAL_LOCATIONS.every(loc => calculateDistance(baseCoords, loc) > 250);
+      if (isRegistryFar && !settings.disableAI) {
+        try {
+          const discoveredHubs = await getNearbyCyclingHubs(baseCoords);
+          if (discoveredHubs.length > 0) {
+            setDynamicPool(discoveredHubs);
+            activePool = [...discoveredHubs, ...REGIONAL_LOCATIONS];
+          }
+        } catch (e) { }
+      }
+      lastDiscoveryBase.current = baseLocationName;
+    } else {
+      activePool = [...dynamicPool, ...REGIONAL_LOCATIONS];
+    }
+    
+    const startTime = Date.now();
+    const TIMEOUT = 8000;
+    const poolSize = 3; 
+    const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
+    const durationInt = Math.ceil(distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
+
+    try {
+      while (Date.now() - startTime < TIMEOUT) {
+        if (abortControllerRef.current.signal.aborted) return;
+        const currentElapsed = Date.now() - startTime;
+        setScanningProgress(Math.round((currentElapsed / TIMEOUT) * 100));
+        const batch = shuffleArray(activePool).slice(0, poolSize);
+        const batchResults = await Promise.all(batch.map(async (loc) => {
+          try {
+            const dFromCenter = calculateDistance(baseCoords, loc);
+            if (dFromCenter < 10 || dFromCenter > 400) return null;
+            const lRaw = await fetchRawWeatherData(loc);
+            const lDayIdx = (dateOffset + 1) * 24;
+            const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
+            let maxFinalScore = -1000;
+            let lBestHour = 0;
+            let lFinalCondition = null;
+            let lBestWeightedScore = 0;
+            for (let h = 0; h <= 23; h++) {
+              const lSlice: any = {};
+              Object.keys(lRaw.hourly).forEach(k => { if (Array.isArray(lRaw.hourly[k])) lSlice[k] = lRaw.hourly[k].slice(lDayIdx + h, lDayIdx + h + durationInt + 1); });
+              if (!lSlice.temperature_2m) continue;
+              const pastTemps = lRaw.hourly.temperature_2m.slice(Math.max(0, lDayIdx + h - 6), lDayIdx + h);
+              const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
+              const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
+              const isDaylight = !lCond.isDark;
+              let effectiveScore = lCond.score + (isDaylight ? 20 : 0);
+              if (searchCriteria.drySurface && lCond.wetSurfaceChance > 30) effectiveScore -= 60;
+              if (searchCriteria.noIce && lCond.iceRisk) effectiveScore -= 120;
+              if (effectiveScore > maxFinalScore) {
+                maxFinalScore = effectiveScore;
+                lBestHour = h;
+                lFinalCondition = lCond;
+                lBestWeightedScore = effectiveScore; 
+              }
+            }
+            if (!lFinalCondition) return null;
+            return { ...loc, score: lBestWeightedScore, bestHour: lBestHour, distanceFromTrainingCenter: dFromCenter };
+          } catch (e) { return null; }
+        }));
+        setCurrentLocationAdvice(prev => {
+          const newValid = batchResults.filter(r => r !== null);
+          if (newValid.length === 0) return prev;
+          const combined = [...prev, ...newValid];
+          const uniqueMap = new Map();
+          combined.forEach(item => {
+            if (!uniqueMap.has(item.name) || uniqueMap.get(item.name).score < item.score) uniqueMap.set(item.name, item);
+          });
+          return Array.from(uniqueMap.values()).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 15);
+        });
+        await new Promise(res => setTimeout(res, 200));
+      }
+    } catch (e) { } finally { setIsScanningAlternatives(false); setScanningProgress(100); }
+  }, [training.dateOffset, training.distance, training.coords, training.location, settings, searchCriteria, dynamicPool, trainingLoading]);
+
+  useEffect(() => {
+    if (viewMode === 'training' && !trainingLoading) {
+      searchAlternativesProgressive();
+    }
+  }, [searchCriteria]);
 
   const [globalTrainingResults, setGlobalTrainingResults] = useState<BelgianLocation[]>([]);
   const [isSearchingGlobalTraining, setIsSearchingGlobalTraining] = useState(false);
@@ -157,7 +263,7 @@ const App: React.FC = () => {
   const getTarget = useCallback((timeStr: string, addDays = 0) => {
     const [h, m] = timeStr.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + addDays); return d;
-  }, []);
+  }, [settings.morningWindow, settings.eveningWindow]);
 
   const nextCommuteInfo = useMemo(() => {
     const now = new Date();
@@ -235,7 +341,7 @@ const App: React.FC = () => {
                 if (next[offset]) {
                   next[offset] = { ...next[offset], isEnhanced: true, weather: {
                     morning: { ...next[offset].weather.morning, surfaceReason: aiInsights[offset].morning.summary, ridingStyleAdvice: aiInsights[offset].morning.style, bikeSetupAdvice: aiInsights[offset].morning.setup, clothingAdvice: aiInsights[offset].morning.clothing, performanceAdvice: aiInsights[offset].morning.performance },
-                    evening: { ...next[offset].weather.evening, surfaceReason: aiInsights[offset].evening.summary, ridingStyleAdvice: aiInsights[offset].evening.style, bikeSetupAdvice: aiInsights[offset].evening.setup, clothingAdvice: aiInsights[offset].evening.clothing, performanceAdvice: aiInsights[offset].evening.performance }
+                    evening: { ...next[offset].weather.evening, surfaceReason: aiInsights[offset].evening.summary, ridingStyleAdvice: aiInsights[offset].evening.style, bikeSetupAdvice: aiInsights[offset].evening.setup, clothingAdvice: aiInsights[offset].morning.clothing, performanceAdvice: aiInsights[offset].evening.performance }
                   }};
                 }
               });
@@ -262,100 +368,6 @@ const App: React.FC = () => {
     }
   }, [syncFullWeek, settings, pulseDataMap]);
 
-  const searchAlternativesProgressive = useCallback(async () => {
-    if (!activeTrainingSlot) return;
-    const baseScore = activeTrainingSlot.score;
-    const dateOffset = training.dateOffset;
-    const distance = training.distance;
-    const baseCoords = training.coords;
-
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    abortControllerRef.current = new AbortController();
-    
-    setIsScanningAlternatives(true);
-    setScanningProgress(0);
-    // Removed: Clear currentLocationAdvice. We keep existing items for incremental search.
-    
-    const startTime = Date.now();
-    const TIMEOUT = 10000; 
-    const poolSize = 3; 
-    const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
-    const durationInt = Math.ceil(distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
-
-    try {
-      while (Date.now() - startTime < TIMEOUT) {
-        if (abortControllerRef.current.signal.aborted) return;
-        
-        const currentElapsed = Date.now() - startTime;
-        setScanningProgress(Math.round((currentElapsed / TIMEOUT) * 100));
-
-        // Use REGIONAL_LOCATIONS pool which includes cross-border cities
-        const batch = shuffleArray([...REGIONAL_LOCATIONS]).slice(0, poolSize);
-        
-        const batchResults = await Promise.all(batch.map(async (loc) => {
-          try {
-            const dFromCenter = calculateDistance(baseCoords, loc);
-            // Search range confirmed up to 300km (Regional/Cross-border)
-            if (dFromCenter < 20 || dFromCenter > 300) return null;
-
-            const lRaw = await fetchRawWeatherData(loc);
-            const lDayIdx = (dateOffset + 1) * 24;
-            const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
-            
-            let maxEffectiveScore = -1;
-            let lBestHour = 0;
-            let lFinalCondition = null;
-            
-            for (let h = 0; h <= 23; h++) {
-              const lSlice: any = {};
-              Object.keys(lRaw.hourly).forEach(k => { if (Array.isArray(lRaw.hourly[k])) lSlice[k] = lRaw.hourly[k].slice(lDayIdx + h, lDayIdx + h + durationInt + 1); });
-              if (!lSlice.temperature_2m) continue;
-              
-              const pastTemps = lRaw.hourly.temperature_2m.slice(Math.max(0, lDayIdx + h - 6), lDayIdx + h);
-              const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
-              
-              const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
-              
-              // Sunset prioritization logic: Give bonus to daylight slots
-              const isDaylight = !lCond.isDark;
-              const effectiveScore = lCond.score + (isDaylight ? 20 : 0);
-
-              if (effectiveScore > maxEffectiveScore) {
-                maxEffectiveScore = effectiveScore;
-                lBestHour = h;
-                lFinalCondition = lCond;
-              }
-            }
-            if (!lFinalCondition) return null;
-            return { ...loc, score: lFinalCondition.score, bestHour: lBestHour, distanceFromTrainingCenter: dFromCenter };
-          } catch (e) { return null; }
-        }));
-
-        // Incremental Update: Merge batch results with existing state, deduplicating by name
-        setCurrentLocationAdvice(prev => {
-          const newValid = batchResults.filter(r => r !== null);
-          if (newValid.length === 0) return prev;
-
-          const combined = [...prev, ...newValid];
-          const uniqueMap = new Map();
-          
-          combined.forEach(item => {
-            // If we have multiple entries for the same location, keep the one with the highest score
-            if (!uniqueMap.has(item.name) || uniqueMap.get(item.name).score < item.score) {
-              uniqueMap.set(item.name, item);
-            }
-          });
-
-          return Array.from(uniqueMap.values())
-            .sort((a, b) => (b.score || 0) - (a.score || 0))
-            .slice(0, 15);
-        });
-
-        await new Promise(res => setTimeout(res, 400));
-      }
-    } catch (e) { } finally { setIsScanningAlternatives(false); setScanningProgress(100); }
-  }, [training.dateOffset, training.distance, training.coords, settings, activeTrainingSlot]);
-
   const syncTraining = useCallback(async () => {
     if (!training.coords || typeof training.coords.lat !== 'number') return;
     setTrainingLoading(true);
@@ -375,21 +387,18 @@ const App: React.FC = () => {
         const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
         const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
         const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
-        
         const isDaylight = !condition.isDark;
         const effectiveScore = condition.score + (isDaylight ? 20 : 0);
-        
         slots.push({ startHour: h, condition, window: winHours, score: condition.score, effectiveScore });
       }
       
-      const targetHour = manualStartHour !== null ? manualStartHour : slots.reduce((p, c) => (c.effectiveScore > p.effectiveScore ? c : p), slots[0]).startHour;
+      const targetHour = slots.reduce((p, c) => (c.effectiveScore > p.effectiveScore ? c : p), slots[0]).startHour;
       if (manualStartHour === null) setManualStartHour(targetHour);
-
-      const targetSlot = slots.find(s => s.startHour === targetHour) || slots[0];
-      const uniqueNames = new Set<string>();
+      const activeHour = manualStartHour !== null ? manualStartHour : targetHour;
       const targetDist = training.distance * 0.4;
-      const windDir = targetSlot.condition.windDirection;
+      const windDir = slots.find(s => s.startHour === activeHour)?.condition?.windDirection || 0;
       
+      const uniqueNames = new Set<string>();
       const optAdvice = REGIONAL_LOCATIONS
         .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
         .filter(loc => loc.distFromCenter > targetDist * 0.8 && loc.distFromCenter < targetDist * 1.2)
@@ -407,21 +416,24 @@ const App: React.FC = () => {
         })
         .slice(0, 5);
 
-      setTrainingSlots(slots.map(s => s.startHour === targetHour ? { ...s, optimizationAdvice: optAdvice } : s));
+      setTrainingSlots(slots.map(s => s.startHour === activeHour ? { ...s, optimizationAdvice: optAdvice } : s));
       
       if (!settings.disableAI) {
-        try {
-          const aiAdvice = await getTrainingSessionAIAdvice(settings, targetSlot.condition, training.distance);
-          if (aiAdvice) {
-            setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? {
-              ...s, isAIEnhanced: true,
-              condition: { ...s.condition, surfaceReason: aiAdvice.summary, ridingStyleAdvice: aiAdvice.style, bikeSetupAdvice: aiAdvice.setup, clothingAdvice: aiAdvice.clothing, performanceAdvice: aiAdvice.performance }
-            } : s));
-          }
-        } catch (err) { setTrainingSlots(prev => prev.map(s => s.startHour === targetHour ? { ...s, aiFailed: true } : s)); }
+        const activeCondition = slots.find(s => s.startHour === activeHour)?.condition;
+        if (activeCondition) {
+          try {
+            const aiAdvice = await getTrainingSessionAIAdvice(settings, activeCondition, training.distance);
+            if (aiAdvice) {
+              setTrainingSlots(prev => prev.map(s => s.startHour === activeHour ? {
+                ...s, isAIEnhanced: true,
+                condition: { ...s.condition, surfaceReason: aiAdvice.summary, ridingStyleAdvice: aiAdvice.style, bikeSetupAdvice: aiAdvice.setup, clothingAdvice: aiAdvice.clothing, performanceAdvice: aiAdvice.performance }
+              } : s));
+            }
+          } catch (err) { }
+        }
       }
     } catch (e) { } finally { setTrainingLoading(false); }
-  }, [training.coords, training.distance, training.dateOffset, settings, manualStartHour]);
+  }, [training.coords, training.distance, training.dateOffset, settings]);
 
   const syncTrainingWeek = useCallback(async () => {
     if (!training.coords || typeof training.coords.lat !== 'number') return;
@@ -431,7 +443,6 @@ const App: React.FC = () => {
       const durationInt = Math.ceil(training.distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
       const weeklyResults = [];
       const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
-
       for (let o = 0; o < 7; o++) {
          const dayIdx = (o + 1) * 24;
          const sun = { sunrise: raw.daily?.sunrise?.[o+1] || "07:00", sunset: raw.daily?.sunset?.[o+1] || "20:00" };
@@ -444,10 +455,8 @@ const App: React.FC = () => {
             const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
             const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
             const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
-            
             const isDaylight = !condition.isDark;
             const eff = condition.score + (isDaylight ? 20 : 0);
-
             if (eff > maxEff) {
               maxEff = eff;
               best = { score: condition.score, condition, startHour: h, window: winHours };
@@ -461,7 +470,7 @@ const App: React.FC = () => {
 
   useEffect(() => { 
     if (viewMode === 'training') { syncTraining(); }
-  }, [viewMode, training.coords, training.distance, training.dateOffset, manualStartHour, syncTraining]);
+  }, [viewMode, training.coords, training.distance, training.dateOffset, syncTraining]);
 
   const handleSetTrainingToCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) return;
