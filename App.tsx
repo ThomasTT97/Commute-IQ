@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState } from './types'; 
 import { BelgianLocation } from './locations';
 import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAINING_SPEED } from './constants';
-import { BELGIAN_LOCATIONS } from './locations';
+import { REGIONAL_LOCATIONS } from './locations';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
 import { TrainingWeeklyForecast } from './components/TrainingWeeklyForecast';
@@ -274,12 +274,11 @@ const App: React.FC = () => {
     
     setIsScanningAlternatives(true);
     setScanningProgress(0);
-    setCurrentLocationAdvice([]);
+    // Removed: Clear currentLocationAdvice. We keep existing items for incremental search.
     
     const startTime = Date.now();
     const TIMEOUT = 10000; 
     const poolSize = 3; 
-    const foundLocations: any[] = [];
     const formatH = (hour: number) => `${(hour % 24).toString().padStart(2, '0')}:00`;
     const durationInt = Math.ceil(distance / (settings.averageSpeed || AVG_TRAINING_SPEED));
 
@@ -290,18 +289,22 @@ const App: React.FC = () => {
         const currentElapsed = Date.now() - startTime;
         setScanningProgress(Math.round((currentElapsed / TIMEOUT) * 100));
 
-        const batch = shuffleArray([...BELGIAN_LOCATIONS]).slice(0, poolSize);
+        // Use REGIONAL_LOCATIONS pool which includes cross-border cities
+        const batch = shuffleArray([...REGIONAL_LOCATIONS]).slice(0, poolSize);
         
-        const results = await Promise.all(batch.map(async (loc) => {
+        const batchResults = await Promise.all(batch.map(async (loc) => {
           try {
             const dFromCenter = calculateDistance(baseCoords, loc);
-            if (dFromCenter < 40 || dFromCenter > 150) return null;
+            // Search range confirmed up to 300km (Regional/Cross-border)
+            if (dFromCenter < 20 || dFromCenter > 300) return null;
 
             const lRaw = await fetchRawWeatherData(loc);
             const lDayIdx = (dateOffset + 1) * 24;
             const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
-            let maxLScore = 0;
+            
+            let maxEffectiveScore = -1;
             let lBestHour = 0;
+            let lFinalCondition = null;
             
             for (let h = 0; h <= 23; h++) {
               const lSlice: any = {};
@@ -313,18 +316,41 @@ const App: React.FC = () => {
               
               const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
               
-              if (lCond.score > maxLScore) {
-                maxLScore = lCond.score;
+              // Sunset prioritization logic: Give bonus to daylight slots
+              const isDaylight = !lCond.isDark;
+              const effectiveScore = lCond.score + (isDaylight ? 20 : 0);
+
+              if (effectiveScore > maxEffectiveScore) {
+                maxEffectiveScore = effectiveScore;
                 lBestHour = h;
+                lFinalCondition = lCond;
               }
             }
-            return { ...loc, score: maxLScore, bestHour: lBestHour, distanceFromTrainingCenter: dFromCenter };
+            if (!lFinalCondition) return null;
+            return { ...loc, score: lFinalCondition.score, bestHour: lBestHour, distanceFromTrainingCenter: dFromCenter };
           } catch (e) { return null; }
         }));
 
-        results.forEach(r => { if (r) foundLocations.push(r); });
-        const betterOnes = foundLocations.filter(l => l.score > baseScore).sort((a, b) => b.score - a.score).slice(0, 10);
-        setCurrentLocationAdvice(betterOnes);
+        // Incremental Update: Merge batch results with existing state, deduplicating by name
+        setCurrentLocationAdvice(prev => {
+          const newValid = batchResults.filter(r => r !== null);
+          if (newValid.length === 0) return prev;
+
+          const combined = [...prev, ...newValid];
+          const uniqueMap = new Map();
+          
+          combined.forEach(item => {
+            // If we have multiple entries for the same location, keep the one with the highest score
+            if (!uniqueMap.has(item.name) || uniqueMap.get(item.name).score < item.score) {
+              uniqueMap.set(item.name, item);
+            }
+          });
+
+          return Array.from(uniqueMap.values())
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
+            .slice(0, 15);
+        });
+
         await new Promise(res => setTimeout(res, 400));
       }
     } catch (e) { } finally { setIsScanningAlternatives(false); setScanningProgress(100); }
@@ -349,10 +375,14 @@ const App: React.FC = () => {
         const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
         const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
         const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
-        slots.push({ startHour: h, condition, window: winHours, score: condition.score });
+        
+        const isDaylight = !condition.isDark;
+        const effectiveScore = condition.score + (isDaylight ? 20 : 0);
+        
+        slots.push({ startHour: h, condition, window: winHours, score: condition.score, effectiveScore });
       }
       
-      const targetHour = manualStartHour !== null ? manualStartHour : slots.reduce((p, c) => (c.score > p.score ? c : p), slots[0]).startHour;
+      const targetHour = manualStartHour !== null ? manualStartHour : slots.reduce((p, c) => (c.effectiveScore > p.effectiveScore ? c : p), slots[0]).startHour;
       if (manualStartHour === null) setManualStartHour(targetHour);
 
       const targetSlot = slots.find(s => s.startHour === targetHour) || slots[0];
@@ -360,7 +390,7 @@ const App: React.FC = () => {
       const targetDist = training.distance * 0.4;
       const windDir = targetSlot.condition.windDirection;
       
-      const optAdvice = BELGIAN_LOCATIONS
+      const optAdvice = REGIONAL_LOCATIONS
         .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
         .filter(loc => loc.distFromCenter > targetDist * 0.8 && loc.distFromCenter < targetDist * 1.2)
         .filter(loc => {
@@ -406,6 +436,7 @@ const App: React.FC = () => {
          const dayIdx = (o + 1) * 24;
          const sun = { sunrise: raw.daily?.sunrise?.[o+1] || "07:00", sunset: raw.daily?.sunset?.[o+1] || "20:00" };
          let best = null;
+         let maxEff = -1;
          for (let h = 0; h <= 23; h++) {
             const slice: any = {};
             Object.keys(raw.hourly).forEach(k => { if (Array.isArray(raw.hourly[k])) slice[k] = raw.hourly[k].slice(dayIdx+h, dayIdx+h+durationInt+1); });
@@ -413,7 +444,14 @@ const App: React.FC = () => {
             const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
             const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
             const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
-            if (!best || condition.score > best.score) best = { score: condition.score, condition, startHour: h, window: winHours };
+            
+            const isDaylight = !condition.isDark;
+            const eff = condition.score + (isDaylight ? 20 : 0);
+
+            if (eff > maxEff) {
+              maxEff = eff;
+              best = { score: condition.score, condition, startHour: h, window: winHours };
+            }
          }
          weeklyResults.push({ offset: o, bestSlot: best });
       }

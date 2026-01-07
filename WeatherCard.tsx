@@ -291,6 +291,12 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     ? 'bg-[#1a1d24] border-blue-500/20 text-blue-400 hover:bg-[#20252d]' 
     : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 shadow-sm';
 
+  const getSubScoreColor = (s: number) => {
+    if (s > 70) return 'text-emerald-500';
+    if (s >= 30) return 'text-orange-500';
+    return 'text-red-500';
+  };
+
   return (
     <div className={`h-full w-full rounded-[2rem] border overflow-visible flex flex-col p-4 sm:p-5 shadow-2xl transition-all relative ${isDark ? 'border-white/5 bg-[#0a0c10]' : 'bg-white border-slate-200'}`}>
       
@@ -361,10 +367,31 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           {showLocationPopup && (
             <div className={`absolute top-full left-0 right-0 mt-2 p-4 rounded-2xl border ${popupBgClass} z-[1200] transform-gpu`}>
               <div className="flex items-center justify-between mb-3"><span className="text-[8px] font-black uppercase text-blue-500">Alternatives</span><button onClick={() => setShowLocationPopup(false)} className="p-1"><X className="w-3.5 h-3.5 text-slate-500" /></button></div>
-              <div className="flex flex-col gap-2">{locationAdvice?.slice(0, 5).map((loc, idx) => (
-                <button key={idx} onClick={() => onSelectLocationAdvice?.(loc)} className={`p-2 rounded-xl border flex items-center justify-between transition-colors ${isDark ? 'bg-black border-white/5 hover:bg-blue-500/10' : 'bg-slate-100 border-slate-300 hover:bg-blue-50'}`}>
-                  <span className={`text-[11px] font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                  <MapIcon className="w-3 h-3 text-blue-500" />
+              <div className="flex flex-col gap-2 max-h-[40vh] overflow-y-auto hide-scrollbar">{locationAdvice?.map((loc, idx) => (
+                <button key={idx} onClick={() => onSelectLocationAdvice?.(loc)} className={`p-3 rounded-xl border flex items-center justify-between transition-all active:scale-[0.98] ${isDark ? 'bg-black border-white/5 hover:border-blue-500/40' : 'bg-slate-100 border-slate-300 hover:bg-blue-50'}`}>
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-[11px] font-black uppercase tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                      {loc.distanceFromTrainingCenter !== undefined && (
+                        <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">
+                          {Math.round(loc.distanceFromTrainingCenter)} KM AWAY
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">SCORE:</span>
+                        <span className={`text-[10px] font-black ${getSubScoreColor(loc.score || 0)}`}>{Math.round(loc.score || 0)}%</span>
+                      </div>
+                      {loc.bestHour !== undefined && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">START:</span>
+                          <span className={`text-[10px] font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{loc.bestHour.toString().padStart(2, '0')}:00</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <MapIcon className="w-3.5 h-3.5 text-blue-500" />
                 </button>
               ))}</div>
             </div>

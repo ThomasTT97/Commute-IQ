@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
-import { BelgianLocation, BELGIAN_LOCATIONS } from "../locations";
+// Fixed: Changed BELGIAN_LOCATIONS to REGIONAL_LOCATIONS to match exported member from locations.ts
+import { BelgianLocation, REGIONAL_LOCATIONS } from "../locations";
 
 export let lastApiErrorMessage: string | null = null;
 export let lastApiErrorType: 'telemetry' | 'gemini' | 'maps' | null = null;
@@ -52,7 +53,8 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
       return { name: cleanName, lat: parseFloat(item.lat), lng: parseFloat(item.lon) };
     });
   } catch (e) {
-    return BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5);
+    // Fixed: Changed BELGIAN_LOCATIONS to REGIONAL_LOCATIONS
+    return REGIONAL_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5);
   }
 };
 

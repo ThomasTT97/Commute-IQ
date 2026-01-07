@@ -1,6 +1,5 @@
-
 import { BelgianLocation } from "../locations";
-import { BELGIAN_LOCATIONS } from "../locations";
+import { REGIONAL_LOCATIONS } from "../locations";
 
 export const getLocality = (address: string): string => {
   if (!address) return '---';
@@ -24,7 +23,7 @@ export function shuffleArray<T>(array: T[]): T[] {
 };
 
 /**
- * Merges internal Belgian registry with global European API results.
+ * Merges regional registry (now including cross-border) with global European API results.
  * Strictly avoids duplicates by normalizing names.
  */
 export const filterLocationsWithGlobal = (query: string, globalResults: BelgianLocation[]) => {
@@ -49,8 +48,8 @@ export const filterLocationsWithGlobal = (query: string, globalResults: BelgianL
   // 1. Prioritize global results but check for duplicates
   globalResults.forEach(addIfUnique);
 
-  // 2. Add local results from static database
-  const local = BELGIAN_LOCATIONS.filter(l => l.name.toLowerCase().includes(normalizedQuery));
+  // 2. Add results from regional database (now cross-border)
+  const local = REGIONAL_LOCATIONS.filter(l => l.name.toLowerCase().includes(normalizedQuery));
   local.forEach(addIfUnique);
 
   return finalResults.slice(0, 8);

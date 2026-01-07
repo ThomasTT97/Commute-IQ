@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommuteSettings, FitnessGoal } from '../../types';
 import { EquipmentManager } from '../EquipmentManager';
-import { BelgianLocation, BELGIAN_LOCATIONS } from '../../locations';
+// Fixed: Removed BELGIAN_LOCATIONS as it is not exported from locations.ts
+import { BelgianLocation } from '../../locations';
 import { getDirectLocationSuggestions } from '../../services/geminiService';
 import { filterLocationsWithGlobal } from '../../utils/helpers';
 import { 
@@ -214,7 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                          ref={speedPickerRef}
                          className="h-full flex items-center gap-4 overflow-x-auto hide-scrollbar scroll-smooth snap-x snap-mandatory px-[calc(50%-28px)]"
                        >
-                          {speedRange.map(s => {
+                          {speedPickerRef.current && speedRange.map(s => {
                             const isSelected = (editSettings.averageSpeed || 25) === s;
                             return (
                               <button

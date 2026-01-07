@@ -23,7 +23,8 @@ import {
   Star
 } from 'lucide-react';
 import { TrainingState } from '../types';
-import { BelgianLocation, BELGIAN_LOCATIONS } from '../locations';
+// Fixed: Removed BELGIAN_LOCATIONS as it is not exported from locations.ts
+import { BelgianLocation } from '../locations';
 import { WeatherCard } from './WeatherCard';
 import { TrainingWeeklyForecast } from './TrainingWeeklyForecast';
 import { TypewriterText } from './TypewriterText';
