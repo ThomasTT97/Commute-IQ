@@ -64,7 +64,15 @@ const App: React.FC = () => {
     } catch (e) { return {}; }
   });
   
-  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'training' | 'training-weekly'>('daily');
+  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'training' | 'training-weekly'>(() => {
+    // Check for URL parameter 'mode' to support PWA shortcuts
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    if (mode === 'training') return 'training';
+    if (mode === 'weekly') return 'weekly';
+    return 'daily';
+  });
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
@@ -101,15 +109,41 @@ const App: React.FC = () => {
 
   useEffect(() => { if (isConnectivityOpen) checkConnections(); }, [isConnectivityOpen, checkConnections]);
 
+  const getTarget = useCallback((timeStr: string, addDays = 0) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + addDays); return d;
+  }, [settings.morningWindow, settings.eveningWindow]);
+
+  const nextCommuteInfo = useMemo(() => {
+    const now = new Date();
+    if (now < getTarget(settings.morningWindow[1])) return { type: 'morning' as const, offset: 0 };
+    if (now < getTarget(settings.eveningWindow[1])) return { type: 'evening' as const, offset: 0 };
+    return { type: 'morning' as const, offset: 1 };
+  }, [settings.morningWindow, settings.eveningWindow, getTarget]);
+
+  const [selectedDateOffset, setSelectedDateOffset] = useState<number>(nextCommuteInfo.offset);
+  const [loadingOffsets, setLoadingOffsets] = useState<number[]>([]);
+
   const [activeLegIndex, setActiveLegIndex] = useState(0);
   const [isAdviceExpanded, setIsAdviceExpanded] = useState(false);
 
   useEffect(() => {
     if (viewMode === 'daily') {
-      setActiveLegIndex(0);
+      let targetIndex = 0;
+      if (selectedDateOffset === 0) {
+         // If selecting today, check if morning commute is over
+         const now = new Date();
+         const [h, m] = settings.morningWindow[1].split(':').map(Number);
+         const morningEnd = new Date();
+         morningEnd.setHours(h, m, 0, 0);
+         if (now > morningEnd) {
+           targetIndex = 1;
+         }
+      }
+      setActiveLegIndex(targetIndex);
       setIsAdviceExpanded(false);
     }
-  }, [viewMode]);
+  }, [viewMode, selectedDateOffset, settings.morningWindow]);
 
   const [training, setTraining] = useState<TrainingState>(() => {
     return {
@@ -233,7 +267,14 @@ const App: React.FC = () => {
               }
             }
             if (!lFinalCondition) return null;
-            return { ...loc, score: lBestWeightedScore, bestHour: lBestHour, distanceFromTrainingCenter: dFromCenter };
+            // Use lFinalCondition.score (max 100) for display, but lBestWeightedScore for sorting
+            return { 
+              ...loc, 
+              score: lFinalCondition.score, 
+              sortScore: lBestWeightedScore, 
+              bestHour: lBestHour, 
+              distanceFromTrainingCenter: dFromCenter 
+            };
           } catch (e) { return null; }
         }));
         setCurrentLocationAdvice(prev => {
@@ -242,9 +283,11 @@ const App: React.FC = () => {
           const combined = [...prev, ...newValid];
           const uniqueMap = new Map();
           combined.forEach(item => {
-            if (!uniqueMap.has(item.name) || uniqueMap.get(item.name).score < item.score) uniqueMap.set(item.name, item);
+            if (!uniqueMap.has(item.name) || (uniqueMap.get(item.name).sortScore || 0) < (item.sortScore || 0)) uniqueMap.set(item.name, item);
           });
-          return Array.from(uniqueMap.values()).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 15);
+          return Array.from(uniqueMap.values())
+            .sort((a, b) => (b.sortScore || b.score || 0) - (a.sortScore || a.score || 0))
+            .slice(0, 15);
         });
         await new Promise(res => setTimeout(res, 200));
       }
@@ -260,21 +303,6 @@ const App: React.FC = () => {
   const [globalTrainingResults, setGlobalTrainingResults] = useState<BelgianLocation[]>([]);
   const [isSearchingGlobalTraining, setIsSearchingGlobalTraining] = useState(false);
 
-  const getTarget = useCallback((timeStr: string, addDays = 0) => {
-    const [h, m] = timeStr.split(':').map(Number);
-    const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + addDays); return d;
-  }, [settings.morningWindow, settings.eveningWindow]);
-
-  const nextCommuteInfo = useMemo(() => {
-    const now = new Date();
-    if (now < getTarget(settings.morningWindow[1])) return { type: 'morning' as const, offset: 0 };
-    if (now < getTarget(settings.eveningWindow[1])) return { type: 'evening' as const, offset: 0 };
-    return { type: 'morning' as const, offset: 1 };
-  }, [settings.morningWindow, settings.eveningWindow, getTarget]);
-
-  const [selectedDateOffset, setSelectedDateOffset] = useState<number>(nextCommuteInfo.offset);
-  const [loadingOffsets, setLoadingOffsets] = useState<number[]>([]);
-
   useEffect(() => {
     setTraining(prev => ({ ...prev, dateOffset: selectedDateOffset }));
   }, [selectedDateOffset]);
@@ -285,19 +313,12 @@ const App: React.FC = () => {
   }, [settings.roadDistance, settings.homeCoords, settings.workCoords]);
 
   const commuteSequence = useMemo(() => {
-    const primaryType = nextCommuteInfo.type;
-    const primaryOffset = nextCommuteInfo.offset;
-    if (selectedDateOffset === primaryOffset) {
-      return {
-        primary: { type: primaryType, offset: primaryOffset },
-        secondary: { 
-          type: primaryType === 'morning' ? 'evening' as const : 'morning' as const, 
-          offset: primaryType === 'morning' ? primaryOffset : primaryOffset + 1
-        }
-      };
-    }
-    return { primary: { type: 'morning' as const, offset: selectedDateOffset }, secondary: { type: 'evening' as const, offset: selectedDateOffset } };
-  }, [selectedDateOffset, nextCommuteInfo]);
+    // Show Morning and Evening for the selected day regardless of current time
+    return {
+      primary: { type: 'morning' as const, offset: selectedDateOffset },
+      secondary: { type: 'evening' as const, offset: selectedDateOffset }
+    };
+  }, [selectedDateOffset]);
 
   const t = TRANSLATIONS[settings.language || 'en'];
   const isDark = settings.theme === 'dark';
@@ -418,6 +439,9 @@ const App: React.FC = () => {
 
       setTrainingSlots(slots.map(s => s.startHour === activeHour ? { ...s, optimizationAdvice: optAdvice } : s));
       
+      // Optimization: Turn off loading state here to show weather data immediately
+      setTrainingLoading(false);
+
       if (!settings.disableAI) {
         const activeCondition = slots.find(s => s.startHour === activeHour)?.condition;
         if (activeCondition) {
@@ -432,7 +456,9 @@ const App: React.FC = () => {
           } catch (err) { }
         }
       }
-    } catch (e) { } finally { setTrainingLoading(false); }
+    } catch (e) { 
+      setTrainingLoading(false);
+    }
   }, [training.coords, training.distance, training.dateOffset, settings]);
 
   const syncTrainingWeek = useCallback(async () => {
@@ -546,7 +572,7 @@ const App: React.FC = () => {
           <TrainingView 
             isDark={isDark} training={training} trainingSearch={trainingSearch} showTrainingSuggestions={showTrainingSuggestions} setShowTrainingSuggestions={setShowTrainingSuggestions} isSearching={isSearchingGlobalTraining} 
             trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} 
-            onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
+            onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setSearchCriteria(prev => ({...prev})); setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
             onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
             onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
             onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
@@ -564,5 +590,4 @@ const App: React.FC = () => {
     </div>
   );
 };
-
 export default App;

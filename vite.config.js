@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
@@ -37,6 +38,8 @@ export default defineConfig(({ mode }) => {
         injectRegister: 'auto',
         includeAssets: ['icon-v4.png'],
         manifestFilename: 'manifest.json',
+        // Use a distinct filename to avoid conflicts with static sw.js files
+        filename: 'service-worker.js',
         workbox: {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
@@ -51,9 +54,16 @@ export default defineConfig(({ mode }) => {
           theme_color: "#05070a",
           background_color: "#05070a",
           display: "standalone",
+          orientation: "portrait",
+          // 'display_override' helps Android prioritize standalone mode over browser tabs
+          display_override: ["window-controls-overlay", "standalone", "minimal-ui"],
+          categories: ["navigation", "health", "fitness", "lifestyle"],
           scope: "/",
           start_url: "/",
           id: "/",
+          launch_handler: {
+            client_mode: "navigate-existing"
+          },
           icons: [
             {
               "src": "/icon-v4.png",
@@ -72,6 +82,20 @@ export default defineConfig(({ mode }) => {
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "maskable"
+            }
+          ],
+          shortcuts: [
+            {
+              "name": "Daily Commute",
+              "url": "/?mode=daily",
+              "description": "Check your daily commute status",
+              "icons": [{ "src": "/icon-v4.png", "sizes": "192x192", "type": "image/png" }]
+            },
+            {
+              "name": "Training Mode",
+              "url": "/?mode=training",
+              "description": "Plan your training session",
+              "icons": [{ "src": "/icon-v4.png", "sizes": "192x192", "type": "image/png" }]
             }
           ]
         }

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -32,7 +33,7 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
     if (!res.ok) throw new Error("Maps API unreachable");
     const data = await res.json();
     
-    return data.map((item: any) => {
+    const mapped = data.map((item: any) => {
       const addr = item.address;
       const houseNum = addr.house_number || "";
       const street = addr.road || addr.pedestrian || addr.cycleway || addr.path || "";
@@ -52,6 +53,18 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
       }
       return { name: cleanName, lat: parseFloat(item.lat), lng: parseFloat(item.lon) };
     });
+
+    const uniqueLocations: BelgianLocation[] = [];
+    const seenNames = new Set<string>();
+    
+    for (const loc of mapped) {
+      if (!seenNames.has(loc.name)) {
+        seenNames.add(loc.name);
+        uniqueLocations.push(loc);
+      }
+    }
+    
+    return uniqueLocations;
   } catch (e) {
     // Fixed: Changed BELGIAN_LOCATIONS to REGIONAL_LOCATIONS
     return REGIONAL_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5);

@@ -313,15 +313,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const isScanning = !!condition?.isScanning;
   const scanProgress = condition?.scanningProgress ?? 0;
 
-  const toggleCriterion = (key: keyof SearchCriteria) => {
-    if (setSearchCriteria && searchCriteria) {
-      setSearchCriteria({
-        ...searchCriteria,
-        [key]: !searchCriteria[key]
-      });
-    }
-  };
-
   if (compact) {
     return (
       <div className={`w-full rounded-[1.5rem] p-3 sm:p-4 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500 bg-[#0a0c10]' : 'border-blue-300 bg-blue-50') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
@@ -477,7 +468,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             {optimizationAdvice?.length ? optimizationAdvice.slice(0, 5).map((loc, idx) => (
               <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200'}`}>
                 <span className={`text-[12px] font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
-                {/* Fixed: Replaced invalid 'item' tag with MapPin icon */}
                 <MapPin className="w-3.5 h-3.5 text-blue-500/50" />
               </div>
             )) : (
@@ -501,33 +491,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             </div>
             <button onClick={() => setShowLocationPopup(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
           </div>
-
-          <div className="mb-6 flex-none">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em] block mb-3 px-1">Search Priorities</span>
-            <div className="flex flex-wrap gap-2">
-              <button 
-                onClick={() => toggleCriterion('betterScore')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.95] ${searchCriteria?.betterScore ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : isDark ? 'bg-black border-white/10 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                Score
-              </button>
-              <button 
-                onClick={() => toggleCriterion('drySurface')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.95] ${searchCriteria?.drySurface ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : isDark ? 'bg-black border-white/10 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
-              >
-                <Droplets className="w-3.5 h-3.5" />
-                Dry
-              </button>
-              <button 
-                onClick={() => toggleCriterion('noIce')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.95] ${searchCriteria?.noIce ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : isDark ? 'bg-black border-white/10 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
-              >
-                <Snowflake className="w-3.5 h-3.5" />
-                No Ice
-              </button>
-            </div>
-          </div>
           
           {isScanning && (
             <div className="mb-6 space-y-2.5 flex-none">
@@ -550,11 +513,11 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           <div className="flex-1 overflow-y-auto hide-scrollbar mb-4 flex flex-col gap-2.5 px-0.5">
             {locationAdvice?.length ? locationAdvice.map((loc, idx) => (
               <button key={idx} onClick={() => { onSelectLocationAdvice?.(loc); setShowLocationPopup(false); }} className={`group p-4 rounded-2xl flex items-center justify-between transition-all active:scale-[0.98] border ${isDark ? 'bg-black border-white/5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5' : 'bg-slate-50 border-slate-200 hover:bg-blue-50'}`}>
-                <div className="flex flex-col items-start gap-1.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className={`text-[14px] font-black uppercase tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name}</span>
+                <div className="flex flex-col items-start gap-1.5 flex-1 min-w-0 pr-4">
+                  <div className="flex items-center gap-2.5 w-full">
+                    <span className={`text-[14px] font-black uppercase tracking-tight leading-none truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name.split(',')[0]}</span>
                     {loc.distanceFromTrainingCenter !== undefined && (
-                      <span className={`px-1.5 py-0.5 rounded bg-blue-500/10 text-[8px] font-black uppercase tracking-widest whitespace-nowrap ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                      <span className={`px-1.5 py-0.5 rounded bg-blue-500/10 text-[8px] font-black uppercase tracking-widest whitespace-nowrap flex-none ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
                         {Math.round(loc.distanceFromTrainingCenter)} KM
                       </span>
                     )}
