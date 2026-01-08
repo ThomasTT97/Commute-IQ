@@ -525,10 +525,18 @@ export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, cond
   const { data } = await callWithRetry(async (ai, model) => {
     const response = await ai.models.generateContent({ 
       model, 
-      contents: `Expert tactical training advice for a ${distance}km ride. 
-      Weather: ${JSON.stringify(condition)}
-      Equipment: ${JSON.stringify(settings.equipment.find(e => e.isSelected))}
-      RETURN JSON with 'summary', 'style', 'setup', 'clothing', 'performance'. Be specific and elite.`, 
+      contents: `Expert elite tactical cycling intelligence for a ${distance}km training session. 
+      Weather Telemetry: ${JSON.stringify(condition)}
+      Equipment Config: ${JSON.stringify(settings.equipment.find(e => e.isSelected))}
+      
+      You must return a high-quality JSON object with exactly these fields:
+      - 'summary': A technical, professional summary of the training conditions (1-2 sentences).
+      - 'performance': Critical physiological and intensity advice for the specified distance.
+      - 'style': Technical bike handling, aerodynamic positioning, and cornering strategy.
+      - 'setup': Mechanical specificities (tire pressure adjustments, visibility hardware, tool requirements).
+      - 'clothing': Thermal regulation and layering strategy specifically for this weather profile.
+      
+      Maintain an elite, data-driven, and technical tone. Return JSON ONLY.`, 
       config: { responseMimeType: "application/json" } 
     });
     return extractJson(response.text);

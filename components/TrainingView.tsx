@@ -65,15 +65,14 @@ interface TrainingViewProps {
 }
 
 const formatModelName = (model: string | null): string => {
-  if (!model) return 'Gemini';
+  if (!model) return 'GEMINI';
   const m = model.toLowerCase();
-  if (m.includes('gemini-3-flash')) return 'Gemini 3.0 Flash';
-  if (m.includes('gemini-3-pro')) return 'Gemini 3.0 Pro';
-  if (m.includes('gemini-2.5-flash')) return 'Gemini 2.5 Flash';
-  if (m.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
-  if (m.includes('lite')) return 'Gemini Flash Lite';
-  if (m.includes('flash')) return 'Gemini Flash';
-  return 'Gemini AI';
+  if (m.includes('gemini-3-flash')) return 'GEMINI 3.0 FLASH';
+  if (m.includes('gemini-3-pro')) return 'GEMINI 3.0 PRO';
+  if (m.includes('gemini-2.5-flash')) return 'GEMINI 2.5 FLASH';
+  if (m.includes('gemini-1.5-flash')) return 'GEMINI 1.5 FLASH';
+  if (m.includes('lite')) return 'GEMINI FLASH LITE';
+  return 'GEMINI AI';
 };
 
 export const TrainingView: React.FC<TrainingViewProps> = ({
@@ -157,22 +156,18 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
   const isAIActive = trainingData?.isAIEnhanced;
   const isAIFailed = trainingData?.aiFailed;
 
-  const shouldShowBlock = (index: number) => {
-    if (!aiEnabled || isAIFailed || !isAIActive) return true;
-    return typingStep >= index;
-  };
-
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
     if (isAIActive && !isAIFailed && text) {
       return (
         <TypewriterText 
           text={text} 
-          speed={8} 
+          speed={6} 
           className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`} 
           onComplete={() => setTypingStep(prev => Math.max(prev, stepIndex + 1))}
         />
       );
     }
+    // Instant reveal for manual fallback
     return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{fallback}</span>;
   };
 
@@ -356,59 +351,96 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                 </div>
 
                 {isIntelligenceExpanded && (
-                  <div className={`flex-1 border rounded-[2rem] p-5 flex flex-col gap-6 overflow-y-auto hide-scrollbar animate-in fade-in slide-in-from-top-4 duration-500 shadow-xl ${isDark ? 'bg-[#0a0c10] border-blue-500/20' : 'bg-white border-blue-200 shadow-sm'} ${isInternalPopupActive ? 'brightness-[0.4] opacity-50 pointer-events-none' : ''}`}>
+                  <div className={`flex-1 border rounded-[2.5rem] p-6 flex flex-col gap-8 overflow-y-auto hide-scrollbar animate-in fade-in slide-in-from-top-4 duration-500 shadow-2xl ${isDark ? 'bg-[#0a0c10] border-white/5' : 'bg-white border-blue-200 shadow-sm'} ${isInternalPopupActive ? 'brightness-[0.4] opacity-50 pointer-events-none' : ''}`}>
+                    
+                    {/* IQ Header */}
                     <div className="flex items-center justify-between w-full flex-none">
-                      <div className="flex items-center gap-2">
-                        <div className={`flex items-center justify-center p-1 rounded-lg transition-colors ${aiEnabled && !isAIActive && !isAIFailed ? 'bg-blue-600/20 text-blue-500' : 'bg-blue-600/10 text-blue-500'}`}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-blue-600/10 text-blue-500">
                           <span className="text-[16px] font-black italic">IQ</span>
                         </div>
-                        <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${aiEnabled && !isAIActive && !isAIFailed ? 'text-blue-600 animate-pulse' : 'text-blue-600'}`}>
-                          {aiEnabled && !isAIActive && !isAIFailed ? 'Enhancing Analytics...' : 'Tactical Intelligence'}
+                        <span className={`text-[12px] font-black uppercase tracking-[0.25em] ${aiEnabled && !isAIActive && !isAIFailed ? 'text-blue-600 animate-pulse' : 'text-blue-500'}`}>
+                          {aiEnabled && !isAIActive && !isAIFailed ? 'ENHANCING...' : 'TACTICAL ADVICE'}
                         </span>
                       </div>
-                      <button onClick={() => setIsIntelligenceExpanded(false)} className={`p-1.5 rounded-full border transition-all ${isDark ? 'bg-[#1a1d24] border-white/10 text-slate-400 hover:text-white' : 'bg-slate-100 hover:bg-slate-200'}`}><X className="w-4 h-4" /></button>
+                      <button onClick={() => setIsIntelligenceExpanded(false)} className={`p-2 rounded-full transition-all ${isDark ? 'bg-white/5 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}><X className="w-5 h-5" /></button>
                     </div>
 
-                    <div className="flex flex-col gap-6 flex-1 pb-2">
-                      {(shouldShowBlock(0)) && (
-                        <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
-                          <div className="flex items-center gap-1.5"><CloudRain className="w-3.5 h-3.5 text-blue-500" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Conditions</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.surfaceReason, trainingData.condition.surfaceReason || "Normal atmosphere.", 0)}</div>
+                    <div className="flex flex-col gap-8 flex-1">
+                      
+                      {/* Summary Section (Conditions) */}
+                      <div className="flex flex-col gap-2.5 animate-in fade-in duration-300">
+                        <div className="flex items-center gap-2 opacity-50">
+                          <CloudRain className="w-4 h-4 text-blue-500" />
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Conditions</span>
                         </div>
-                      )}
-
-                      {(shouldShowBlock(1)) && (
-                        <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
-                          <div className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-emerald-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Performance</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.performanceAdvice, trainingData.condition.performanceAdvice || "Maintain standard protocols.", 1)}</div>
+                        <div className={`text-[15px] font-bold leading-[1.5] text-left transition-all ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                           {renderAdviceText(trainingData.condition.surfaceReason, trainingData.condition.surfaceReason || "Normal atmospheric conditions for standard training effort.", 0)}
                         </div>
-                      )}
+                      </div>
 
-                      {(shouldShowBlock(2)) && (
-                        <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
-                          <div className="flex items-center gap-1.5"><Compass className="w-3.5 h-3.5 text-blue-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Riding Style</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.ridingStyleAdvice, trainingData.condition.ridingStyleAdvice || "Normal protocols.", 2)}</div>
-                        </div>
-                      )}
+                      {/* 4 Core Intelligence Topics */}
+                      <div className="space-y-6">
+                        
+                        {/* Performance */}
+                        {(typingStep >= 1 || !isAIActive) && (
+                          <div className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-left-2 duration-300">
+                            <div className="flex items-center gap-2 opacity-50">
+                              <Activity className="w-4 h-4 text-emerald-500" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Performance</span>
+                            </div>
+                            <div className={`text-[14px] font-medium leading-[1.5] text-left opacity-90 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                               {renderAdviceText(trainingData.condition.performanceAdvice, "Maintain standard training intensity protocols.", 1)}
+                            </div>
+                          </div>
+                        )}
 
-                      {(shouldShowBlock(3)) && (
-                        <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
-                          <div className="flex items-center gap-1.5"><Bike className="w-3.5 h-3.5 text-blue-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Bike Setup</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.bikeSetupAdvice, trainingData.condition.bikeSetupAdvice || "Check equipment.", 3)}</div>
-                        </div>
-                      )}
+                        {/* Riding Style */}
+                        {(typingStep >= 2 || !isAIActive) && (
+                          <div className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-left-2 duration-300">
+                            <div className="flex items-center gap-2 opacity-50">
+                              <Compass className="w-4 h-4 text-blue-400" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Riding Style</span>
+                            </div>
+                            <div className={`text-[14px] font-medium leading-[1.5] text-left opacity-90 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                               {renderAdviceText(trainingData.condition.ridingStyleAdvice, "Execute standard cornering and braking protocols.", 2)}
+                            </div>
+                          </div>
+                        )}
 
-                      {(shouldShowBlock(4)) && (
-                        <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
-                          <div className="flex items-center gap-1.5"><Shirt className="w-3.5 h-3.5 text-blue-600" /><span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Clothing</span></div>
-                          <div className="text-[13px] font-semibold leading-[1.4] text-left">{renderAdviceText(trainingData.condition.clothingAdvice, trainingData.condition.clothingAdvice || "Standard kit.", 4)}</div>
-                        </div>
-                      )}
+                        {/* Bike Setup */}
+                        {(typingStep >= 3 || !isAIActive) && (
+                          <div className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-left-2 duration-300">
+                            <div className="flex items-center gap-2 opacity-50">
+                              <Bike className="w-4 h-4 text-blue-500" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Bike Setup</span>
+                            </div>
+                            <div className={`text-[14px] font-medium leading-[1.5] text-left opacity-90 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                               {renderAdviceText(trainingData.condition.bikeSetupAdvice, "Maintain base mechanical setup and check lights.", 3)}
+                            </div>
+                          </div>
+                        )}
 
-                      <div className="pt-3 mt-auto border-t border-dashed border-slate-500/20 flex justify-end">
-                        <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest opacity-40 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                        {/* Clothing */}
+                        {(typingStep >= 4 || !isAIActive) && (
+                          <div className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-left-2 duration-300">
+                            <div className="flex items-center gap-2 opacity-50">
+                              <Shirt className="w-4 h-4 text-indigo-400" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Clothing</span>
+                            </div>
+                            <div className={`text-[14px] font-medium leading-[1.5] text-left opacity-90 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                               {renderAdviceText(trainingData.condition.clothingAdvice, "Standard cycling kit for current atmospheric profile.", 4)}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+
+                      {/* Source attribution at the bottom-right */}
+                      <div className="pt-6 mt-auto border-t border-dashed border-white/5 flex justify-end">
+                        <div className={`flex items-center gap-2 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-[0.2em] opacity-40 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                           {isAIActive && !isAIFailed ? <Sparkles className="w-2.5 h-2.5" /> : <Calculator className="w-2.5 h-2.5" />}
-                          <span>Source: {isAIActive && !isAIFailed ? formatModelName(currentLLMModel) : 'Tactical Algorithm'}</span>
+                          <span>SOURCE: {isAIActive && !isAIFailed ? formatModelName(currentLLMModel) : 'COMMUTE IQ CORE'}</span>
                         </div>
                       </div>
                     </div>
