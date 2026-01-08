@@ -529,14 +529,14 @@ export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, cond
       Weather Telemetry: ${JSON.stringify(condition)}
       Equipment Config: ${JSON.stringify(settings.equipment.find(e => e.isSelected))}
       
-      You must return a high-quality JSON object with exactly these fields:
+      CRITICAL INSTRUCTION: You MUST return a high-quality JSON object with exactly these five fields. Do not omit any.
       - 'summary': A technical, professional summary of the training conditions (1-2 sentences).
-      - 'performance': Critical physiological and intensity advice for the specified distance.
-      - 'style': Technical bike handling, aerodynamic positioning, and cornering strategy.
-      - 'setup': Mechanical specificities (tire pressure adjustments, visibility hardware, tool requirements).
-      - 'clothing': Thermal regulation and layering strategy specifically for this weather profile.
+      - 'performance': Specific, high-level physiological and intensity advice for the specified distance (threshold focus, muscular endurance, or recovery).
+      - 'style': Explicit technical bike handling, aerodynamic positioning, and cornering strategy for these specific winds/surfaces.
+      - 'setup': Critical mechanical specificities (exact tire pressure adjustments, visibility hardware needs, tool requirements).
+      - 'clothing': Comprehensive thermal regulation and layering strategy specifically for this humidity, wind chill, and precip profile.
       
-      Maintain an elite, data-driven, and technical tone. Return JSON ONLY.`, 
+      Tone: Elite, data-driven, and technical. Return raw JSON ONLY.`, 
       config: { responseMimeType: "application/json" } 
     });
     return extractJson(response.text);

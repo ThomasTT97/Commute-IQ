@@ -2,9 +2,34 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { registerSW } from 'virtual:pwa-register';
 
-// vite-plugin-pwa handles the service worker registration automatically via 'injectRegister: auto' in vite.config.js
-// We do not need to manually register /sw.js here as it conflicts with the generated worker.
+// Automatically update the service worker when a new one is found.
+// This is critical for iOS home screen PWAs which often get stuck on old versions.
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    // Force a full reload to ensure the new assets from the updated service worker are active
+    if (confirm("A new version is available. Update now?")) {
+      window.location.reload();
+    }
+  },
+  onOfflineReady() {
+    console.log('Commute IQ: System ready for offline operation.');
+  },
+});
+
+// Periodically check for updates every hour
+setInterval(() => {
+  updateSW();
+}, 60 * 60 * 1000);
+
+// Also check for updates when the app becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    updateSW();
+  }
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
