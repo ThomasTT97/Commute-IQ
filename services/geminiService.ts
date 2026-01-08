@@ -2,7 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
-// Fixed: Changed BELGIAN_LOCATIONS to REGIONAL_LOCATIONS to match exported member from locations.ts
 import { BelgianLocation, REGIONAL_LOCATIONS } from "../locations";
 
 export let lastApiErrorMessage: string | null = null;
@@ -12,14 +11,16 @@ export let isAIFallingBack = false;
 export let currentLLMModel: string | null = null;
 export let currentLLMModelPriorityLabel: string | null = null;
 export let remainingLLMAlternativesCount: number | null = null;
+export let alternativeLLMModels: string[] = [];
 export let isUsingFallbackModel = false;
+
+export let activeWeatherProvider: 'Open-Meteo' | 'WeatherAPI' | 'Unknown' = 'Unknown';
 
 const USAGE_CACHE_KEY = 'commute_iq_usage_log';
 
 export const MODEL_CHAIN = [
   "gemini-3-flash-preview",
   "gemini-2.5-flash",          
-  "gemini-flash-latest",                
   "gemini-flash-lite-latest" 
 ];
 
@@ -28,7 +29,7 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=6`;
     const res = await fetch(url, {
-      headers: { 'Accept-Language': 'nl,fr,en' }
+      headers: { 'Accept-Language': 'nl,fr,en', 'User-Agent': 'Commute-IQ-App' }
     });
     if (!res.ok) throw new Error("Maps API unreachable");
     const data = await res.json();
@@ -66,7 +67,6 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
     
     return uniqueLocations;
   } catch (e) {
-    // Fixed: Changed BELGIAN_LOCATIONS to REGIONAL_LOCATIONS
     return REGIONAL_LOCATIONS.filter(l => l.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5);
   }
 };
@@ -74,7 +74,7 @@ export const getDirectLocationSuggestions = async (query: string): Promise<Belgi
 export const reverseGeocodeDirect = async (coords: Coordinates): Promise<string> => {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json&addressdetails=1`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'nl,fr,en' } });
+    const res = await fetch(url, { headers: { 'Accept-Language': 'nl,fr,en', 'User-Agent': 'Commute-IQ-App' } });
     if (!res.ok) throw new Error("Reverse geocode failed");
     const data = await res.json();
     const addr = data.address;
@@ -110,12 +110,61 @@ const recordLlmRequest = () => {
   localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify(log));
 };
 
+export const fetchWeatherAPIFallback = async (coords: Coordinates): Promise<any> => {
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${coords.lat}&lon=${coords.lng}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Commute-IQ-Cycling-App github.com/user/commute-iq' }
+  });
+  if (!res.ok) throw new Error("Fallback Weather API failed");
+  const data = await res.json();
+  
+  const hourly: any = {
+    time: [],
+    temperature_2m: [],
+    precipitation: [],
+    weather_code: [],
+    wind_speed_10m: [],
+    wind_direction_10m: [],
+    relative_humidity_2m: [],
+    apparent_temperature: []
+  };
+
+  data.properties.timeseries.forEach((ts: any) => {
+    const details = ts.data.instant.details;
+    const next1 = ts.data.next_1_hours?.details || ts.data.next_6_hours?.details || {};
+    hourly.time.push(ts.time);
+    hourly.temperature_2m.push(details.air_temperature);
+    hourly.apparent_temperature.push(details.air_temperature);
+    hourly.precipitation.push(next1.precipitation_amount || 0);
+    hourly.wind_speed_10m.push((details.wind_speed || 0) * 3.6);
+    hourly.wind_direction_10m.push(details.wind_from_direction);
+    hourly.relative_humidity_2m.push(details.relative_humidity);
+    hourly.weather_code.push(0);
+  });
+
+  return { hourly, daily: { sunrise: ["07:00"], sunset: ["20:00"] }, fallbackUsed: true };
+};
+
 export const fetchRawWeatherData = async (coords: Coordinates): Promise<any> => {
   if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') throw new Error("Invalid coordinates");
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Weather telemetry failed");
-  return res.json();
+  
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&hourly=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=14`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Primary weather telemetry failed");
+    activeWeatherProvider = 'Open-Meteo';
+    return res.json();
+  } catch (e) {
+    console.warn("Primary weather provider failed, trying fallback Met.no");
+    try {
+      const fallbackData = await fetchWeatherAPIFallback(coords);
+      activeWeatherProvider = 'WeatherAPI';
+      return fallbackData;
+    } catch (fallbackError) {
+      activeWeatherProvider = 'Unknown';
+      throw new Error("All weather telemetry providers failed");
+    }
+  }
 };
 
 export const sliceWeatherData = (hourly: any, window: [string, string], offset: number): any => {
@@ -216,6 +265,8 @@ const callWithRetry = async <T>(fn: (aiInstance: GoogleGenAI, modelName: string)
       const res = await fn(ai, MODEL_CHAIN[i]);
       currentLLMModel = MODEL_CHAIN[i];
       isUsingFallbackModel = i > 0;
+      remainingLLMAlternativesCount = MODEL_CHAIN.length - 1 - i;
+      alternativeLLMModels = MODEL_CHAIN.slice(i + 1);
       recordLlmRequest();
       return { data: res, model: MODEL_CHAIN[i] };
     } catch (e) { if (i === MODEL_CHAIN.length - 1) throw e; }
@@ -224,7 +275,12 @@ const callWithRetry = async <T>(fn: (aiInstance: GoogleGenAI, modelName: string)
 };
 
 export const checkLLMConnectivity = async (): Promise<boolean> => {
-  try { await callWithRetry(async (ai, model) => ai.models.generateContent({ model, contents: "Hi", config: { maxOutputTokens: 5 } })); return true; } catch (e) { return false; }
+  try { 
+    await callWithRetry(async (ai, model) => ai.models.generateContent({ model, contents: "Hi", config: { maxOutputTokens: 5 } })); 
+    return true; 
+  } catch (e) { 
+    return false; 
+  }
 };
 
 export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
@@ -292,8 +348,6 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
       if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2) });
       else items.push({ label: "Weather Surplus", val: Math.round(temp - 15) });
     }
-    
-    // Sleep hours deduction: 23:00 to 05:00
     if (startHour !== undefined) {
       if (startHour >= 23 || startHour < 5) {
         items.push({ label: "Sleep hours", val: -20 });
@@ -418,20 +472,16 @@ export const getTelemetryBatch = async (settings: CommuteSettings, offsets: numb
   if (!settings.homeCoords || !settings.workCoords) return {};
   const [homeRaw, workRaw] = await Promise.all([fetchRawWeatherData(settings.homeCoords), fetchRawWeatherData(settings.workCoords)]);
   const batch: Record<number, any> = {};
-
-  // Fix: Defined avgTemp for historical fallback calculation on lines 412 and 416
   const avgTemp = 15;
 
   for (const offset of offsets) {
     const dayStartIdx = (offset + 1) * 24;
     const sunTimesM = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const mIdx = dayStartIdx + parseInt(settings.morningWindow[0].split(':')[0]);
-    // Fix: Using defined avgTemp variable
     const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...(homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx) || [avgTemp])), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
     
     const sunTimesE = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const eIdx = dayStartIdx + parseInt(settings.eveningWindow[0].split(':')[0]);
-    // Fix: Using defined avgTemp variable
     const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...(workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx) || [avgTemp])), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
 
     batch[offset] = {

@@ -106,9 +106,11 @@ export interface WeatherCondition {
 
 export interface ConnectionStatusState {
   'Open-Meteo': 'checking' | 'ok' | 'fail' | 'fallback';
+  'Fallback Weather': 'checking' | 'ok' | 'fail' | 'disabled';
   'Gemini LLM': 'checking' | 'ok' | 'fail' | 'fallback';
   'Google Maps': 'checking' | 'ok' | 'fail' | 'fallback';
   llmDetails: { model: string | null; priority: string | null; alternatives: number | null };
+  activeWeatherProvider: 'Open-Meteo' | 'WeatherAPI' | 'Unknown';
   lastWeatherUpdate?: number;
   errorMessage?: string;
 }

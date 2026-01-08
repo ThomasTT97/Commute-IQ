@@ -6,7 +6,6 @@ import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAI
 import { REGIONAL_LOCATIONS } from './locations';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
-import { TrainingWeeklyForecast } from './components/TrainingWeeklyForecast';
 import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
 import { InfoModal } from './components/modals/InfoModal';
@@ -21,6 +20,7 @@ import {
   getTrainingSessionAIAdvice,
   getCommuteRoadDistance, 
   fetchRawWeatherData, 
+  fetchWeatherAPIFallback,
   aggregateRawWeather, 
   calculateBearing,
   calculateDistance,
@@ -34,7 +34,8 @@ import {
   currentLLMModelPriorityLabel, 
   remainingLLMAlternativesCount,
   lastApiErrorMessage,
-  getNearbyCyclingHubs
+  getNearbyCyclingHubs,
+  activeWeatherProvider
 } from './services/geminiService';
 
 const App: React.FC = () => {
@@ -65,7 +66,6 @@ const App: React.FC = () => {
   });
   
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'training' | 'training-weekly'>(() => {
-    // Check for URL parameter 'mode' to support PWA shortcuts
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
     if (mode === 'training') return 'training';
@@ -85,16 +85,35 @@ const App: React.FC = () => {
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatusState>({
     'Open-Meteo': 'checking',
+    'Fallback Weather': 'checking',
     'Gemini LLM': 'checking',
     'Google Maps': 'checking',
     llmDetails: { model: null, priority: null, alternatives: null },
+    activeWeatherProvider: 'Unknown',
     lastWeatherUpdate: lastUpdateFromCache
   });
 
   const checkConnections = useCallback(async () => {
-    setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'checking', 'Gemini LLM': 'checking', 'Google Maps': 'checking' }));
-    try { await fetchRawWeatherData({ lat: 51.0, lng: 3.7 }); setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'ok' })); } catch (e) { setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'fail' })); }
+    setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'checking', 'Fallback Weather': 'checking', 'Gemini LLM': 'checking', 'Google Maps': 'checking' }));
+    
+    // Primary Weather
+    try { 
+      await fetchRawWeatherData({ lat: 51.0, lng: 3.7 }); 
+      setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'ok', activeWeatherProvider: 'Open-Meteo' })); 
+    } catch (e) { 
+      setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'fail' })); 
+    }
+    
+    // Fallback Weather
+    try { 
+      await fetchWeatherAPIFallback({ lat: 51.0, lng: 3.7 }); 
+      setConnectionStatus(prev => ({ ...prev, 'Fallback Weather': 'ok' })); 
+    } catch (e) { 
+      setConnectionStatus(prev => ({ ...prev, 'Fallback Weather': 'fail' })); 
+    }
+
     try { await getDirectLocationSuggestions("Gent"); setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'ok' })); } catch (e) { setConnectionStatus(prev => ({ ...prev, 'Google Maps': 'fail' })); }
+    
     try {
       const isConnected = await checkLLMConnectivity();
       let llmStatus: 'ok' | 'fallback' | 'fail' = (isConnected && !isAIFallingBack) ? (isUsingFallbackModel ? 'fallback' : 'ok') : 'fail';
@@ -102,6 +121,7 @@ const App: React.FC = () => {
         ...prev, 
         'Gemini LLM': llmStatus, 
         llmDetails: { model: currentLLMModel, priority: currentLLMModelPriorityLabel, alternatives: remainingLLMAlternativesCount },
+        activeWeatherProvider: activeWeatherProvider,
         errorMessage: lastApiErrorMessage || undefined
       }));
     } catch (e) { setConnectionStatus(prev => ({ ...prev, 'Gemini LLM': 'fail' })); }
@@ -112,7 +132,7 @@ const App: React.FC = () => {
   const getTarget = useCallback((timeStr: string, addDays = 0) => {
     const [h, m] = timeStr.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + addDays); return d;
-  }, [settings.morningWindow, settings.eveningWindow]);
+  }, []);
 
   const nextCommuteInfo = useMemo(() => {
     const now = new Date();
@@ -131,7 +151,6 @@ const App: React.FC = () => {
     if (viewMode === 'daily') {
       let targetIndex = 0;
       if (selectedDateOffset === 0) {
-         // If selecting today, check if morning commute is over
          const now = new Date();
          const [h, m] = settings.morningWindow[1].split(':').map(Number);
          const morningEnd = new Date();
@@ -267,7 +286,6 @@ const App: React.FC = () => {
               }
             }
             if (!lFinalCondition) return null;
-            // Use lFinalCondition.score (max 100) for display, but lBestWeightedScore for sorting
             return { 
               ...loc, 
               score: lFinalCondition.score, 
@@ -313,7 +331,6 @@ const App: React.FC = () => {
   }, [settings.roadDistance, settings.homeCoords, settings.workCoords]);
 
   const commuteSequence = useMemo(() => {
-    // Show Morning and Evening for the selected day regardless of current time
     return {
       primary: { type: 'morning' as const, offset: selectedDateOffset },
       secondary: { type: 'evening' as const, offset: selectedDateOffset }
@@ -345,7 +362,7 @@ const App: React.FC = () => {
         localStorage.setItem(CACHE_KEY, JSON.stringify(next));
         return next;
       });
-      setConnectionStatus(prev => ({ ...prev, lastWeatherUpdate: updateTime }));
+      setConnectionStatus(prev => ({ ...prev, lastWeatherUpdate: updateTime, activeWeatherProvider: activeWeatherProvider }));
       setLoadingOffsets([]);
       
       if (!currentSettings.disableAI) {
@@ -438,8 +455,6 @@ const App: React.FC = () => {
         .slice(0, 5);
 
       setTrainingSlots(slots.map(s => s.startHour === activeHour ? { ...s, optimizationAdvice: optAdvice } : s));
-      
-      // Optimization: Turn off loading state here to show weather data immediately
       setTrainingLoading(false);
 
       if (!settings.disableAI) {
