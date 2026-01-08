@@ -13,9 +13,16 @@ export default defineConfig(({ mode }) => {
       const logoPath = path.resolve(process.cwd(), 'logo.png');
       if (fs.existsSync(logoPath)) {
         const source = fs.readFileSync(logoPath);
+        // Emit as logo.png (used by manifest and HTML)
         this.emitFile({
           type: 'asset',
-          fileName: 'icon.png',
+          fileName: 'logo.png',
+          source: source
+        });
+        // Also emit as apple-touch-icon.png (standard iOS fallback)
+        this.emitFile({
+          type: 'asset',
+          fileName: 'apple-touch-icon.png',
           source: source
         });
       }
@@ -32,7 +39,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['icon.png'],
+        includeAssets: ['logo.png', 'apple-touch-icon.png'],
         manifestFilename: 'manifest.json',
         workbox: {
           cleanupOutdatedCaches: true,
@@ -65,25 +72,25 @@ export default defineConfig(({ mode }) => {
           categories: ["navigation", "health", "fitness", "lifestyle"],
           scope: "/",
           start_url: "/",
-          id: "commute-iq-pwa-stable-v1", // Stable ID is crucial for reliable updates
+          id: "commute-iq-pwa-stable-v2",
           launch_handler: {
             client_mode: "navigate-existing"
           },
           icons: [
             {
-              "src": "/icon.png",
+              "src": "/logo.png",
               "sizes": "192x192",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/icon.png",
+              "src": "/logo.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "any"
             },
             {
-              "src": "/icon.png",
+              "src": "/logo.png",
               "sizes": "512x512",
               "type": "image/png",
               "purpose": "maskable"
