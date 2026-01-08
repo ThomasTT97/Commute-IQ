@@ -258,8 +258,11 @@ const App: React.FC = () => {
         const batch = shuffleArray(activePool).slice(0, poolSize);
         const batchResults = await Promise.all(batch.map(async (loc) => {
           try {
-            const dFromCenter = calculateDistance(baseCoords, loc);
-            if (dFromCenter < 10 || dFromCenter > 400) return null;
+            const straightDist = calculateDistance(baseCoords, loc);
+            // APPLY ROAD DISTANCE CORRECTION
+            const roadDistFromCenter = straightDist * ROAD_DETOUR_FACTOR;
+            
+            if (roadDistFromCenter < 10 || roadDistFromCenter > 400) return null;
             const lRaw = await fetchRawWeatherData(loc);
             const lDayIdx = (dateOffset + 1) * 24;
             const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
@@ -291,7 +294,7 @@ const App: React.FC = () => {
               score: lFinalCondition.score, 
               sortScore: lBestWeightedScore, 
               bestHour: lBestHour, 
-              distanceFromTrainingCenter: dFromCenter 
+              distanceFromTrainingCenter: roadDistFromCenter 
             };
           } catch (e) { return null; }
         }));
@@ -327,6 +330,7 @@ const App: React.FC = () => {
 
   const displayedDistance = useMemo(() => {
     if (settings.roadDistance) return settings.roadDistance;
+    // Commute distance also correctly applies ROAD_DETOUR_FACTOR
     return calculateDistance(settings.homeCoords, settings.workCoords) * ROAD_DETOUR_FACTOR;
   }, [settings.roadDistance, settings.homeCoords, settings.workCoords]);
 
@@ -433,19 +437,25 @@ const App: React.FC = () => {
       const targetHour = slots.reduce((p, c) => (c.effectiveScore > p.effectiveScore ? c : p), slots[0]).startHour;
       if (manualStartHour === null) setManualStartHour(targetHour);
       const activeHour = manualStartHour !== null ? manualStartHour : targetHour;
-      const targetDist = training.distance * 0.4;
+      
+      // Calculate turnaround distance (road distance)
+      // If user wants a 50km training ride, they go 25km road distance out.
+      const roadTargetRideOut = training.distance / 2;
       const windDir = slots.find(s => s.startHour === activeHour)?.condition?.windDirection || 0;
       
       const uniqueNames = new Set<string>();
       const optAdvice = REGIONAL_LOCATIONS
-        .map(loc => ({ ...loc, distFromCenter: calculateDistance(training.coords, loc) }))
-        .filter(loc => loc.distFromCenter > targetDist * 0.8 && loc.distFromCenter < targetDist * 1.2)
+        .map(loc => {
+          const straightDist = calculateDistance(training.coords, loc);
+          return { ...loc, roadDistFromCenter: straightDist * ROAD_DETOUR_FACTOR };
+        })
+        .filter(loc => loc.roadDistFromCenter > roadTargetRideOut * 0.8 && loc.roadDistFromCenter < roadTargetRideOut * 1.2)
         .filter(loc => {
           const bearing = calculateBearing(training.coords, loc);
           const diff = Math.abs(bearing - windDir);
           return diff < 30 || diff > 330; 
         })
-        .sort((a, b) => Math.abs(a.distFromCenter - targetDist) - Math.abs(b.distFromCenter - targetDist))
+        .sort((a, b) => Math.abs(a.roadDistFromCenter - roadTargetRideOut) - Math.abs(b.roadDistFromCenter - roadTargetRideOut))
         .filter(loc => {
           const normalized = loc.name.trim().toUpperCase();
           if (uniqueNames.has(normalized)) return false;

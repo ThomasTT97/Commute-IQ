@@ -190,7 +190,7 @@ const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): st
   pressure -= (surfacePreference / 100) * 1.4;
   pressure = Math.max(1.5, Math.min(8.5, pressure));
   if (w.isSnowy || w.iceRisk) pressure -= 0.6;
-  else if ((w.precipitation > 0) || (w.wetSurfaceChance > 50)) pressure -= 0.3;
+  else if ((w.precipitation > 0) || (w.wetSurfaceChance > 30)) pressure -= 0.3;
   return `${Math.max(1.2, pressure).toFixed(1)} Bar`;
 };
 
@@ -323,29 +323,39 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
   const items: ScoreDeduction[] = [];
   if (w.isSnowy) items.push({ label: "Active Snowfall", val: -60 });
   if (w.iceRisk) items.push({ label: "Critical Ice Risk", val: -70 });
-  if (!w.isSnowy && (w.precipitation || 0) > 0) {
-    const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 4);
-    items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
-  } else if (!w.isSnowy && (w.wetSurfaceChance || 0) > 50) {
-    items.push({ label: "Wet Roads", val: -10 });
+  
+  // Consistency Alignment: Using 80% as "Wet" threshold to match UI labeling
+  if (!w.isSnowy) {
+    if ((w.precipitation || 0) > 0) {
+      const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 5);
+      items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
+    } else if ((w.wetSurfaceChance || 0) > 80) {
+      items.push({ label: "Wet Roads", val: -10 });
+    } else if ((w.wetSurfaceChance || 0) >= 30) {
+      items.push({ label: "Damp Surface", val: -5 });
+    }
   }
-  if ((w.windSpeed || 0) > 15) {
-    const windDeduction = ((w.windSpeed || 0) - 15) * 1.5;
+
+  // Linearized Wind Intensity
+  if ((w.windSpeed || 0) > 12) {
+    const windDeduction = ((w.windSpeed || 0) - 12) * 1.65;
     items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
   }
+
   if (!isTraining) {
     if ((w.headwindImpact || 0) > 20) {
-      const headwindDeduction = (w.headwindImpact || 0) / 4;
+      const headwindDeduction = (w.headwindImpact || 0) / 4.5;
       items.push({ label: "Headwind Drag", val: -Math.round(headwindDeduction) });
-    } else if ((w.headwindImpact || 0) < -20) {
+    } else if ((w.headwindImpact || 0) < -30) {
       items.push({ label: "Tailwind Boost", val: 5 });
     }
   }
+
   const temp = w.temp || 0;
   if (isTraining) {
-    if (temp < 10) items.push({ label: "Cold Exposure", val: -Math.round((10 - temp) * 2) });
+    if (temp < 10) items.push({ label: "Cold Exposure", val: -Math.round((10 - temp) * 2.5) });
     else if (temp > 15) {
-      if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2) });
+      if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2.5) });
       else items.push({ label: "Weather Surplus", val: Math.round(temp - 15) });
     }
     if (startHour !== undefined) {
@@ -354,8 +364,8 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
       }
     }
   } else {
-    if (temp < 5) items.push({ label: "Cold Exposure", val: -Math.round((5 - temp) * 2) });
-    else if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2) });
+    if (temp < 5) items.push({ label: "Cold Exposure", val: -Math.round((5 - temp) * 2.5) });
+    else if (temp > 28) items.push({ label: "Heat Stress", val: -Math.round((temp - 28) * 2.5) });
   }
   if (w.isDark) items.push({ label: "Darkness / Visibility", val: -10 });
   return items;
@@ -403,11 +413,14 @@ export const aggregateRawWeather = (
     isDark = startH < 6 || startH >= 21; 
   }
 
+  // TRACTION RECOVERY MODEL: Find exact termination of last rain event
+  let lastPrecipIdx = -1;
   let lastPrecipTime = "None";
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
-    for (let i = 1; i <= 12; i++) {
+    for (let i = 1; i <= 24; i++) {
       const idx = sessionStartAbsoluteIdx - i;
-      if (idx >= 0 && fullRawHourlyPrecip[idx] > 0) {
+      if (idx >= 0 && fullRawHourlyPrecip[idx] > 0.1) {
+        lastPrecipIdx = idx;
         const hour = idx % 24;
         lastPrecipTime = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
         break;
@@ -416,28 +429,52 @@ export const aggregateRawWeather = (
   }
 
   let estimatedDryTime: number | undefined;
-  if ((totalPrecip > 0 || lastPrecipTime !== "None") && fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
-    let stopIdx = -1;
-    for (let i = 0; i < 48; i++) {
-      const idx = sessionStartAbsoluteIdx + i;
-      if (idx >= fullRawHourlyPrecip.length) break;
-      if (fullRawHourlyPrecip.slice(idx, idx + 3).every(v => v === 0)) { stopIdx = idx; break; }
-    }
-    if (stopIdx !== -1) {
-      let evap = 2;
-      if ((fullRawHourlyHumidity?.[stopIdx] ?? avgHum) > 85) evap += 6;
-      else if ((fullRawHourlyHumidity?.[stopIdx] ?? avgHum) > 70) evap += 3;
-      if ((fullRawHourlyTemp?.[stopIdx] ?? avgTemp) < 5) evap += 4;
-      const startDate = new Date(); startDate.setDate(startDate.getDate() - 1); startDate.setHours(0, 0, 0, 0);
-      estimatedDryTime = startDate.getTime() + (stopIdx + evap) * 3600000;
+  let wetSurfaceChance = 10;
+
+  if (totalPrecip > 0.1) {
+    wetSurfaceChance = 95;
+  } else if (lastPrecipIdx !== -1) {
+    const lastRainTemp = fullRawHourlyTemp?.[lastPrecipIdx] ?? avgTemp;
+    const lastRainHum = fullRawHourlyHumidity?.[lastPrecipIdx] ?? avgHum;
+    
+    // Wind-Aware Evaporation Decay
+    let evapDelayHours = 2.0; 
+    if (lastRainHum > 85) evapDelayHours += 6.0;
+    else if (lastRainHum > 70) evapDelayHours += 3.0;
+    if (lastRainTemp < 5) evapDelayHours += 4.5;
+    else if (lastRainTemp < 12) evapDelayHours += 2.5;
+
+    // Wind Impact (faster drying)
+    const windEffect = 1 + (maxWind / 25);
+    evapDelayHours /= windEffect;
+
+    // Daylight Impact
+    if (!isDark) evapDelayHours *= 0.65;
+
+    const startDate = new Date(); 
+    startDate.setDate(startDate.getDate() - 1); 
+    startDate.setHours(0, 0, 0, 0);
+    estimatedDryTime = startDate.getTime() + (lastPrecipIdx + 1 + evapDelayHours) * 3600000;
+
+    const nowMs = startDate.getTime() + (sessionStartAbsoluteIdx || 0) * 3600000;
+    const remainingDryingTimeMs = estimatedDryTime - nowMs;
+
+    if (remainingDryingTimeMs > 0) {
+      const hoursRemaining = remainingDryingTimeMs / 3600000;
+      if (hoursRemaining < 0.75) wetSurfaceChance = 35;
+      else if (hoursRemaining < 2.5) wetSurfaceChance = 65;
+      else wetSurfaceChance = 85;
     }
   }
 
-  const sessionStartAbsoluteMs = new Date().setHours(0,0,0,0) - 86400000 + (sessionStartAbsoluteIdx || 0) * 3600000;
-  const isWet = (totalPrecip > 0 || lastPrecipTime !== "None") && (totalPrecip > 0 || (estimatedDryTime ? estimatedDryTime > sessionStartAbsoluteMs : false));
-  const activeFreezing = minTemp <= 0.5; 
+  // Freezing History & Frost Logic
+  const isWet = wetSurfaceChance >= 30;
+  const activeFreezing = minTemp <= 0.6; 
   const overnightFreeze = minPastTemp <= 0;
-  const iceRisk = (isWet || avgHum > (overnightFreeze ? 60 : 75) || isSnowy) && (activeFreezing || (overnightFreeze && minTemp <= 3.5));
+  
+  // Frost forms more aggressively at high humidity even without active freezing
+  const humidityRisk = avgHum > (overnightFreeze ? 55 : 78);
+  const iceRisk = (isWet || humidityRisk || isSnowy) && (activeFreezing || (overnightFreeze && minTemp <= 3.8));
 
   const startHour = parseInt(timeWindow[0].split(':')[0]);
 
@@ -447,7 +484,7 @@ export const aggregateRawWeather = (
     condition: isSnowy ? 'Snowy' : (totalPrecip > 0.5 ? 'Rainy' : (maxWind > 35 ? 'Windy' : (maxCode <= 1 ? 'Sunny' : 'Cloudy'))),
     isSnowy, precipitation: parseFloat(totalPrecip.toFixed(1)),
     windSpeed: parseFloat(maxWind.toFixed(1)), windDirection: Math.round(avgDir), humidity: Math.round(avgHum),
-    isDark, wetSurfaceChance: isWet ? 90 : 10, headwindImpact, iceRisk, 
+    isDark, wetSurfaceChance, headwindImpact, iceRisk, 
     activeFreezing, overnightFreeze, minPastTemp: minPastTemp === 99 ? avgTemp : parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime, estimatedDryTime,
     precipDuringSession: parseFloat(totalPrecip.toFixed(1)), sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
@@ -487,7 +524,7 @@ export const getTelemetryBatch = async (settings: CommuteSettings, offsets: numb
     batch[offset] = {
       weather: { morning: mWeather, evening: eWeather }, lastUpdated: Date.now(),
       score: Math.min(mWeather.score, eWeather.score),
-      summary: { isWet: mWeather.wetSurfaceChance > 50 || eWeather.wetSurfaceChance > 50, isSnowy: mWeather.isSnowy || eWeather.isSnowy, isIcy: mWeather.iceRisk || eWeather.iceRisk }
+      summary: { isWet: mWeather.wetSurfaceChance >= 30 || eWeather.wetSurfaceChance >= 30, isSnowy: mWeather.isSnowy || eWeather.isSnowy, isIcy: mWeather.iceRisk || eWeather.iceRisk }
     };
   }
   return batch;
