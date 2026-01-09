@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LocationSuggestion, WeatherCondition, SearchCriteria } from '../types';
@@ -183,7 +182,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     return { label: 'SIDEWIND', color: 'text-blue-500', icon: <ArrowLeftRight className="w-5.5 h-5.5" /> };
   }, [condition?.headwindImpact, condition?.windSpeed, showRawWind]);
 
-  // Unified Surface status logic with consistent thresholds
   const surface = useMemo(() => {
     if (condition?.isSnowy) return { label: 'SNOW', color: 'text-indigo-400', icon: <Snowflake className="w-5.5 h-5.5" /> };
     const chance = condition?.wetSurfaceChance ?? 0;
@@ -202,20 +200,28 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const iceRiskReason = useMemo(() => {
     if (!condition) return "";
     if (condition.iceRisk) {
-      if (condition.activeFreezing) {
-        const temp = Math.round(condition.temp);
-        if (temp > 0) return `Caution: Temperatures touched the freezing boundary (0.5°C). At ${temp}°C, invisible black ice remains a high probability.`;
-        return `Critical: Surface moisture has frozen solid. Air temperatures reached ${temp}°C, creating treacherous conditions.`;
+      if (condition.isSnowy) {
+        return "Critical: Snow accumulation detected. Surface friction is non-existent. Stay upright and minimize lean angle.";
       }
-      if (condition.overnightFreeze) {
-        return "Caution: Recent sub-zero temperatures. Due to thermal inertia, damp patches may remain frozen despite current air temp.";
+      const isWet = (condition.wetSurfaceChance ?? 0) >= 30;
+      if (isWet) {
+        if (condition.activeFreezing) {
+          return `Active Freezing: Air temp is ${Math.round(condition.temp)}°C. Wet roads are likely turning to black ice as ground temp is often 2-3 degrees lower.`;
+        }
+        if (condition.overnightFreeze) {
+          return `Thermal Inertia: Sub-zero temps overnight. Shaded patches will remain frozen well into the day despite rising air temperatures.`;
+        }
+      } else {
+        return `Hoar Frost: High humidity (${condition.humidity}%) meeting freezing air. Moisture is crystallizing directly onto dry roads. Corners will be greasy.`;
       }
-      return "Surface Alert: High moisture and near-freezing temperatures detected. Roads likely slippery with frost.";
+      return "Safety Alert: Atmospheric profile suggests high probability of surface icing. Execute defensive handling.";
     } else {
-      const isCurrentlyFreezing = condition.temp <= 0.5;
-      const wasFreezingRecently = condition.minPastTemp !== undefined && condition.minPastTemp <= 0;
-      if (isCurrentlyFreezing || wasFreezingRecently) return "Safe (Dry Cold): Below freezing, but critically low humidity inhibits frost formation.";
-      return "Safe: Temperatures remained consistently above the freezing threshold.";
+      const isCurrentlyCold = condition.temp <= 2.5;
+      const wasFreezingRecently = condition.minPastTemp !== undefined && condition.minPastTemp <= 0.5;
+      if (isCurrentlyCold || wasFreezingRecently) {
+        return "Dry Cold: Conditions are near zero, but critically low humidity inhibits frost formation and roads are bone dry.";
+      }
+      return "Safe: Surface and air temperatures remain comfortably above the freezing boundary.";
     }
   }, [condition]);
 

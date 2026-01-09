@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -468,11 +467,22 @@ export const aggregateRawWeather = (
   }
 
   const isWet = wetSurfaceChance >= 30;
-  const activeFreezing = minTemp <= 0.6; 
-  const overnightFreeze = minPastTemp <= 0;
   
-  const humidityRisk = avgHum > (overnightFreeze ? 55 : 78);
-  const iceRisk = (isWet || humidityRisk || isSnowy) && (activeFreezing || (overnightFreeze && minTemp <= 3.8));
+  // REFINED ICE LOGIC: Prevents false positives by ensuring a moisture trigger exists 
+  // for frost or residual ice.
+  const activeFreezing = minTemp <= 1.5; // Threshold for ground radiation cooling
+  const overnightFreeze = minPastTemp <= 0.5;
+  const residualCold = minTemp <= 3.8; // Belgian shadow-ice buffer
+
+  let iceRisk = false;
+  if (isSnowy || isWet) {
+    // If roads have liquid/solid water, any near-freezing or residual cold is critical.
+    iceRisk = activeFreezing || (overnightFreeze && residualCold);
+  } else {
+    // Dry roads: Risk is ONLY from Hoar Frost (high humidity + freezing air).
+    // Standard meteorological frost threshold is >80% RH.
+    iceRisk = avgHum > 80 && activeFreezing;
+  }
 
   const startHour = parseInt(timeWindow[0].split(':')[0]);
 
