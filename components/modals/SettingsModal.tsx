@@ -1,10 +1,10 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommuteSettings, FitnessGoal } from '../../types';
 import { EquipmentManager } from '../EquipmentManager';
-// Fixed: Removed BELGIAN_LOCATIONS as it is not exported from locations.ts
 import { BelgianLocation } from '../../locations';
 import { getDirectLocationSuggestions } from '../../services/geminiService';
-import { filterLocationsWithGlobal } from '../../utils/helpers';
+import { CACHE_KEY } from '../../constants';
 import { 
   X, 
   Sun, 
@@ -27,7 +27,9 @@ import {
   Briefcase,
   ArrowLeft,
   Gauge,
-  CalendarDays
+  CalendarDays,
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -135,6 +137,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsSaving(true);
     await onSave(editSettings);
     if (isOpen) setIsSaving(false);
+  };
+
+  const handleResetApp = () => {
+    const confirmed = window.confirm("Reset Application? This will clear all saved locations, equipment, and cache. You will return to a clean factory state.");
+    if (confirmed) {
+      localStorage.removeItem('velo_settings');
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem('commute_iq_usage_log');
+      window.location.href = '/'; 
+      window.location.reload();
+    }
   };
 
   const toggleWorkDay = (day: number) => {
@@ -413,7 +426,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  </button>
                </div>
                
-               <div className="flex flex-col gap-2 mt-1 pb-4">
+               <div className="flex flex-col gap-2 mt-1">
                  <button onClick={() => setCurrentView('personal')} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' : 'bg-orange-50 border-orange-200 text-orange-600'}`}>
                    <User className="w-4 h-4" />
                    <span className="text-[10px] font-black uppercase tracking-widest">Personal Settings</span>
@@ -422,6 +435,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                    <Activity className="w-4 h-4 text-blue-500" />
                    <span className="text-[10px] font-black uppercase tracking-widest">Connectivity Hub</span>
                  </button>
+               </div>
+
+               <div className="flex flex-col gap-1.5 mt-4 pt-4 border-t border-dashed border-slate-500/20">
+                 <label className="text-[9px] font-black uppercase text-red-500 tracking-widest ml-1">Danger Zone</label>
+                 <button onClick={handleResetApp} className={`w-full py-3.5 rounded-xl border flex items-center justify-center gap-3 px-3.5 transition-all active:scale-[0.98] ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-red-50 border-red-200 text-red-600'}`}>
+                   <RotateCcw className="w-4 h-4" />
+                   <span className="text-[10px] font-black uppercase tracking-[0.2em]">Reset Application</span>
+                 </button>
+                 <p className="text-[8px] text-center font-bold text-slate-500 uppercase tracking-widest mt-1">Clears all locations, equipment, and cached pulse data.</p>
                </div>
              </div>
            )}
