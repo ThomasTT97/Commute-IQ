@@ -34,7 +34,10 @@ import {
   Search,
   Loader2,
   Activity,
-  Compass
+  Compass,
+  Sun,
+  Cloud,
+  CloudLightning
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -75,6 +78,19 @@ const formatTime = (isoString?: string): string => {
   if (!isoString) return "--:--";
   const timePart = isoString.includes('T') ? isoString.split('T')[1] : isoString;
   return timePart.substring(0, 5);
+};
+
+const getWeatherIcon = (cond: string, isDark: boolean, sizeClasses: string = "w-8 h-8") => {
+  if (isDark && (cond === 'Sunny' || cond === 'Cloudy')) return <Moon className={`${sizeClasses} text-indigo-400`} />;
+  switch (cond) {
+    case 'Sunny': return <Sun className={`${sizeClasses} text-yellow-500`} />;
+    case 'Rainy': return <CloudRain className={`${sizeClasses} text-blue-500`} />;
+    case 'Cloudy': return <Cloud className={`${sizeClasses} text-slate-400`} />;
+    case 'Windy': return <Wind className={`${sizeClasses} text-slate-400`} />;
+    case 'Stormy': return <CloudLightning className={`${sizeClasses} text-purple-500`} />;
+    case 'Snowy': return <Snowflake className={`${sizeClasses} text-blue-200`} />;
+    default: return <Cloud className={`${sizeClasses} text-slate-400`} />;
+  }
 };
 
 const Modal = ({ children, onClose, isDark, size = 'md' }: { children?: React.ReactNode, onClose: () => void, isDark: boolean, size?: 'md' | 'lg' }) => {
@@ -339,8 +355,11 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <MapPin className="w-2.5 h-2.5 flex-none text-blue-500/50" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2 h-2 opacity-30 flex-none" /><span className="truncate">{endLocation}</span>
           </div>
         </div>
-        <div className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-tight truncate border-t pt-1.5 ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
-          <div className="flex items-center gap-4 sm:gap-6"><span className={`text-xl sm:text-2xl font-black leading-none tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{primaryTemp}°</span></div>
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-2">
+            {getWeatherIcon(condition?.condition || 'Cloudy', !!condition?.isDark, "w-6 h-6")}
+            <div className="flex items-center gap-4 sm:gap-6"><span className={`text-xl sm:text-2xl font-black leading-none tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{primaryTemp}°</span></div>
+          </div>
           <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2.5">
                 <Lightbulb className={`w-4 h-4 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]' : 'text-slate-700 opacity-40'}`} />
@@ -598,9 +617,12 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
       <div className="flex-none flex items-center justify-between mb-3 sm:mb-4">
         <div className="flex flex-col relative">
-          <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-all active:opacity-70 text-left">
-            <span className={`text-4xl sm:text-5xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{primaryTemp}°</span><span className="text-lg font-bold text-slate-500 tracking-tighter ml-1">C</span>
-          </button>
+          <div className="flex items-center gap-4">
+            {getWeatherIcon(condition?.condition || 'Cloudy', !!condition?.isDark, "w-10 h-10")}
+            <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-all active:opacity-70 text-left">
+              <span className={`text-4xl sm:text-5xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{primaryTemp}°</span><span className="text-lg font-bold text-slate-500 tracking-tighter ml-1">C</span>
+            </button>
+          </div>
         </div>
         <div className="relative">
           <button onClick={toggleLights} className={`rounded-[1.25rem] p-2.5 flex items-center gap-3 min-w-[110px] transition-all active:scale-[0.98] ${isDark ? 'bg-[#161920] border border-white/5 hover:bg-[#1c2029]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
