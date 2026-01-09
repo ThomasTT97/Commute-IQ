@@ -324,7 +324,6 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
   if (w.isSnowy) items.push({ label: "Active Snowfall", val: -60 });
   if (w.iceRisk) items.push({ label: "Critical Ice Risk", val: -70 });
   
-  // Consistency Alignment: Using 80% as "Wet" threshold to match UI labeling
   if (!w.isSnowy) {
     if ((w.precipitation || 0) > 0) {
       const precipDeduction = 20 + Math.min(20, (w.precipitation || 0) * 5);
@@ -336,7 +335,6 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
     }
   }
 
-  // Linearized Wind Intensity
   if ((w.windSpeed || 0) > 12) {
     const windDeduction = ((w.windSpeed || 0) - 12) * 1.65;
     items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
@@ -396,6 +394,11 @@ export const aggregateRawWeather = (
   const avgHum = humidities.length ? humidities.reduce((a, b) => a + b, 0) / humidities.length : 50;
   const maxCode = codes.length ? Math.max(...codes) : 0;
 
+  // Commencement Precision for Display
+  const startTemp = temps.length ? temps[0] : avgTemp;
+  const startWindSpeed = winds.length ? winds[0] : maxWind;
+  const startWindDirection = dirs.length ? dirs[0] : avgDir;
+
   const isSnowy = [71, 73, 75, 77, 85, 86].includes(maxCode);
   const headwindImpact = Math.round(calculateAverageWindImpact(heading, dirs));
   const timeWindow = customWindow || (isMorning ? settings.morningWindow : settings.eveningWindow);
@@ -406,6 +409,7 @@ export const aggregateRawWeather = (
     const endMin = getMinutes(timeWindow[1]);
     const sunriseMin = getMinutes(sunTimes.sunrise);
     const sunsetMin = getMinutes(sunTimes.sunset);
+    // Dark if ride starts before sunrise or ends after sunset, or crosses midnight
     if (endMin < startMin) isDark = true;
     else isDark = startMin < sunriseMin || endMin > sunsetMin;
   } else {
@@ -413,7 +417,6 @@ export const aggregateRawWeather = (
     isDark = startH < 6 || startH >= 21; 
   }
 
-  // TRACTION RECOVERY MODEL: Find exact termination of last rain event
   let lastPrecipIdx = -1;
   let lastPrecipTime = "None";
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
@@ -437,18 +440,15 @@ export const aggregateRawWeather = (
     const lastRainTemp = fullRawHourlyTemp?.[lastPrecipIdx] ?? avgTemp;
     const lastRainHum = fullRawHourlyHumidity?.[lastPrecipIdx] ?? avgHum;
     
-    // Wind-Aware Evaporation Decay
     let evapDelayHours = 2.0; 
     if (lastRainHum > 85) evapDelayHours += 6.0;
     else if (lastRainHum > 70) evapDelayHours += 3.0;
     if (lastRainTemp < 5) evapDelayHours += 4.5;
     else if (lastRainTemp < 12) evapDelayHours += 2.5;
 
-    // Wind Impact (faster drying)
     const windEffect = 1 + (maxWind / 25);
     evapDelayHours /= windEffect;
 
-    // Daylight Impact
     if (!isDark) evapDelayHours *= 0.65;
 
     const startDate = new Date(); 
@@ -467,23 +467,29 @@ export const aggregateRawWeather = (
     }
   }
 
-  // Freezing History & Frost Logic
   const isWet = wetSurfaceChance >= 30;
   const activeFreezing = minTemp <= 0.6; 
   const overnightFreeze = minPastTemp <= 0;
   
-  // Frost forms more aggressively at high humidity even without active freezing
   const humidityRisk = avgHum > (overnightFreeze ? 55 : 78);
   const iceRisk = (isWet || humidityRisk || isSnowy) && (activeFreezing || (overnightFreeze && minTemp <= 3.8));
 
   const startHour = parseInt(timeWindow[0].split(':')[0]);
 
   const baseWeather: any = {
-    temp: parseFloat(avgTemp.toFixed(1)), feelsLike: parseFloat(avgApparentTemp.toFixed(1)),
-    minTemp: parseFloat(minTemp.toFixed(1)), maxTemp: parseFloat(maxTemp.toFixed(1)),
+    temp: parseFloat(avgTemp.toFixed(1)), 
+    startTemp: parseFloat(startTemp.toFixed(1)),
+    feelsLike: parseFloat(avgApparentTemp.toFixed(1)),
+    minTemp: parseFloat(minTemp.toFixed(1)), 
+    maxTemp: parseFloat(maxTemp.toFixed(1)),
     condition: isSnowy ? 'Snowy' : (totalPrecip > 0.5 ? 'Rainy' : (maxWind > 35 ? 'Windy' : (maxCode <= 1 ? 'Sunny' : 'Cloudy'))),
-    isSnowy, precipitation: parseFloat(totalPrecip.toFixed(1)),
-    windSpeed: parseFloat(maxWind.toFixed(1)), windDirection: Math.round(avgDir), humidity: Math.round(avgHum),
+    isSnowy, 
+    precipitation: parseFloat(totalPrecip.toFixed(1)),
+    windSpeed: parseFloat(maxWind.toFixed(1)), 
+    startWindSpeed: parseFloat(startWindSpeed.toFixed(1)),
+    windDirection: Math.round(avgDir), 
+    startWindDirection: Math.round(startWindDirection),
+    humidity: Math.round(avgHum),
     isDark, wetSurfaceChance, headwindImpact, iceRisk, 
     activeFreezing, overnightFreeze, minPastTemp: minPastTemp === 99 ? avgTemp : parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime, estimatedDryTime,

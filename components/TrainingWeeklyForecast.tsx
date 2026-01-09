@@ -67,8 +67,26 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
           const condition = bestSlot?.condition;
           
           const isSnowy = condition?.isSnowy;
-          const isWet = condition?.wetSurfaceChance > 50 || (condition?.precipitation || 0) > 0;
-          const hasIce = condition?.iceRisk;
+          const chance = condition?.wetSurfaceChance ?? 0;
+          
+          // Unified Surface labels and thresholds with WeatherCard
+          let surfaceLabel = 'DRY';
+          let surfaceColor = 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600';
+          let surfaceIcon = null;
+
+          if (isSnowy) {
+            surfaceLabel = 'SNOW';
+            surfaceColor = 'bg-indigo-500/20 border-indigo-500/30 text-indigo-500';
+            surfaceIcon = <Snowflake className="w-3 h-3" />;
+          } else if (chance > 80) {
+            surfaceLabel = 'WET';
+            surfaceColor = 'bg-blue-500/20 border-blue-500/30 text-blue-500';
+          } else if (chance > 30) {
+            surfaceLabel = 'DAMP';
+            surfaceColor = 'bg-blue-400/20 border-blue-400/30 text-blue-400';
+          }
+
+          const hasIce = !!condition?.iceRisk;
           const styles = getScoreStyles(score, false, isDark);
 
           return (
@@ -105,9 +123,9 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
               {/* Right Side: Risk Indicators (Grid) & Score */}
               <div className="flex items-center gap-4 z-10">
                 <div className="grid grid-cols-2 gap-2">
-                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${isSnowy ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-500' : (isWet ? 'bg-blue-500/20 border-blue-500/30 text-blue-500' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-600')}`}>
-                      {isSnowy ? <Snowflake className="w-3 h-3" /> : null}
-                      {isSnowy ? 'SNOW' : (isWet ? 'WET' : 'DRY')}
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${surfaceColor}`}>
+                      {surfaceIcon}
+                      {surfaceLabel}
                     </div>
                     <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black border uppercase tracking-wide w-16 justify-center ${hasIce ? 'bg-red-500/20 border-red-500/30 text-red-500' : (isDark ? 'bg-slate-800/50 border-white/5 text-slate-500' : 'bg-slate-200 border-slate-300 text-slate-600')}`}>
                       {hasIce ? 'ICE' : 'NO ICE'}

@@ -3,7 +3,6 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LocationSuggestion, WeatherCondition, SearchCriteria } from '../types';
 import { BelgianLocation } from '../locations';
-// Added Activity to the imports to resolve the "Cannot find name 'Activity'" error.
 import { 
   Wind, 
   AlertTriangle, 
@@ -35,7 +34,8 @@ import {
   RefreshCw,
   Search,
   Loader2,
-  Activity
+  Activity,
+  Compass
 } from 'lucide-react';
 
 interface WeatherCardProps {
@@ -172,12 +172,18 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const wind = useMemo(() => {
     const impact = condition?.headwindImpact ?? 0;
     const speed = condition?.windSpeed ?? 0;
+
+    if (showRawWind) {
+      return { label: 'COMPASS', color: 'text-blue-400', icon: <Compass className="w-5.5 h-5.5" /> };
+    }
+
     if (speed < 7) return { label: 'CALM', color: 'text-slate-500', icon: <Wind className="w-5.5 h-5.5" /> };
     if (impact > 20) return { label: 'HEADWIND', color: 'text-orange-500', icon: <ArrowDownToLine className="w-5.5 h-5.5" /> };
     if (impact < -20) return { label: 'TAILWIND', color: 'text-emerald-500', icon: <MoveUp className="w-5.5 h-5.5" /> };
     return { label: 'SIDEWIND', color: 'text-blue-500', icon: <ArrowLeftRight className="w-5.5 h-5.5" /> };
-  }, [condition?.headwindImpact, condition?.windSpeed]);
+  }, [condition?.headwindImpact, condition?.windSpeed, showRawWind]);
 
+  // Unified Surface status logic with consistent thresholds
   const surface = useMemo(() => {
     if (condition?.isSnowy) return { label: 'SNOW', color: 'text-indigo-400', icon: <Snowflake className="w-5.5 h-5.5" /> };
     const chance = condition?.wetSurfaceChance ?? 0;
@@ -311,6 +317,10 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const isScanning = !!condition?.isScanning;
   const scanProgress = condition?.scanningProgress ?? 0;
 
+  const primaryTemp = Math.round(condition?.startTemp ?? condition?.temp ?? 0);
+  const primaryWindSpeed = Math.round(condition?.startWindSpeed ?? condition?.windSpeed ?? 0);
+  const primaryWindDir = condition?.startWindDirection ?? condition?.windDirection ?? 0;
+
   if (compact) {
     return (
       <div className={`w-full rounded-[1.5rem] p-3 sm:p-4 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500 bg-[#0a0c10]' : 'border-blue-300 bg-blue-50') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
@@ -324,14 +334,14 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           </div>
         </div>
         <div className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-tight truncate border-t pt-1.5 ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
-          <div className="flex items-center gap-4 sm:gap-6"><span className={`text-xl sm:text-2xl font-black leading-none tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{Math.round(condition?.temp ?? 0)}°</span></div>
+          <div className="flex items-center gap-4 sm:gap-6"><span className={`text-xl sm:text-2xl font-black leading-none tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{primaryTemp}°</span></div>
           <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2.5">
                 <Lightbulb className={`w-4 h-4 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]' : 'text-slate-700 opacity-40'}`} />
                 <div className="flex gap-2 sm:gap-3 text-[10px] sm:text-[11px] font-black items-center"><span className={surface.color}>{surface.label}</span><span className="text-slate-700 opacity-20">|</span><span className={iceInfo.label === 'NO ICE' ? 'text-emerald-500' : 'text-red-500'}>{iceInfo.label}</span></div>
               </div>
             </div>
-          <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl font-black text-[10px] sm:text-[11px] border tracking-wider transition-colors ${isDark ? 'bg-[#1a1d24] border-white/5' : 'bg-slate-50 border-slate-200'} ${showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}`}>{showRawWind ? `${Math.round(condition?.windSpeed ?? 0)} ${getCardinal(condition?.windDirection ?? 0)}` : wind.label} <Wind className="w-4 h-4" /></div>
+          <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-black text-[10px] sm:text-[11px] border tracking-wider transition-colors ${isDark ? 'bg-[#1a1d24] border-white/5' : 'bg-slate-50 border-slate-200'} ${showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}`}>{showRawWind ? `${primaryWindSpeed} ${getCardinal(primaryWindDir)}` : wind.label} <Wind className="w-4 h-4" /></div>
         </div>
       </div>
     );
@@ -401,19 +411,19 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
           <div className="flex flex-col gap-4">
             <div className={`p-4 rounded-xl border flex items-center justify-between ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-200'}`}>
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Speed</span>
-                <span className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{Math.round(condition?.windSpeed ?? 0)} KM/H</span>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Start Velocity</span>
+                <span className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{primaryWindSpeed} KM/H</span>
               </div>
               <div className="flex flex-col items-end">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Heading</span>
-                <span className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{getCardinal(condition?.windDirection ?? 0)}</span>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Vector</span>
+                <span className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{getCardinal(primaryWindDir)}</span>
               </div>
             </div>
             <div className="flex justify-center py-2">
                <div className={`relative p-6 rounded-full border ${isDark ? 'bg-black border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                 <div 
                   className="transition-transform duration-700 ease-out" 
-                  style={{ transform: `rotate(${(condition?.windDirection ?? 0) + 180}deg)` }}
+                  style={{ transform: `rotate(${(primaryWindDir) + 180}deg)` }}
                 >
                   <ArrowUp className="w-12 h-12 text-blue-500" />
                 </div>
@@ -583,7 +593,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       <div className="flex-none flex items-center justify-between mb-3 sm:mb-4">
         <div className="flex flex-col relative">
           <button onClick={toggleTemp} className="flex items-baseline gap-1 group transition-all active:opacity-70 text-left">
-            <span className={`text-4xl sm:text-5xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{Math.round(condition?.temp ?? 0)}°</span><span className="text-lg font-bold text-slate-500 tracking-tighter ml-1">C</span>
+            <span className={`text-4xl sm:text-5xl font-black leading-none tracking-tighter transition-colors ${isDark ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{primaryTemp}°</span><span className="text-lg font-bold text-slate-500 tracking-tighter ml-1">C</span>
           </button>
         </div>
         <div className="relative">
@@ -597,7 +607,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       <div className="grid grid-cols-2 gap-2 sm:gap-3 flex-grow min-h-0">
         <button onClick={toggleWind} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showWindDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>
           <div className="flex items-center justify-between mb-0.5"><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">WIND</span></div>
-          <div className="flex items-center justify-between">{showRawWind ? (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{Math.round(condition?.windSpeed ?? 0)} <span className="text-[9px] opacity-60">KM/H</span> {getCardinal(condition?.windDirection ?? 0)}</span>) : (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${wind.color}`}>{wind.label}</span>)}<div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div></div>
+          <div className="flex items-center justify-between">{showRawWind ? (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{primaryWindSpeed} <span className="text-[9px] opacity-60">KM/H</span> {getCardinal(primaryWindDir)}</span>) : (<span className={`text-lg sm:text-[1.6rem] font-black tracking-tighter ${wind.color}`}>{wind.label}</span>)}<div className={showRawWind ? (isDark ? 'text-blue-400' : 'text-blue-600') : wind.color}>{wind.icon}</div></div>
         </button>
 
         <button onClick={toggleSurface} className={`text-left rounded-[1.25rem] px-3.5 py-2.5 flex flex-col justify-center border relative transition-all duration-300 active:scale-[0.98] ${showSurfaceDetails ? 'ring-1 ring-blue-500/50' : ''} ${blockBgClass}`}>

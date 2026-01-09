@@ -435,7 +435,7 @@ const App: React.FC = () => {
       }
       
       const targetHour = slots.reduce((p, c) => (c.effectiveScore > p.effectiveScore ? c : p), slots[0]).startHour;
-      if (manualStartHour === null) setManualStartHour(targetHour);
+      // Note: We no longer auto-set manualStartHour here to allow the UI to handle "optimal" fallback automatically
       const activeHour = manualStartHour !== null ? manualStartHour : targetHour;
       
       // Calculate turnaround distance (road distance)
@@ -484,7 +484,7 @@ const App: React.FC = () => {
     } catch (e) { 
       setTrainingLoading(false);
     }
-  }, [training.coords, training.distance, training.dateOffset, settings]);
+  }, [training.coords, training.distance, training.dateOffset, settings, manualStartHour]);
 
   const syncTrainingWeek = useCallback(async () => {
     if (!training.coords || typeof training.coords.lat !== 'number') return;
@@ -575,7 +575,8 @@ const App: React.FC = () => {
   const handleSelectLocationAdvice = useCallback((loc: any) => {
     setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}}));
     setTrainingSearch(loc.name);
-    if (typeof loc.bestHour === 'number') { setManualStartHour(loc.bestHour); }
+    // When selecting a suggested location, we reset manual hour to null to let the system find the "optimal" window at that new location
+    setManualStartHour(null);
     setShowTrainingSuggestions(false);
   }, []);
 
@@ -601,7 +602,12 @@ const App: React.FC = () => {
             onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
             onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
             onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
-            onSelectWeeklySlot={(offset, hour) => { setSelectedDateOffset(offset); setManualStartHour(hour); setViewMode('training'); }}
+            onSelectWeeklySlot={(offset, hour) => { 
+              setSelectedDateOffset(offset); 
+              // Reset manualStartHour to null when opening from 7-day overview to ensure the "optimal" window is auto-selected
+              setManualStartHour(null); 
+              setViewMode('training'); 
+            }}
             filterLocations={filterLocationsWithGlobal} globalTrainingResults={globalTrainingResults} getDayLabel={getDayLabel} 
             isWeeklyView={viewMode === 'training-weekly'} weeklyData={trainingWeek} weeklyLoading={isTrainingWeekLoading} aiEnabled={!settings.disableAI} onPopupStateChange={setIsPopupActive} 
             onToggleMode={() => setViewMode('weekly')} onTriggerAlternativesSearch={searchAlternativesProgressive}
