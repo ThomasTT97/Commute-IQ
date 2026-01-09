@@ -104,12 +104,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => clearTimeout(timer);
   }, [workSearch]);
 
+  // Sync scroll on mount/change
   useEffect(() => {
-    if (currentView === 'personal' && speedPickerRef.current && editSettings.averageSpeed) {
+    if (currentView === 'personal' && speedPickerRef.current) {
+      const targetSpeed = editSettings.averageSpeed || 25;
       const timer = setTimeout(() => {
-        const el = speedPickerRef.current?.querySelector(`[data-speed="${editSettings.averageSpeed}"]`);
+        const el = speedPickerRef.current?.querySelector(`[data-speed="${targetSpeed}"]`);
         if (el) {
-           el.scrollIntoView({ behavior: 'auto', inline: 'center' });
+           el.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
         }
       }, 50);
       return () => clearTimeout(timer);
@@ -227,7 +229,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                          ref={speedPickerRef}
                          className="h-full flex items-center gap-4 overflow-x-auto hide-scrollbar scroll-smooth snap-x snap-mandatory px-[calc(50%-28px)]"
                        >
-                          {speedPickerRef.current && speedRange.map(s => {
+                          {speedRange.map(s => {
                             const isSelected = (editSettings.averageSpeed || 25) === s;
                             return (
                               <button
