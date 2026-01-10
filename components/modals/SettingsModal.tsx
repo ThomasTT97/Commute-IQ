@@ -29,7 +29,8 @@ import {
   Gauge,
   CalendarDays,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -40,6 +41,7 @@ interface SettingsModalProps {
   onThemeChange: (theme: 'dark' | 'light') => void;
   onOpenConnectivity: () => void;
   onOpenTraining: () => void;
+  onOpenReleaseNotes: () => void;
   isDark: boolean;
 }
 
@@ -51,6 +53,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onThemeChange, 
   onOpenConnectivity,
   onOpenTraining,
+  onOpenReleaseNotes,
   isDark 
 }) => {
   const [editSettings, setEditSettings] = useState<CommuteSettings>(currentSettings);
@@ -436,6 +439,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                  <button onClick={onOpenConnectivity} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-blue-500/5 border-white/5 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                    <Activity className="w-4 h-4 text-blue-500" />
                    <span className="text-[10px] font-black uppercase tracking-widest">Connectivity Hub</span>
+                 </button>
+                 <button onClick={onOpenReleaseNotes} className={`w-full py-2.5 rounded-xl border flex items-center gap-3 px-3.5 transition-all ${isDark ? 'bg-blue-600/5 border-white/5 text-slate-300 hover:bg-blue-600/10' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                   <Sparkles className="w-4 h-4 text-blue-500" />
+                   <span className="text-[10px] font-black uppercase tracking-widest">Release Notes</span>
                  </button>
                </div>
 

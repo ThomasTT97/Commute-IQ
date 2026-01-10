@@ -626,7 +626,7 @@ const App: React.FC = () => {
         )}
       </main>
       <BottomNav viewMode={viewMode} setViewMode={setViewMode} onShowTrainingWeekly={syncTrainingWeek} isDark={isDark} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentSettings={settings} onSave={handleSaveSettings} onThemeChange={t => setSettings(prev => ({ ...prev, theme: t }))} onOpenConnectivity={() => setIsConnectivityOpen(true)} onOpenTraining={() => { setViewMode('training'); setManualStartHour(null); }} isDark={isDark} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentSettings={settings} onSave={handleSaveSettings} onThemeChange={t => setSettings(prev => ({ ...prev, theme: t }))} onOpenConnectivity={() => setIsConnectivityOpen(true)} onOpenTraining={() => { setViewMode('training'); setManualStartHour(null); }} onOpenReleaseNotes={() => setIsReleaseNotesOpen(true)} isDark={isDark} />
       <ConnectivityModal isOpen={isConnectivityOpen} onClose={() => setIsConnectivityOpen(false)} status={connectionStatus} onCheckConnection={checkConnections} isDark={isDark} />
       <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} isDark={isDark} language={settings.language} />
       <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} isDark={isDark} />
