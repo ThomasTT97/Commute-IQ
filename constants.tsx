@@ -1,9 +1,33 @@
 
 import { Language, CommuteSettings, Coordinates } from './types';
 
-export const ROAD_DETOUR_FACTOR = 1.32;
+export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
+export const APP_VERSION = "2.3.3"; // Build increment for sync timing
+
+export const RELEASE_NOTES = {
+  version: APP_VERSION,
+  date: "JAN 10, 2025",
+  time: "12:45 PM",
+  features: [
+    {
+      title: "Snow Logic",
+      description: "Surfaces now stay wet 3x longer after snow to account for melting slush and ice.",
+      icon: "Snowflake"
+    },
+    {
+      title: "Drying Accuracy",
+      description: "Drying timers are now precisely adjusted for high humidity and cold air temperatures.",
+      icon: "Droplets"
+    },
+    {
+      title: "Dry Clock",
+      description: "The surface popup now shows the exact time roads are expected to be dry.",
+      icon: "Clock"
+    }
+  ]
+};
 
 // Comprehensive lookup for Belgian cities and villages
 export const BELGIAN_CITIES: Record<string, Coordinates> = {
@@ -119,13 +143,13 @@ export const TRANSLATIONS: Record<Language, any> = {
     commuteScore: 'The Commute Score',
     commuteScoreContent: 'The baseline is 100%. Quantitative deductions are applied for adverse variables: ice probability (-70), significant precipitation (-40), and opposing wind vectors. A high score signifies optimal efficiency and safety.',
     trainingMode: 'Performance Optimization',
-    trainingModeContent: 'Utilize Training Mode to locate the "Golden Window"—a calculated interval where wind direction and thermodynamic conditions are most favorable for high-intensity efforts.',
+    trainingModeContent: 'Utilize Training Mode to locate the \"Golden Window\"—a calculated interval where wind direction and thermodynamic conditions are most favorable for high-intensity efforts.',
     generalSources: 'Data Provenance',
     generalSourcesContent: 'We aggregate high-resolution meteorological data from Open-Meteo and employ Google\'s Gemini 3.0 reasoning engine for tactical analysis.',
     iceRisk: 'Surface Traction Analysis',
     iceRiskContent: 'The system monitors ground thermal history over a 6-hour window. If surface inertia indicates freezing potential despite positive air temperatures, a black ice alert is generated.',
     surfaceCondition: 'Surface State',
-    surfaceConditionContent: 'Based on precipitation volume, relative humidity, and evaporation rates, the system projects surface moisture. "Wet" status indicates reduced friction coefficients.',
+    surfaceConditionContent: 'Based on precipitation volume, relative humidity, and evaporation rates, the system projects surface moisture. \"Wet\" status indicates reduced friction coefficients.',
     windCondition: 'Aerodynamic Impact',
     windContent: 'Wind resistance is calculated relative to your specific heading. Headwinds result in score penalties, while tailwinds offer a marginal efficiency bonus.',
     lightingCondition: 'Visibility Protocols',
@@ -168,13 +192,13 @@ export const TRANSLATIONS: Record<Language, any> = {
     commuteScore: 'Le Score de Trajet',
     commuteScoreContent: 'La base est de 100%. Des déductions sont appliquées pour les variables défavorables : risque de verglas (-70), précipitations importantes (-40) et vecteurs de vent opposés.',
     trainingMode: 'Optimisation de la Performance',
-    trainingModeContent: 'Utilisez le Mode Entraînement pour identifier la "Fenêtre d\'Or" — l\'intervalle où le vent et la température sont optimaux pour l\'effort.',
+    trainingModeContent: 'Utilisez le Mode Entraînement pour identifier la \"Fenêtre d\'Or\" — l\'intervalle où le vent et la température sont optimaux pour l\'effort.',
     generalSources: 'Provenance des Données',
     generalSourcesContent: 'Nous agrégeons les données haute résolution d\'Open-Meteo et utilisons le moteur de raisonnement Google Gemini 3.0 pour l\'analyse tactique.',
     iceRisk: 'Analyse d\'Adhérence',
     iceRiskContent: 'Le système surveille l\'inertie thermique du sol sur 6 heures. Si le gel est probable malgré une température de l\'air positive, une alerte verglas est générée.',
     surfaceCondition: 'État de la Surface',
-    surfaceConditionContent: 'Basé sur les précipitations et l\'évaporation, le système projette l\'humidité au sol. Le statut "Mouillé" indique un coefficient de friction réduit.',
+    surfaceConditionContent: 'Basé sur les précipitations et l\'évaporation, le système projette l\'humidité au sol. Le statut \"Mouillé\" indique un coefficient de friction réduit.',
     windCondition: 'Impact Aérodynamique',
     windContent: 'La résistance au vent est calculée par rapport à votre cap. Les vents de face réduisent le score, tandis que les vents arrière offrent un bonus.',
     lightingCondition: 'Protocoles de Visibilité',
@@ -213,17 +237,17 @@ export const TRANSLATIONS: Record<Language, any> = {
     quickStart: 'Snelstartgids',
     quickStartContent: '1. **Locaties**: Configureer Thuis en Werk in Instellingen.\n2. **Schema**: Stel uw reistijden in.\n3. **Score**: 100 staat voor ideale condities. Lagere scores duiden op weersrisico\'s.\n4. **Analyse**: Tik op statistieken voor technische details.\n5. **Garage**: Voeg uw fietsprofiel toe voor advies over bandenspanning en remmen.',
     purposeTitle: 'Operationele Intelligentie',
-    purposeContent: 'Commute IQ fungeert als een beslissingsondersteunend systeem. Het verwerkt atmosferische data tot een unieke veiligheidsscore voor geïnformeerde planning.',
+    purposeContent: 'Commute IQ fungert als een beslissingsondersteunend systeem. Het verwerkt atmosferische data tot een unieke veiligheidsscore voor geïnformeerde planning.',
     commuteScore: 'De Forenzen-Score',
     commuteScoreContent: 'De basis is 100%. Aftrekpunten gelden voor nadelige variabelen: ijsrisico (-70), zware neerslag (-40) en tegenwind. Een hoge score betekent optimale efficiëntie.',
     trainingMode: 'Prestatie-optimalisatie',
-    trainingModeContent: 'Gebruik de Trainingsmodus om het "Gouden Venster" te vinden — het moment waarop wind en temperatuur het gunstigst zijn voor inspanning.',
+    trainingModeContent: 'Gebruik de Trainingsmodus om het \"Gouden Venster\" te vinden — het moment waarop wind en temperatuur het gunstiger zijn voor inspanning.',
     generalSources: 'Gegevensbronnen',
     generalSourcesContent: 'We gebruiken hoge-resolutie data van Open-Meteo en Google\'s Gemini 3.0 engine voor tactische analyse.',
     iceRisk: 'Grip-analyse',
     iceRiskContent: 'Het systeem volgt de bodemtemperatuur over 6 uur. Als bodeminertie wijst op bevriezing ondanks positieve luchttemperaturen, wordt een ijzelalarm gegenereerd.',
     surfaceCondition: 'Wegdekstatus',
-    surfaceConditionContent: 'Op basis van neerslag en verdamping berekent het systeem de bodemvochtigheid. "Nat" duidt op verminderde wrijvingscoëfficiënten.',
+    surfaceConditionContent: 'Op basis van neerslag en verdamping berekent het systeem de bodemvochtigheid. \"Nat\" duidt op verminderde wrijvingscoëfficiënten.',
     windCondition: 'Aerodynamische Impact',
     windContent: 'Windweerstand wordt berekend ten opzicate van uw route. Tegenwind verlaagt de score, terwijl meewind een marginale bonus biedt.',
     lightingCondition: 'Zichtbaarheidsprotocollen',

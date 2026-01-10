@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LocationSuggestion, WeatherCondition, SearchCriteria } from '../types';
@@ -62,6 +63,7 @@ interface WeatherCardProps {
   onTriggerAlternativesSearch?: () => void;
   searchCriteria?: SearchCriteria;
   setSearchCriteria?: (val: SearchCriteria) => void;
+  isLoading?: boolean;
 }
 
 const getCardinal = (angle: number): string => {
@@ -130,7 +132,8 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   onPopupStateChange,
   onTriggerAlternativesSearch,
   searchCriteria,
-  setSearchCriteria
+  setSearchCriteria,
+  isLoading = false
 }) => {
   const isDark = theme === 'dark';
   const [showWindDetails, setShowWindDetails] = useState(false);
@@ -141,7 +144,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const [showLightsDetails, setShowLightsDetails] = useState(false);
   const [showRoutePopup, setShowRoutePopup] = useState(false);
   const [showLocationPopup, setShowLocationPopup] = useState(false);
-  const [countdown, setCountdown] = useState<string>("");
 
   const isAnyPopupOpen = showWindDetails || showIceDetails || showSurfaceDetails || showScoreDetails || showTempDetails || showLightsDetails || showRoutePopup || showLocationPopup;
 
@@ -164,26 +166,6 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     closeAllPopups();
   }, [compact]);
 
-  useEffect(() => {
-    if (!condition?.estimatedDryTime || !showSurfaceDetails) return;
-    const updateTimer = () => {
-      const now = Date.now();
-      const diff = condition.estimatedDryTime - now;
-      if (diff <= 0) {
-        setCountdown("DRY");
-      } else {
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        if (hours > 0) setCountdown(`${hours}h ${minutes}m`);
-        else setCountdown(`${minutes}m ${seconds}s`);
-      }
-    };
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [condition?.estimatedDryTime, showSurfaceDetails]);
-
   const wind = useMemo(() => {
     const impact = condition?.headwindImpact ?? 0;
     const speed = condition?.windSpeed ?? 0;
@@ -202,7 +184,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (condition?.isSnowy) return { label: 'SNOW', color: 'text-indigo-400', icon: <Snowflake className="w-5.5 h-5.5" /> };
     const chance = condition?.wetSurfaceChance ?? 0;
     if (chance > 80) return { label: 'WET', color: 'text-blue-500', icon: <AlertTriangle className="w-5.5 h-5.5" /> };
-    if (chance > 30) return { label: 'DAMP', color: 'text-blue-400', icon: <Droplets className="w-5.5 h-5.5" /> };
+    if (chance >= 10) return { label: 'DAMP', color: 'text-blue-400', icon: <Droplets className="w-5.5 h-5.5" /> };
     return { label: 'DRY', color: 'text-emerald-500', icon: <ShieldCheck className="w-5.5 h-5.5" /> };
   }, [condition?.wetSurfaceChance, condition?.isSnowy]);
 
@@ -219,7 +201,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       if (condition.isSnowy) {
         return "Critical: Snow accumulation detected. Surface friction is non-existent. Stay upright and minimize lean angle.";
       }
-      const isWet = (condition.wetSurfaceChance ?? 0) >= 30;
+      const isWet = (condition.wetSurfaceChance ?? 0) >= 10;
       if (isWet) {
         if (condition.activeFreezing) {
           return `Active Freezing: Air temp is ${Math.round(condition.temp)}°C. Wet roads are likely turning to black ice as ground temp is often 2-3 degrees lower.`;
@@ -246,7 +228,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (condition.isSnowy) return "Snow Cover: Active snowfall detected. Traction is compromised across all vectors. High risk of sliding.";
     const chance = condition.wetSurfaceChance ?? 0;
     if (chance > 80) return "Saturated: Roads are significantly wet. Hydroplaning risk and low friction coefficients present.";
-    if (chance > 30) return `Drying: Residual moisture detected from rain at ${condition.lastPrecipitationTime || 'earlier'}. Surface is likely greasy/damp.`;
+    if (chance >= 10) return `Drying: Residual moisture detected from rain at ${condition.lastPrecipitationTime || 'earlier'}. Surface is likely greasy/damp.`;
     return "Optimal Traction: The road surface is dry. Evaporation cycles effective.";
   }, [condition]);
 
@@ -264,7 +246,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
     if (!condition) return [];
     const rainDuring = condition.precipDuringSession ?? condition.precipitation ?? 0;
     return [
-      { label: "Condition", value: condition.isSnowy ? "Snow" : (condition.wetSurfaceChance > 80 ? "Wet" : (condition.wetSurfaceChance > 30 ? "Damp" : "Dry")), icon: condition.isSnowy ? <Snowflake className="w-3.5 h-3.5 text-indigo-400" /> : <Droplets className="w-3.5 h-3.5 text-blue-500" /> },
+      { label: "Humidity", value: `${condition.humidity}%`, icon: <Droplets className="w-3.5 h-3.5 text-blue-300" /> },
       { label: "Rain Vol", value: rainDuring > 0 ? `${rainDuring} mm` : "None", icon: <CloudRain className="w-3.5 h-3.5 text-blue-500" /> },
       { label: "Last Rain", value: condition.lastPrecipitationTime || "None", icon: <Clock className="w-3.5 h-3.5 text-slate-400" /> },
       { label: "Wetness%", value: `${condition.wetSurfaceChance}%`, icon: <Activity className="w-3.5 h-3.5 text-blue-300" /> }
@@ -343,16 +325,32 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const primaryWindSpeed = Math.round(condition?.startWindSpeed ?? condition?.windSpeed ?? 0);
   const primaryWindDir = condition?.startWindDirection ?? condition?.windDirection ?? 0;
 
+  const formattedDryTime = useMemo(() => {
+    if (!condition?.estimatedDryTime) return "";
+    const d = new Date(condition.estimatedDryTime);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  }, [condition?.estimatedDryTime]);
+
   if (compact) {
     return (
       <div className={`w-full rounded-[1.5rem] p-3 sm:p-4 border transition-all flex flex-col justify-between ${isActive ? (isDark ? 'border-blue-500 bg-[#0a0c10]' : 'border-blue-300 bg-blue-50') : (isDark ? 'border-white/5 bg-[#0a0c10]' : 'border-slate-200 bg-white shadow-sm')}`}>
         <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between text-[10px] font-black tracking-[0.15em] text-slate-500 uppercase">
+          <div className="flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase">
             <div className="flex items-center gap-1.5"><Calendar className="w-2.5 h-2.5 text-blue-500/50" /><span>{dateLabel}</span></div>
-            <div className="flex items-center gap-1.5"><Clock className="w-2.5 h-2.5 text-slate-600" /><span>{timeRange}</span></div>
+            <div className="flex items-center gap-1.5">
+              {isLoading && <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-500/50 mr-1" />}
+              <Clock className="w-2.5 h-2.5 text-slate-600" /><span>{timeRange}</span>
+            </div>
           </div>
-          <div className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-tight truncate border-t pt-1.5 ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
-            <MapPin className="w-2.5 h-2.5 flex-none text-blue-500/50" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2 h-2 opacity-30 flex-none" /><span className="truncate">{endLocation}</span>
+          <div className={`flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-tight truncate border-t pt-1.5 ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
+            <div className="flex items-center gap-2 truncate">
+              <MapPin className="w-2.5 h-2.5 flex-none text-blue-500/50" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2 h-2 opacity-30 flex-none" /><span className="truncate">{endLocation}</span>
+            </div>
+            {distance && (
+              <span className="flex-none text-[9px] font-black text-slate-500 opacity-60 tabular-nums">
+                {distance.toFixed(1)}KM
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between mt-2">
@@ -461,9 +459,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       {showSurfaceDetails && (
         <Modal onClose={() => setShowSurfaceDetails(false)} isDark={isDark}>
           <div className="flex items-center justify-between mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-widest leading-none">Surface Diagnostics</span><button onClick={() => setShowSurfaceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4" /></button></div>
-          {condition?.estimatedDryTime && (condition?.wetSurfaceChance ?? 0) > 30 && !condition?.isSnowy && (
+          {condition?.estimatedDryTime && (condition?.wetSurfaceChance ?? 0) >= 10 && !condition?.isSnowy && (
             <div className={`p-3 rounded-xl border flex flex-col gap-1.5 mb-3 ${isDark ? 'bg-black border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}>
-              <div className="flex justify-between items-center"><div className="flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 text-blue-500 animate-pulse" /><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Traction Recovery</span></div><span className={`text-sm font-black font-mono tracking-tighter ${isDark ? 'text-white' : 'text-blue-700'}`}>{countdown}</span></div>
+              <div className="flex justify-between items-center"><div className="flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 text-blue-500 animate-pulse" /><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Expected Dry</span></div><span className={`text-sm font-black font-mono tracking-tighter ${isDark ? 'text-white' : 'text-blue-700'}`}>{formattedDryTime}</span></div>
               <div className={`h-1 w-full rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.max(0, 100 - (condition.wetSurfaceChance || 0))}%` }} /></div>
             </div>
           )}
@@ -592,10 +590,16 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
       <div className="flex-none flex items-center justify-between text-[10px] font-black tracking-widest text-slate-500 uppercase mb-1.5">
         <div className="flex items-center gap-1.5"><Calendar className="w-3 h-3 text-blue-500/50" /><span>{dateLabel}</span><Clock className="w-3 h-3 text-slate-600 ml-1" /><span>{timeRange}</span></div>
+        {isLoading && (
+          <div className="flex items-center gap-1.5 animate-in fade-in duration-300">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
+            <span className="text-[8px] font-black tracking-[0.2em] text-blue-500">REFRESHING</span>
+          </div>
+        )}
       </div>
       <div className="flex-none flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-tight truncate max-w-[70%]"><MapPin className="w-3 h-3 text-blue-500/50 flex-none" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2.5 h-2.5 opacity-30 flex-none" /><span className="truncate">{endLocation}</span></div>
-        {distance && (<div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 flex-none"><Bike className="w-2.5 h-2.5 text-blue-500" /><span className="tracking-tighter">{distance.toFixed(1)} KM</span></div>)}
+        {distance && (<div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 flex-none"><Bike className="w-2.5 h-2.5 text-blue-500" /><span className="tracking-tighter tabular-nums">{distance.toFixed(1)} KM</span></div>)}
       </div>
 
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && (locationAdvice.length > 0 || isScanning)) || onToggleIntelligence) && (

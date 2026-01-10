@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -189,7 +190,7 @@ const calculateOptimalPressure = (equipment: Equipment, w: WeatherCondition): st
   pressure -= (surfacePreference / 100) * 1.4;
   pressure = Math.max(1.5, Math.min(8.5, pressure));
   if (w.isSnowy || w.iceRisk) pressure -= 0.6;
-  else if ((w.precipitation > 0) || (w.wetSurfaceChance > 30)) pressure -= 0.3;
+  else if ((w.precipitation > 0) || (w.wetSurfaceChance > 10)) pressure -= 0.3;
   return `${Math.max(1.2, pressure).toFixed(1)} Bar`;
 };
 
@@ -284,11 +285,17 @@ export const checkLLMConnectivity = async (): Promise<boolean> => {
 
 export const calculateDistance = (c1?: Coordinates, c2?: Coordinates): number => {
   if (!c1 || !c2) return 0;
-  const R = 6371; 
+  const R = 6371.0088; // Mean radius of Earth in km
+  const lat1 = c1.lat * Math.PI / 180;
+  const lat2 = c2.lat * Math.PI / 180;
   const dLat = (c2.lat - c1.lat) * Math.PI / 180;
   const dLon = (c2.lng - c1.lng) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1) * Math.cos(lat2) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 };
 
 export const calculateBearing = (start: Coordinates, end: Coordinates): number => {
@@ -329,7 +336,7 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
       items.push({ label: "Active Precipitation", val: -Math.round(precipDeduction) });
     } else if ((w.wetSurfaceChance || 0) > 80) {
       items.push({ label: "Wet Roads", val: -10 });
-    } else if ((w.wetSurfaceChance || 0) >= 30) {
+    } else if ((w.wetSurfaceChance || 0) >= 10) {
       items.push({ label: "Damp Surface", val: -5 });
     }
   }
@@ -373,7 +380,8 @@ export const aggregateRawWeather = (
   sunTimes?: { sunrise: string, sunset: string }, minPastTemp: number = 99,
   customWindow?: [string, string], fullRawHourlyPrecip?: number[],
   sessionStartAbsoluteIdx?: number, isTraining: boolean = false,
-  fullRawHourlyHumidity?: number[], fullRawHourlyTemp?: number[]
+  fullRawHourlyHumidity?: number[], fullRawHourlyTemp?: number[],
+  fullRawHourlyCodes?: number[]
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
   const apparentTemps = (rawSlice.apparent_temperature || []) as number[];
@@ -393,7 +401,6 @@ export const aggregateRawWeather = (
   const avgHum = humidities.length ? humidities.reduce((a, b) => a + b, 0) / humidities.length : 50;
   const maxCode = codes.length ? Math.max(...codes) : 0;
 
-  // Commencement Precision for Display
   const startTemp = temps.length ? temps[0] : avgTemp;
   const startWindSpeed = winds.length ? winds[0] : maxWind;
   const startWindDirection = dirs.length ? dirs[0] : avgDir;
@@ -408,7 +415,6 @@ export const aggregateRawWeather = (
     const endMin = getMinutes(timeWindow[1]);
     const sunriseMin = getMinutes(sunTimes.sunrise);
     const sunsetMin = getMinutes(sunTimes.sunset);
-    // Dark if ride starts before sunrise or ends after sunset, or crosses midnight
     if (endMin < startMin) isDark = true;
     else isDark = startMin < sunriseMin || endMin > sunsetMin;
   } else {
@@ -416,76 +422,99 @@ export const aggregateRawWeather = (
     isDark = startH < 6 || startH >= 21; 
   }
 
+  // PHASE CHANGE PERSISTENCE MODEL
   let lastPrecipIdx = -1;
   let lastPrecipTime = "None";
+  let lastPrecipVolume = 0;
+  let lastPrecipWasSnow = false;
+
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
-    for (let i = 1; i <= 24; i++) {
+    // Scan back 36 hours for past snow/rain to ensure persistent wetness is detected
+    for (let i = 1; i <= 36; i++) {
       const idx = sessionStartAbsoluteIdx - i;
       if (idx >= 0 && fullRawHourlyPrecip[idx] > 0.1) {
-        lastPrecipIdx = idx;
-        const hour = idx % 24;
-        lastPrecipTime = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
-        break;
+        if (lastPrecipIdx === -1) {
+          lastPrecipIdx = idx;
+          lastPrecipVolume = fullRawHourlyPrecip[idx];
+          const hour = idx % 24;
+          lastPrecipTime = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
+        }
+        // If any precipitation in the last 24h was snow, we flag it for high persistence
+        if (fullRawHourlyCodes && [71, 73, 75, 77, 85, 86].includes(fullRawHourlyCodes[idx]) && i <= 24) {
+          lastPrecipWasSnow = true;
+        }
       }
     }
   }
 
   let estimatedDryTime: number | undefined;
-  let wetSurfaceChance = 10;
+  let wetSurfaceChance = 5;
 
   if (totalPrecip > 0.1) {
-    wetSurfaceChance = 95;
+    wetSurfaceChance = 98; // Saturated
   } else if (lastPrecipIdx !== -1) {
     const lastRainTemp = fullRawHourlyTemp?.[lastPrecipIdx] ?? avgTemp;
     const lastRainHum = fullRawHourlyHumidity?.[lastPrecipIdx] ?? avgHum;
     
-    let evapDelayHours = 2.0; 
-    if (lastRainHum > 85) evapDelayHours += 6.0;
-    else if (lastRainHum > 70) evapDelayHours += 3.0;
-    if (lastRainTemp < 5) evapDelayHours += 4.5;
-    else if (lastRainTemp < 12) evapDelayHours += 2.5;
+    // Physics-based evaporation delay
+    let evapDelayHours = 4.0; // Baseline floor for asphalt drying
+    
+    // SNOW PERSISTENCE: Snow and slush keep roads wet 3-4x longer than rain
+    if (lastPrecipWasSnow) {
+      evapDelayHours *= 3.5; 
+      if (lastRainTemp < 4.5) evapDelayHours += 12.0; // Near-freezing thermal lock
+    }
+    
+    // Humidity penalty: Vapor pressure deficit is low when humidity is high
+    if (lastRainHum > 88) evapDelayHours += 8.0;
+    else if (lastRainHum > 78) evapDelayHours += 4.5;
+    
+    // Temperature penalty: Cold air holds significantly less moisture
+    if (lastRainTemp < 3) evapDelayHours += 9.0;
+    else if (lastRainTemp < 10) evapDelayHours += 4.0;
 
+    // Volume penalty: Saturated substrate
+    if (lastPrecipVolume > 1.5) evapDelayHours += 3.5;
+    if (lastPrecipVolume > 5.0) evapDelayHours += 6.0;
+
+    // Wind bonus: Forced convection increases evaporation
     const windEffect = 1 + (maxWind / 25);
     evapDelayHours /= windEffect;
-
-    if (!isDark) evapDelayHours *= 0.65;
+    
+    // Nocturnal penalty: No solar radiation to heat the substrate
+    if (isDark) evapDelayHours *= 1.4;
+    else evapDelayHours *= 0.7; 
 
     const startDate = new Date(); 
     startDate.setDate(startDate.getDate() - 1); 
     startDate.setHours(0, 0, 0, 0);
     estimatedDryTime = startDate.getTime() + (lastPrecipIdx + 1 + evapDelayHours) * 3600000;
-
     const nowMs = startDate.getTime() + (sessionStartAbsoluteIdx || 0) * 3600000;
     const remainingDryingTimeMs = estimatedDryTime - nowMs;
 
     if (remainingDryingTimeMs > 0) {
       const hoursRemaining = remainingDryingTimeMs / 3600000;
-      if (hoursRemaining < 0.75) wetSurfaceChance = 35;
-      else if (hoursRemaining < 2.5) wetSurfaceChance = 65;
-      else wetSurfaceChance = 85;
+      // Ultra-strict thresholds: Road is 'DAMP' or 'WET' for a long time
+      if (hoursRemaining < 0.3) wetSurfaceChance = 12; // Almost dry
+      else if (hoursRemaining < 2.0) wetSurfaceChance = 45; // Damp
+      else if (hoursRemaining < 5.0) wetSurfaceChance = 75; // Wet
+      else wetSurfaceChance = 92; // Saturated
     }
   }
 
-  const isWet = wetSurfaceChance >= 30;
-  
-  // REFINED ICE LOGIC: Prevents false positives by ensuring a moisture trigger exists 
-  // for frost or residual ice.
-  const activeFreezing = minTemp <= 1.5; // Threshold for ground radiation cooling
+  const isWet = wetSurfaceChance >= 10;
+  const activeFreezing = minTemp <= 1.5; 
   const overnightFreeze = minPastTemp <= 0.5;
-  const residualCold = minTemp <= 3.8; // Belgian shadow-ice buffer
+  const residualCold = minTemp <= 3.8; 
 
   let iceRisk = false;
   if (isSnowy || isWet) {
-    // If roads have liquid/solid water, any near-freezing or residual cold is critical.
     iceRisk = activeFreezing || (overnightFreeze && residualCold);
   } else {
-    // Dry roads: Risk is ONLY from Hoar Frost (high humidity + freezing air).
-    // Standard meteorological frost threshold is >80% RH.
     iceRisk = avgHum > 80 && activeFreezing;
   }
 
   const startHour = parseInt(timeWindow[0].split(':')[0]);
-
   const baseWeather: any = {
     temp: parseFloat(avgTemp.toFixed(1)), 
     startTemp: parseFloat(startTemp.toFixed(1)),
@@ -531,16 +560,16 @@ export const getTelemetryBatch = async (settings: CommuteSettings, offsets: numb
     const dayStartIdx = (offset + 1) * 24;
     const sunTimesM = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const mIdx = dayStartIdx + parseInt(settings.morningWindow[0].split(':')[0]);
-    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...(homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx) || [avgTemp])), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m);
+    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...(homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx) || [avgTemp])), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m, homeRaw.hourly.weather_code);
     
     const sunTimesE = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const eIdx = dayStartIdx + parseInt(settings.eveningWindow[0].split(':')[0]);
-    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...(workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx) || [avgTemp])), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m);
+    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...(workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx) || [avgTemp])), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m, workRaw.hourly.weather_code);
 
     batch[offset] = {
       weather: { morning: mWeather, evening: eWeather }, lastUpdated: Date.now(),
       score: Math.min(mWeather.score, eWeather.score),
-      summary: { isWet: mWeather.wetSurfaceChance >= 30 || eWeather.wetSurfaceChance >= 30, isSnowy: mWeather.isSnowy || eWeather.isSnowy, isIcy: mWeather.iceRisk || eWeather.iceRisk }
+      summary: { isWet: mWeather.wetSurfaceChance >= 10 || eWeather.wetSurfaceChance >= 10, isSnowy: mWeather.isSnowy || eWeather.isSnowy, isIcy: mWeather.iceRisk || eWeather.iceRisk }
     };
   }
   return batch;
@@ -601,7 +630,7 @@ export const getCommuteRoadDistance = async (home: string, work: string): Promis
   const { data } = await callWithRetry(async (ai, model) => {
     const response = await ai.models.generateContent({ 
       model, 
-      contents: `Cycling distance between ${home} and ${work} in km. Number only.`, 
+      contents: `Calculate the actual cycling road distance between ${home} and ${work} strictly in kilometers (km). Return the numerical distance only, no units.`, 
       config: { tools: [{ googleSearch: {} }] } 
     });
     const match = (response.text || "").match(/(\d+(\.\d+)?)/);

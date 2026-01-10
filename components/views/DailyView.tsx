@@ -127,6 +127,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
           isActive={activeLegIndex === 0}
           popupDirection="down"
           onPopupStateChange={onPopupStateChange}
+          isLoading={isCurrentDayLoading}
         />
       </div>
 
@@ -270,6 +271,7 @@ export const DailyView: React.FC<DailyViewProps> = ({
           isActive={activeLegIndex === 1}
           popupDirection="up"
           onPopupStateChange={onPopupStateChange}
+          isLoading={isCurrentDayLoading}
         />
       </div>
     </div>

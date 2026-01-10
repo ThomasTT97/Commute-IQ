@@ -81,7 +81,7 @@ export const TrainingWeeklyForecast: React.FC<TrainingWeeklyForecastProps> = ({ 
           } else if (chance > 80) {
             surfaceLabel = 'WET';
             surfaceColor = 'bg-blue-500/20 border-blue-500/30 text-blue-500';
-          } else if (chance > 30) {
+          } else if (chance >= 10) {
             surfaceLabel = 'DAMP';
             surfaceColor = 'bg-blue-400/20 border-blue-400/30 text-blue-400';
           }

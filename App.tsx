@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState, SearchCriteria, LocationSuggestion } from './types'; 
 import { BelgianLocation } from './locations';
-import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAINING_SPEED } from './constants';
+import { DEFAULT_SETTINGS, TRANSLATIONS, ROAD_DETOUR_FACTOR, CACHE_KEY, AVG_TRAINING_SPEED, APP_VERSION } from './constants';
 import { REGIONAL_LOCATIONS } from './locations';
 import { WeeklyForecast } from './components/WeeklyForecast';
 import { TrainingView } from './components/TrainingView';
@@ -11,6 +11,7 @@ import { BottomNav } from './components/layout/BottomNav';
 import { InfoModal } from './components/modals/InfoModal';
 import { ConnectivityModal } from './components/modals/ConnectivityModal';
 import { SettingsModal } from './components/modals/SettingsModal';
+import { ReleaseNotesModal } from './components/modals/ReleaseNotesModal';
 import { DailyView } from './components/views/DailyView';
 import { getLocality, shuffleArray, filterLocationsWithGlobal } from './utils/helpers';
 import { 
@@ -76,7 +77,17 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
+  const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
   const [isPopupActive, setIsPopupActive] = useState(false);
+
+  // Release Tracking Logic
+  useEffect(() => {
+    const lastSeen = localStorage.getItem('commute_iq_last_version');
+    if (lastSeen !== APP_VERSION) {
+      setIsReleaseNotesOpen(true);
+      localStorage.setItem('commute_iq_last_version', APP_VERSION);
+    }
+  }, []);
 
   const lastUpdateFromCache = useMemo(() => {
     const updates = Object.values(pulseDataMap).map((d: any) => d.lastUpdated).filter(Boolean);
@@ -618,6 +629,7 @@ const App: React.FC = () => {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentSettings={settings} onSave={handleSaveSettings} onThemeChange={t => setSettings(prev => ({ ...prev, theme: t }))} onOpenConnectivity={() => setIsConnectivityOpen(true)} onOpenTraining={() => { setViewMode('training'); setManualStartHour(null); }} isDark={isDark} />
       <ConnectivityModal isOpen={isConnectivityOpen} onClose={() => setIsConnectivityOpen(false)} status={connectionStatus} onCheckConnection={checkConnections} isDark={isDark} />
       <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} isDark={isDark} language={settings.language} />
+      <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} isDark={isDark} />
     </div>
   );
 };

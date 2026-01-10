@@ -347,6 +347,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       onPopupStateChange={handlePopupStateChange}
                       popupDirection="down"
                       onTriggerAlternativesSearch={onTriggerAlternativesSearch}
+                      isLoading={trainingLoading}
                     />
                 </div>
 
