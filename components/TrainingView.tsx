@@ -348,6 +348,8 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                       popupDirection="down"
                       onTriggerAlternativesSearch={onTriggerAlternativesSearch}
                       isLoading={trainingLoading}
+                      searchCriteria={trainingData.searchCriteria}
+                      setSearchCriteria={trainingData.setSearchCriteria}
                     />
                 </div>
 

@@ -227,13 +227,26 @@ const App: React.FC = () => {
     return trainingSlots.reduce((prev, curr) => (curr.effectiveScore > prev.effectiveScore ? curr : prev), trainingSlots[0]).startHour;
   }, [trainingSlots]);
 
+  // Derived sorted list for the UI that responds to sort changes without triggering re-scans
+  const sortedLocationAdvice = useMemo(() => {
+    const sorted = [...currentLocationAdvice];
+    if (searchCriteria.sortBy === 'distance') {
+      return sorted.sort((a, b) => (a.distanceFromTrainingCenter || 0) - (b.distanceFromTrainingCenter || 0)).slice(0, 15);
+    } else if (searchCriteria.sortBy === 'hour') {
+      return sorted.sort((a, b) => (a.bestHour || 0) - (b.bestHour || 0)).slice(0, 15);
+    } else {
+      // Default: Sort by tactical score
+      return sorted.sort((a, b) => (b.sortScore || b.score || 0) - (a.sortScore || a.score || 0)).slice(0, 15);
+    }
+  }, [currentLocationAdvice, searchCriteria.sortBy]);
+
   const activeTrainingSlot = useMemo(() => {
     if (!trainingSlots.length) return null;
     const hourToFind = manualStartHour !== null ? manualStartHour : bestStartHour;
     const slot = trainingSlots.find(s => s.startHour === hourToFind) || trainingSlots[0];
     return {
       ...slot,
-      locationAdvice: currentLocationAdvice,
+      locationAdvice: sortedLocationAdvice,
       searchCriteria,
       setSearchCriteria,
       condition: {
@@ -242,7 +255,7 @@ const App: React.FC = () => {
         scanningProgress: scanningProgress
       }
     };
-  }, [trainingSlots, manualStartHour, bestStartHour, currentLocationAdvice, isScanningAlternatives, scanningProgress, searchCriteria]);
+  }, [trainingSlots, manualStartHour, bestStartHour, sortedLocationAdvice, isScanningAlternatives, scanningProgress, searchCriteria]);
 
   const searchAlternativesProgressive = useCallback(async () => {
     if (trainingLoading) return;
@@ -337,27 +350,27 @@ const App: React.FC = () => {
             if (!uniqueMap.has(item.name) || (uniqueMap.get(item.name).sortScore || 0) < (item.sortScore || 0)) uniqueMap.set(item.name, item);
           });
           
-          let sorted = Array.from(uniqueMap.values());
-          if (searchCriteria.sortBy === 'distance') {
-            sorted = sorted.sort((a, b) => (a.distanceFromTrainingCenter || 0) - (b.distanceFromTrainingCenter || 0));
-          } else if (searchCriteria.sortBy === 'hour') {
-            sorted = sorted.sort((a, b) => (a.bestHour || 0) - (b.bestHour || 0));
-          } else {
-            sorted = sorted.sort((a, b) => (b.sortScore || b.score || 0) - (a.sortScore || a.score || 0));
-          }
-          
-          return sorted.slice(0, 15);
+          // We store up to 50 in the raw pool to allow client-side sorting without loss of data
+          return Array.from(uniqueMap.values()).slice(0, 50);
         });
         await new Promise(res => setTimeout(res, 200));
       }
     } catch (e) { } finally { setIsScanningAlternatives(false); setScanningProgress(100); }
-  }, [training.dateOffset, training.distance, training.coords, training.location, settings, searchCriteria, dynamicPool, trainingLoading]);
+  }, [training.dateOffset, training.distance, training.coords, training.location, settings, searchCriteria.maxDistance, searchCriteria.drySurface, searchCriteria.noIce, dynamicPool, trainingLoading]);
 
+  // Effect to trigger search only on parameters that actually change the search grid/results
   useEffect(() => {
     if (viewMode === 'training' && !trainingLoading) {
       searchAlternativesProgressive();
     }
-  }, [searchCriteria]);
+  }, [
+    searchCriteria.maxDistance, 
+    searchCriteria.drySurface, 
+    searchCriteria.noIce, 
+    training.location, 
+    training.distance, 
+    training.dateOffset
+  ]);
 
   const [globalTrainingResults, setGlobalTrainingResults] = useState<BelgianLocation[]>([]);
   const [isSearchingGlobalTraining, setIsSearchingGlobalTraining] = useState(false);
