@@ -28,10 +28,8 @@ if ('serviceWorker' in navigator) {
           if (newWorker) {
             newWorker.onstatechange = () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content is available; force the page to reload once the new SW takes over
-                if (confirm("A new version of Commute IQ is available. Update now?")) {
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                }
+                // New content is available; notify the UI via custom event
+                window.dispatchEvent(new CustomEvent('commute-iq-update-ready', { detail: newWorker }));
               }
             };
           }

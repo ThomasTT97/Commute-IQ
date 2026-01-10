@@ -79,6 +79,26 @@ const App: React.FC = () => {
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
   const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
   const [isPopupActive, setIsPopupActive] = useState(false);
+  const [isUpdateReady, setIsUpdateReady] = useState(false);
+  const pendingWorkerRef = useRef<ServiceWorker | null>(null);
+
+  // Listen for software updates
+  useEffect(() => {
+    const handleUpdate = (e: any) => {
+      setIsUpdateReady(true);
+      pendingWorkerRef.current = e.detail;
+    };
+    window.addEventListener('commute-iq-update-ready', handleUpdate);
+    return () => window.removeEventListener('commute-iq-update-ready', handleUpdate);
+  }, []);
+
+  const handleApplyUpdate = () => {
+    if (pendingWorkerRef.current) {
+      pendingWorkerRef.current.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      window.location.reload();
+    }
+  };
 
   // Release Tracking Logic
   useEffect(() => {
@@ -270,7 +290,6 @@ const App: React.FC = () => {
         const batchResults = await Promise.all(batch.map(async (loc) => {
           try {
             const straightDist = calculateDistance(baseCoords, loc);
-            // APPLY ROAD DISTANCE CORRECTION
             const roadDistFromCenter = straightDist * ROAD_DETOUR_FACTOR;
             
             if (roadDistFromCenter < 10 || roadDistFromCenter > 400) return null;
@@ -341,7 +360,6 @@ const App: React.FC = () => {
 
   const displayedDistance = useMemo(() => {
     if (settings.roadDistance) return settings.roadDistance;
-    // Commute distance also correctly applies ROAD_DETOUR_FACTOR
     return calculateDistance(settings.homeCoords, settings.workCoords) * ROAD_DETOUR_FACTOR;
   }, [settings.roadDistance, settings.homeCoords, settings.workCoords]);
 
@@ -446,11 +464,8 @@ const App: React.FC = () => {
       }
       
       const targetHour = slots.reduce((p, c) => (c.effectiveScore > p.effectiveScore ? c : p), slots[0]).startHour;
-      // Note: We no longer auto-set manualStartHour here to allow the UI to handle "optimal" fallback automatically
       const activeHour = manualStartHour !== null ? manualStartHour : targetHour;
       
-      // Calculate turnaround distance (road distance)
-      // If user wants a 50km training ride, they go 25km road distance out.
       const roadTargetRideOut = training.distance / 2;
       const windDir = slots.find(s => s.startHour === activeHour)?.condition?.windDirection || 0;
       
@@ -586,7 +601,6 @@ const App: React.FC = () => {
   const handleSelectLocationAdvice = useCallback((loc: any) => {
     setTraining(p => ({...p, location: loc.name, coords: {lat: loc.lat, lng: loc.lng}}));
     setTrainingSearch(loc.name);
-    // When selecting a suggested location, we reset manual hour to null to let the system find the "optimal" window at that new location
     setManualStartHour(null);
     setShowTrainingSuggestions(false);
   }, []);
@@ -594,7 +608,16 @@ const App: React.FC = () => {
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
       {viewMode !== 'weekly' && viewMode !== 'training-weekly' && (
-        <Header onOpenInfo={() => setIsInfoOpen(true)} viewMode={viewMode} selectedDateOffset={selectedDateOffset} setSelectedDateOffset={setSelectedDateOffset} onOpenSettings={() => setIsSettingsOpen(true)} isDark={isDark} />
+        <Header 
+          onOpenInfo={() => setIsInfoOpen(true)} 
+          viewMode={viewMode} 
+          selectedDateOffset={selectedDateOffset} 
+          setSelectedDateOffset={setSelectedDateOffset} 
+          onOpenSettings={() => setIsSettingsOpen(true)} 
+          isDark={isDark} 
+          updateAvailable={isUpdateReady}
+          onApplyUpdate={handleApplyUpdate}
+        />
       )}
       <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${viewMode.includes('weekly') ? 'pt-[max(0.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'} ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
         {viewMode === 'daily' && (
@@ -615,7 +638,6 @@ const App: React.FC = () => {
             onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
             onSelectWeeklySlot={(offset, hour) => { 
               setSelectedDateOffset(offset); 
-              // Reset manualStartHour to null when opening from 7-day overview to ensure the "optimal" window is auto-selected
               setManualStartHour(null); 
               setViewMode('training'); 
             }}

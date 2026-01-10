@@ -4,12 +4,12 @@ import { Language, CommuteSettings, Coordinates } from './types';
 export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
-export const APP_VERSION = "2.3.5"; // Latest synchronization build
+export const APP_VERSION = "2.4.1"; // Deployment & Update Notification Build
+// SYSTEM_TIME_SYNC: JAN 10, 2025 - 11:58 PM BRUSSELS
 
 export const RELEASE_NOTES = {
   version: APP_VERSION,
   date: "JAN 10, 2025",
-  time: "11:21 PM",
   features: [
     {
       title: "Snow Persistence",
@@ -251,7 +251,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     windCondition: 'Aerodynamische Impact',
     windContent: 'Windweerstand wordt berekend ten opzicate van uw route. Tegenwind verlaagt de score, terwijl meewind een marginale bonus biedt.',
     lightingCondition: 'Zichtbaarheidsprotocollen',
-    lightingContent: 'Reistijden worden vergeleken met zonne-data. Bij weinig licht volgt een dwingend advies voor actieve verlichting.',
+    lightingContent: 'Reistijden worden vergeleken met zonne-data. Bij weinig licht volgt een dwingend advies for actieve verlichting.',
     equipmentLogic: 'Mechanische Kalibratie',
     equipmentContent: 'Door uw fietsspecificaties in te voeren, kan het algoritme nauwkeurige bandenspanningsadviezen en rem-aanpassingen genereren.',
   }

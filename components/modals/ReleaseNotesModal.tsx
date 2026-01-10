@@ -39,7 +39,7 @@ export const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ isOpen, on
               <div className="flex flex-col min-w-0 overflow-hidden">
                 <h2 className={`text-sm font-black uppercase tracking-widest leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>System Update</h2>
                 <span className="text-[8px] font-black text-blue-500 uppercase tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis block w-full">
-                  Build v{RELEASE_NOTES.version} • {RELEASE_NOTES.date} • {RELEASE_NOTES.time}
+                  Build v{RELEASE_NOTES.version} • {RELEASE_NOTES.date}
                 </span>
               </div>
             </div>
