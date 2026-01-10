@@ -375,7 +375,7 @@ export const TrainingView: React.FC<TrainingViewProps> = ({
                           <CloudRain className="w-4 h-4 text-blue-500" />
                           <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Conditions</span>
                         </div>
-                        <div className={`text-[15px] font-bold leading-[1.5] text-left transition-all ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                        <div className={`text-[14px] font-medium leading-[1.5] text-left opacity-90 transition-all ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                            {renderAdviceText(trainingData.condition.surfaceReason, trainingData.condition.surfaceReason || "Normal atmospheric conditions for standard training effort.", 0)}
                         </div>
                       </div>
