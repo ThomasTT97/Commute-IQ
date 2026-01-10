@@ -4,26 +4,26 @@ import { Language, CommuteSettings, Coordinates } from './types';
 export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
-export const APP_VERSION = "2.5.1"; // Atomic Release
-// SYSTEM_TIME_SYNC: JAN 22, 2025 - 11:32 AM BRUSSELS
+export const APP_VERSION = "2.6.0"; // Enhanced Weather Logic Deployment
+// SYSTEM_TIME_SYNC: JAN 22, 2025 - 1:15 PM BRUSSELS
 
 export const RELEASE_NOTES = {
   version: APP_VERSION,
   features: [
     {
-      title: "Snow Persistence",
-      description: "Roads now stay wet 3x longer after snow to account for melting slush and ice.",
+      title: "Black Ice Detection",
+      description: "Enhanced ground-thermal tracking now predicts hidden ice patches by analyzing overnight frost accumulation and road surface history.",
       icon: "Snowflake"
     },
     {
-      title: "Atmos Precision",
-      description: "Drying rates are now accurately adjusted for high humidity and freezing air.",
+      title: "Precision Drying Model",
+      description: "Our new evaporation logic uses humidity and wind vectors to estimate exactly when road surfaces will transition from wet to safe-dry.",
       icon: "Droplets"
     },
     {
-      title: "Dry Clock",
-      description: "Surface diagnostics now show the exact clock time when roads are expected to dry.",
-      icon: "Clock"
+      title: "Winter Visibility Logic",
+      description: "Solar analysis is now more aggressive, triggering mandatory light recommendations earlier during grey, low-contrast winter days.",
+      icon: "Zap"
     }
   ]
 };
@@ -195,7 +195,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     generalSources: 'Provenance des Données',
     generalSourcesContent: 'Nous agrégeons les données haute résolution d\'Open-Meteo et utilisons le moteur de raisonnement Google Gemini 3.0 pour l\'analyse tactique.',
     iceRisk: 'Analyse d\'Adhérence',
-    iceRiskContent: 'The system monitors ground thermal history over a 6-hour window. If surface inertia indicates freezing potential despite positive air temperatures, a black ice alert is generated.',
+    iceRiskContent: 'Le système surveille l\'inertie thermique du sol sur 6 heures. Si le gel est probable malgré une température de l\'air positive, une alerte verglas est générée.',
     surfaceCondition: 'État de la Surface',
     surfaceConditionContent: 'Basé sur les précipitations et l\'évaporation, le système projette l\'humidité au sol. Le statut "Mouillé" indique un coefficient de friction réduit.',
     windCondition: 'Impact Aérodynamique',

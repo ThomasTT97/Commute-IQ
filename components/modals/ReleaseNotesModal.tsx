@@ -14,12 +14,17 @@ const getFeatureIcon = (name: string) => {
     case 'Snowflake': return <Snowflake className="w-5 h-5 text-blue-300" />;
     case 'Droplets': return <Droplets className="w-5 h-5 text-blue-500" />;
     case 'Clock': return <Clock className="w-5 h-5 text-emerald-500" />;
-    default: return <Zap className="w-5 h-5 text-blue-500" />;
+    case 'ShieldCheck': return <ShieldCheck className="w-5 h-5 text-blue-400" />;
+    case 'Zap': return <Zap className="w-5 h-5 text-orange-400" />;
+    default: return <Sparkles className="w-5 h-5 text-blue-500" />;
   }
 };
 
 export const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ isOpen, onClose, isDark }) => {
   if (!isOpen) return null;
+
+  // Strictly display only the last 3 most relevant changes
+  const relevantFeatures = RELEASE_NOTES.features.slice(-3);
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -44,17 +49,16 @@ export const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ isOpen, on
                 </span>
               </div>
             </div>
-            {/* Header Close button removed to enforce update deployment */}
           </div>
         </div>
 
         <div className="flex-1 px-6 pb-6 space-y-4 overflow-y-auto hide-scrollbar max-h-[60vh] relative z-10">
           <p className={`text-[10px] font-medium leading-relaxed opacity-70 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            Tactical improvements and physics model updates for the winter cycling season.
+            Operational refinements and logic upgrades for the latest system deployment.
           </p>
 
           <div className="space-y-2.5">
-            {RELEASE_NOTES.features.map((feature, idx) => (
+            {relevantFeatures.map((feature, idx) => (
               <div key={idx} className={`p-3.5 rounded-2xl border flex flex-col gap-1 ${isDark ? 'bg-white/5 border-white/5 shadow-inner' : 'bg-slate-50 border-slate-200'}`}>
                 <div className="flex items-center gap-2">
                   <div className={`p-1 rounded-lg shrink-0 ${isDark ? 'bg-black/40' : 'bg-white shadow-sm'}`}>
@@ -74,7 +78,7 @@ export const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ isOpen, on
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Stability Rating</span>
              </div>
-             <span className="text-[10px] font-black text-emerald-500 uppercase">99.8%</span>
+             <span className="text-[10px] font-black text-emerald-500 uppercase">99.9%</span>
           </div>
         </div>
 

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES } from "../constants";
@@ -392,7 +391,7 @@ export const aggregateRawWeather = (
   const humidities = (rawSlice.relative_humidity_2m || []) as number[];
 
   const avgTemp = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : 15;
-  const avgApparentTemp = apparentTemps.length ? apparentTemps.reduce((a, b) => a + b, 0) / apparentTemps.length : avgTemp;
+  const apparentTemp = apparentTemps.length ? apparentTemps.reduce((a, b) => a + b, 0) / apparentTemps.length : avgTemp;
   const minTemp = temps.length ? Math.min(...temps) : 15;
   const maxTemp = temps.length ? Math.max(...temps) : 15;
   const totalPrecip = precips.length ? precips.reduce((a, b) => a + b, 0) : 0;
@@ -429,7 +428,6 @@ export const aggregateRawWeather = (
   let lastPrecipWasSnow = false;
 
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
-    // Scan back 36 hours for past snow/rain to ensure persistent wetness is detected
     for (let i = 1; i <= 36; i++) {
       const idx = sessionStartAbsoluteIdx - i;
       if (idx >= 0 && fullRawHourlyPrecip[idx] > 0.1) {
@@ -439,7 +437,6 @@ export const aggregateRawWeather = (
           const hour = idx % 24;
           lastPrecipTime = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
         }
-        // If any precipitation in the last 24h was snow, we flag it for high persistence
         if (fullRawHourlyCodes && [71, 73, 75, 77, 85, 86].includes(fullRawHourlyCodes[idx]) && i <= 24) {
           lastPrecipWasSnow = true;
         }
@@ -451,76 +448,76 @@ export const aggregateRawWeather = (
   let wetSurfaceChance = 5;
 
   if (totalPrecip > 0.1) {
-    wetSurfaceChance = 98; // Saturated
+    wetSurfaceChance = 98;
   } else if (lastPrecipIdx !== -1) {
     const lastRainTemp = fullRawHourlyTemp?.[lastPrecipIdx] ?? avgTemp;
     const lastRainHum = fullRawHourlyHumidity?.[lastPrecipIdx] ?? avgHum;
-    
-    // Physics-based evaporation delay
-    let evapDelayHours = 4.0; // Baseline floor for asphalt drying
-    
-    // SNOW PERSISTENCE: Snow and slush keep roads wet 3-4x longer than rain
+    let evapDelayHours = 4.0;
     if (lastPrecipWasSnow) {
       evapDelayHours *= 3.5; 
-      if (lastRainTemp < 4.5) evapDelayHours += 12.0; // Near-freezing thermal lock
+      if (lastRainTemp < 4.5) evapDelayHours += 12.0;
     }
-    
-    // Humidity penalty: Vapor pressure deficit is low when humidity is high
     if (lastRainHum > 88) evapDelayHours += 8.0;
     else if (lastRainHum > 78) evapDelayHours += 4.5;
-    
-    // Temperature penalty: Cold air holds significantly less moisture
     if (lastRainTemp < 3) evapDelayHours += 9.0;
     else if (lastRainTemp < 10) evapDelayHours += 4.0;
-
-    // Volume penalty: Saturated substrate
     if (lastPrecipVolume > 1.5) evapDelayHours += 3.5;
     if (lastPrecipVolume > 5.0) evapDelayHours += 6.0;
-
-    // Wind bonus: Forced convection increases evaporation
     const windEffect = 1 + (maxWind / 25);
     evapDelayHours /= windEffect;
-    
-    // Nocturnal penalty: No solar radiation to heat the substrate
     if (isDark) evapDelayHours *= 1.4;
     else evapDelayHours *= 0.7; 
-
     const startDate = new Date(); 
     startDate.setDate(startDate.getDate() - 1); 
     startDate.setHours(0, 0, 0, 0);
     estimatedDryTime = startDate.getTime() + (lastPrecipIdx + 1 + evapDelayHours) * 3600000;
     const nowMs = startDate.getTime() + (sessionStartAbsoluteIdx || 0) * 3600000;
     const remainingDryingTimeMs = estimatedDryTime - nowMs;
-
     if (remainingDryingTimeMs > 0) {
       const hoursRemaining = remainingDryingTimeMs / 3600000;
-      // Ultra-strict thresholds: Road is 'DAMP' or 'WET' for a long time
-      if (hoursRemaining < 0.3) wetSurfaceChance = 12; // Almost dry
-      else if (hoursRemaining < 2.0) wetSurfaceChance = 45; // Damp
-      else if (hoursRemaining < 5.0) wetSurfaceChance = 75; // Wet
-      else wetSurfaceChance = 92; // Saturated
+      if (hoursRemaining < 0.3) wetSurfaceChance = 12;
+      else if (hoursRemaining < 2.0) wetSurfaceChance = 45;
+      else if (hoursRemaining < 5.0) wetSurfaceChance = 75;
+      else wetSurfaceChance = 92;
     }
   }
 
-  const isWet = wetSurfaceChance >= 10;
-  const activeFreezing = minTemp <= 1.5; 
   const overnightFreeze = minPastTemp <= 0.5;
-  const residualCold = minTemp <= 3.8; 
+
+  // GROUND TEMPERATURE ESTIMATION MODEL
+  // Pavement temp lags air temp significantly. Cooling is faster than heating for pavement in winter.
+  let groundTemp = avgTemp;
+  if (overnightFreeze) {
+    // If it froze recently, ground temp is heavily influenced by the sub-zero thermal mass
+    // Weighted average favoring recent past (70% weight to recent min)
+    groundTemp = (avgTemp * 0.3) + (minPastTemp * 0.7);
+  } else {
+    // Standard lag: usually 1.5 - 2.5 degrees lower than air in cool weather
+    groundTemp = avgTemp - 1.8;
+  }
+  
+  if (isDark) groundTemp -= 1.0; 
+  const finalGroundTemp = parseFloat(groundTemp.toFixed(1));
 
   let iceRisk = false;
-  if (isSnowy || isWet) {
-    iceRisk = activeFreezing || (overnightFreeze && residualCold);
+  if (isSnowy) {
+    iceRisk = true;
   } else {
-    iceRisk = avgHum > 80 && activeFreezing;
+    const isGroundFrozen = finalGroundTemp <= 0.8; // Buffer for near-freezing risk
+    if (isGroundFrozen) {
+      const hasMoisture = (wetSurfaceChance >= 10) || (avgHum > 78);
+      if (hasMoisture) iceRisk = true;
+    }
   }
 
   const startHour = parseInt(timeWindow[0].split(':')[0]);
   const baseWeather: any = {
     temp: parseFloat(avgTemp.toFixed(1)), 
     startTemp: parseFloat(startTemp.toFixed(1)),
-    feelsLike: parseFloat(avgApparentTemp.toFixed(1)),
+    feelsLike: parseFloat(apparentTemp.toFixed(1)),
     minTemp: parseFloat(minTemp.toFixed(1)), 
     maxTemp: parseFloat(maxTemp.toFixed(1)),
+    estimatedGroundTemp: finalGroundTemp,
     condition: isSnowy ? 'Snowy' : (totalPrecip > 0.5 ? 'Rainy' : (maxWind > 35 ? 'Windy' : (maxCode <= 1 ? 'Sunny' : 'Cloudy'))),
     isSnowy, 
     precipitation: parseFloat(totalPrecip.toFixed(1)),
@@ -530,7 +527,7 @@ export const aggregateRawWeather = (
     startWindDirection: Math.round(startWindDirection),
     humidity: Math.round(avgHum),
     isDark, wetSurfaceChance, headwindImpact, iceRisk, 
-    activeFreezing, overnightFreeze, minPastTemp: minPastTemp === 99 ? avgTemp : parseFloat(minPastTemp.toFixed(1)), 
+    overnightFreeze, minPastTemp: minPastTemp === 99 ? avgTemp : parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime, estimatedDryTime,
     precipDuringSession: parseFloat(totalPrecip.toFixed(1)), sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
   };

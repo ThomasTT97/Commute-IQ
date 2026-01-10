@@ -78,7 +78,6 @@ const App: React.FC = () => {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
   
-  // RELEASE TRACKING: Initialized to true if version changed to prevent main UI flash
   const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(() => {
     const lastSeen = localStorage.getItem('commute_iq_last_version');
     return lastSeen !== APP_VERSION;
@@ -88,7 +87,6 @@ const App: React.FC = () => {
   const [isUpdateReady, setIsUpdateReady] = useState(false);
   const pendingWorkerRef = useRef<ServiceWorker | null>(null);
 
-  // Listen for software updates (Service Worker logic)
   useEffect(() => {
     const handleUpdate = (e: any) => {
       setIsUpdateReady(true);
@@ -129,7 +127,6 @@ const App: React.FC = () => {
   const checkConnections = useCallback(async () => {
     setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'checking', 'Fallback Weather': 'checking', 'Gemini LLM': 'checking', 'Google Maps': 'checking' }));
     
-    // Primary Weather
     try { 
       await fetchRawWeatherData({ lat: 51.0, lng: 3.7 }); 
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'ok', activeWeatherProvider: 'Open-Meteo' })); 
@@ -137,7 +134,6 @@ const App: React.FC = () => {
       setConnectionStatus(prev => ({ ...prev, 'Open-Meteo': 'fail' })); 
     }
     
-    // Fallback Weather
     try { 
       await fetchWeatherAPIFallback({ lat: 51.0, lng: 3.7 }); 
       setConnectionStatus(prev => ({ ...prev, 'Fallback Weather': 'ok' })); 
@@ -218,7 +214,9 @@ const App: React.FC = () => {
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
     betterScore: true,
     drySurface: false,
-    noIce: false
+    noIce: false,
+    maxDistance: 250,
+    sortBy: 'score'
   });
   const [dynamicPool, setDynamicPool] = useState<BelgianLocation[]>([]);
   const lastDiscoveryBase = useRef<string>("");
@@ -294,7 +292,7 @@ const App: React.FC = () => {
             const straightDist = calculateDistance(baseCoords, loc);
             const roadDistFromCenter = straightDist * ROAD_DETOUR_FACTOR;
             
-            if (roadDistFromCenter < 10 || roadDistFromCenter > 400) return null;
+            if (roadDistFromCenter < 10 || roadDistFromCenter > searchCriteria.maxDistance) return null;
             const lRaw = await fetchRawWeatherData(loc);
             const lDayIdx = (dateOffset + 1) * 24;
             const lSun = { sunrise: lRaw.daily?.sunrise?.[dateOffset+1] || "07:00", sunset: lRaw.daily?.sunset?.[dateOffset+1] || "20:00" };
@@ -338,9 +336,17 @@ const App: React.FC = () => {
           combined.forEach(item => {
             if (!uniqueMap.has(item.name) || (uniqueMap.get(item.name).sortScore || 0) < (item.sortScore || 0)) uniqueMap.set(item.name, item);
           });
-          return Array.from(uniqueMap.values())
-            .sort((a, b) => (b.sortScore || b.score || 0) - (a.sortScore || a.score || 0))
-            .slice(0, 15);
+          
+          let sorted = Array.from(uniqueMap.values());
+          if (searchCriteria.sortBy === 'distance') {
+            sorted = sorted.sort((a, b) => (a.distanceFromTrainingCenter || 0) - (b.distanceFromTrainingCenter || 0));
+          } else if (searchCriteria.sortBy === 'hour') {
+            sorted = sorted.sort((a, b) => (a.bestHour || 0) - (b.bestHour || 0));
+          } else {
+            sorted = sorted.sort((a, b) => (b.sortScore || b.score || 0) - (a.sortScore || a.score || 0));
+          }
+          
+          return sorted.slice(0, 15);
         });
         await new Promise(res => setTimeout(res, 200));
       }
@@ -568,6 +574,16 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const [hasAutoLocatedTraining, setHasAutoLocatedTraining] = useState(false);
+  useEffect(() => {
+    const isTrainingActive = viewMode === 'training' || viewMode === 'training-weekly';
+    const isAtDefault = training.location === settings.homeLocation || training.location === "Gent";
+    if (isTrainingActive && !hasAutoLocatedTraining && isAtDefault) {
+      handleSetTrainingToCurrentLocation();
+      setHasAutoLocatedTraining(true);
+    }
+  }, [viewMode, hasAutoLocatedTraining, training.location, settings.homeLocation, handleSetTrainingToCurrentLocation]);
+
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
     setIsSettingsOpen(false);
     const locationChanged = newSettings.homeLocation !== settings.homeLocation || newSettings.workLocation !== settings.workLocation;
@@ -609,7 +625,6 @@ const App: React.FC = () => {
 
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
-      {/* Conditionally hide main UI if release notes are open to prevent any flash */}
       {!isReleaseNotesOpen && viewMode !== 'weekly' && viewMode !== 'training-weekly' && (
         <Header 
           onOpenInfo={() => setIsInfoOpen(true)} 
@@ -637,7 +652,7 @@ const App: React.FC = () => {
             <TrainingView 
               isDark={isDark} training={training} trainingSearch={trainingSearch} showTrainingSuggestions={showTrainingSuggestions} setShowTrainingSuggestions={setShowTrainingSuggestions} isSearching={isSearchingGlobalTraining} 
               trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} 
-              onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setSearchCriteria(prev => ({...prev})); setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
+              onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
               onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
               onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
               onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
@@ -662,7 +677,6 @@ const App: React.FC = () => {
       <ConnectivityModal isOpen={isConnectivityOpen} onClose={() => setIsConnectivityOpen(false)} status={connectionStatus} onCheckConnection={checkConnections} isDark={isDark} />
       <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} isDark={isDark} language={settings.language} />
       
-      {/* ReleaseNotesModal rendered as the top-most guard */}
       <ReleaseNotesModal 
         isOpen={isReleaseNotesOpen} 
         onClose={handleDeployUpdates} 

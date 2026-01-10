@@ -51,6 +51,8 @@ export interface SearchCriteria {
   betterScore: boolean;
   drySurface: boolean;
   noIce: boolean;
+  maxDistance: number;
+  sortBy: 'score' | 'distance' | 'hour';
 }
 
 export interface LocationSuggestion extends BelgianLocation {
@@ -75,6 +77,7 @@ export interface WeatherCondition {
   feelsLike: number;
   minTemp?: number;
   maxTemp?: number;
+  estimatedGroundTemp?: number;
   score: number;
   condition: 'Sunny' | 'Rainy' | 'Cloudy' | 'Windy' | 'Stormy' | 'Snowy';
   precipitation: number;
