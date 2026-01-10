@@ -77,12 +77,18 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isConnectivityOpen, setIsConnectivityOpen] = useState(false);
-  const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
+  
+  // RELEASE TRACKING: Initialized to true if version changed to prevent main UI flash
+  const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(() => {
+    const lastSeen = localStorage.getItem('commute_iq_last_version');
+    return lastSeen !== APP_VERSION;
+  });
+
   const [isPopupActive, setIsPopupActive] = useState(false);
   const [isUpdateReady, setIsUpdateReady] = useState(false);
   const pendingWorkerRef = useRef<ServiceWorker | null>(null);
 
-  // Listen for software updates
+  // Listen for software updates (Service Worker logic)
   useEffect(() => {
     const handleUpdate = (e: any) => {
       setIsUpdateReady(true);
@@ -100,14 +106,10 @@ const App: React.FC = () => {
     }
   };
 
-  // Release Tracking Logic
-  useEffect(() => {
-    const lastSeen = localStorage.getItem('commute_iq_last_version');
-    if (lastSeen !== APP_VERSION) {
-      setIsReleaseNotesOpen(true);
-      localStorage.setItem('commute_iq_last_version', APP_VERSION);
-    }
-  }, []);
+  const handleDeployUpdates = () => {
+    localStorage.setItem('commute_iq_last_version', APP_VERSION);
+    setIsReleaseNotesOpen(false);
+  };
 
   const lastUpdateFromCache = useMemo(() => {
     const updates = Object.values(pulseDataMap).map((d: any) => d.lastUpdated).filter(Boolean);
@@ -607,7 +609,8 @@ const App: React.FC = () => {
 
   return (
     <div className={`h-full w-full flex flex-col font-sans overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070a] text-slate-100' : 'bg-slate-50 text-slate-950'}`}>
-      {viewMode !== 'weekly' && viewMode !== 'training-weekly' && (
+      {/* Conditionally hide main UI if release notes are open to prevent any flash */}
+      {!isReleaseNotesOpen && viewMode !== 'weekly' && viewMode !== 'training-weekly' && (
         <Header 
           onOpenInfo={() => setIsInfoOpen(true)} 
           viewMode={viewMode} 
@@ -619,39 +622,52 @@ const App: React.FC = () => {
           onApplyUpdate={handleApplyUpdate}
         />
       )}
-      <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${viewMode.includes('weekly') ? 'pt-[max(0.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'} ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
-        {viewMode === 'daily' && (
-          <DailyView activeLegIndex={activeLegIndex} setActiveLegIndex={setActiveLegIndex} isAdviceExpanded={isAdviceExpanded} setIsAdviceExpanded={setIsAdviceExpanded} primaryData={primaryData} secondaryData={secondaryData} activeWeather={activeLegIndex === 0 ? primaryData.condition : secondaryData.condition} displayedDistance={displayedDistance} settings={settings} isCurrentDayLoading={loadingOffsets.includes(selectedDateOffset)} isCurrentDayEnhanced={pulseDataMap[selectedDateOffset]?.isEnhanced ?? false} isDark={isDark} onPopupStateChange={setIsPopupActive} />
-        )}
-        {viewMode === 'weekly' && (
-          <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
-            <WeeklyForecast pulseDataMap={pulseDataMap} loadingOffsets={loadingOffsets} theme={settings.theme} onSelectDay={(offset: number) => { setSelectedDateOffset(offset); setViewMode('daily'); }} onToggleMode={syncTrainingWeek} workDays={settings.workDays} />
-          </div>
-        )}
-        {(viewMode === 'training' || viewMode === 'training-weekly') && (
-          <TrainingView 
-            isDark={isDark} training={training} trainingSearch={trainingSearch} showTrainingSuggestions={showTrainingSuggestions} setShowTrainingSuggestions={setShowTrainingSuggestions} isSearching={isSearchingGlobalTraining} 
-            trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} 
-            onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setSearchCriteria(prev => ({...prev})); setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
-            onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
-            onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
-            onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
-            onSelectWeeklySlot={(offset, hour) => { 
-              setSelectedDateOffset(offset); 
-              setManualStartHour(null); 
-              setViewMode('training'); 
-            }}
-            filterLocations={filterLocationsWithGlobal} globalTrainingResults={globalTrainingResults} getDayLabel={getDayLabel} 
-            isWeeklyView={viewMode === 'training-weekly'} weeklyData={trainingWeek} weeklyLoading={isTrainingWeekLoading} aiEnabled={!settings.disableAI} onPopupStateChange={setIsPopupActive} 
-            onToggleMode={() => setViewMode('weekly')} onTriggerAlternativesSearch={searchAlternativesProgressive}
-          />
-        )}
-      </main>
-      <BottomNav viewMode={viewMode} setViewMode={setViewMode} onShowTrainingWeekly={syncTrainingWeek} isDark={isDark} />
+      
+      {!isReleaseNotesOpen && (
+        <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${viewMode.includes('weekly') ? 'pt-[max(0.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'} ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
+          {viewMode === 'daily' && (
+            <DailyView activeLegIndex={activeLegIndex} setActiveLegIndex={setActiveLegIndex} isAdviceExpanded={isAdviceExpanded} setIsAdviceExpanded={setIsAdviceExpanded} primaryData={primaryData} secondaryData={secondaryData} activeWeather={activeLegIndex === 0 ? primaryData.condition : secondaryData.condition} displayedDistance={displayedDistance} settings={settings} isCurrentDayLoading={loadingOffsets.includes(selectedDateOffset)} isCurrentDayEnhanced={pulseDataMap[selectedDateOffset]?.isEnhanced ?? false} isDark={isDark} onPopupStateChange={setIsPopupActive} />
+          )}
+          {viewMode === 'weekly' && (
+            <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
+              <WeeklyForecast pulseDataMap={pulseDataMap} loadingOffsets={loadingOffsets} theme={settings.theme} onSelectDay={(offset: number) => { setSelectedDateOffset(offset); setViewMode('daily'); }} onToggleMode={syncTrainingWeek} workDays={settings.workDays} />
+            </div>
+          )}
+          {(viewMode === 'training' || viewMode === 'training-weekly') && (
+            <TrainingView 
+              isDark={isDark} training={training} trainingSearch={trainingSearch} showTrainingSuggestions={showTrainingSuggestions} setShowTrainingSuggestions={setShowTrainingSuggestions} isSearching={isSearchingGlobalTraining} 
+              trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} 
+              onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setSearchCriteria(prev => ({...prev})); setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
+              onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
+              onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
+              onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
+              onSelectWeeklySlot={(offset, hour) => { 
+                setSelectedDateOffset(offset); 
+                setManualStartHour(null); 
+                setViewMode('training'); 
+              }}
+              filterLocations={filterLocationsWithGlobal} globalTrainingResults={globalTrainingResults} getDayLabel={getDayLabel} 
+              isWeeklyView={viewMode === 'training-weekly'} weeklyData={trainingWeek} weeklyLoading={isTrainingWeekLoading} aiEnabled={!settings.disableAI} onPopupStateChange={setIsPopupActive} 
+              onToggleMode={() => setViewMode('weekly')} onTriggerAlternativesSearch={searchAlternativesProgressive}
+            />
+          )}
+        </main>
+      )}
+
+      {!isReleaseNotesOpen && (
+        <BottomNav viewMode={viewMode} setViewMode={setViewMode} onShowTrainingWeekly={syncTrainingWeek} isDark={isDark} />
+      )}
+
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentSettings={settings} onSave={handleSaveSettings} onThemeChange={t => setSettings(prev => ({ ...prev, theme: t }))} onOpenConnectivity={() => setIsConnectivityOpen(true)} onOpenTraining={() => { setViewMode('training'); setManualStartHour(null); }} onOpenReleaseNotes={() => setIsReleaseNotesOpen(true)} isDark={isDark} />
       <ConnectivityModal isOpen={isConnectivityOpen} onClose={() => setIsConnectivityOpen(false)} status={connectionStatus} onCheckConnection={checkConnections} isDark={isDark} />
       <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} isDark={isDark} language={settings.language} />
-      <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} isDark={isDark} />
+      
+      {/* ReleaseNotesModal rendered as the top-most guard */}
+      <ReleaseNotesModal 
+        isOpen={isReleaseNotesOpen} 
+        onClose={handleDeployUpdates} 
+        isDark={isDark} 
+      />
     </div>
   );
 };

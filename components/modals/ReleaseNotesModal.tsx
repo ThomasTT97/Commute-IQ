@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { X, Sparkles, Snowflake, Droplets, Clock, Zap, ShieldCheck } from 'lucide-react';
+import { Sparkles, Snowflake, Droplets, Clock, Zap, ShieldCheck } from 'lucide-react';
 import { RELEASE_NOTES } from '../../constants';
 
 interface ReleaseNotesModalProps {
@@ -23,7 +23,8 @@ export const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
+      {/* Backdrop - Click interaction removed to prevent accidental closure */}
+      <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" />
       
       <div className={`relative w-full max-w-[360px] border rounded-[2.5rem] flex flex-col shadow-3xl animate-in zoom-in-95 duration-200 overflow-hidden ${isDark ? 'bg-[#0a0c10] border-white/10' : 'bg-white border-slate-200'}`}>
         
@@ -39,13 +40,11 @@ export const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ isOpen, on
               <div className="flex flex-col min-w-0 overflow-hidden">
                 <h2 className={`text-sm font-black uppercase tracking-widest leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>System Update</h2>
                 <span className="text-[8px] font-black text-blue-500 uppercase tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis block w-full">
-                  Build v{RELEASE_NOTES.version} • {RELEASE_NOTES.date}
+                  Build v{RELEASE_NOTES.version}
                 </span>
               </div>
             </div>
-            <button onClick={onClose} className={`p-2 rounded-full transition-colors shrink-0 ${isDark ? 'text-slate-600 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`}>
-              <X className="w-5 h-5" />
-            </button>
+            {/* Header Close button removed to enforce update deployment */}
           </div>
         </div>
 

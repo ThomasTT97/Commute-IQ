@@ -4,12 +4,11 @@ import { Language, CommuteSettings, Coordinates } from './types';
 export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
-export const APP_VERSION = "2.4.1"; // Deployment & Update Notification Build
-// SYSTEM_TIME_SYNC: JAN 10, 2025 - 11:58 PM BRUSSELS
+export const APP_VERSION = "2.5.1"; // Atomic Release
+// SYSTEM_TIME_SYNC: JAN 22, 2025 - 11:32 AM BRUSSELS
 
 export const RELEASE_NOTES = {
   version: APP_VERSION,
-  date: "JAN 10, 2025",
   features: [
     {
       title: "Snow Persistence",
@@ -196,7 +195,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     generalSources: 'Provenance des Données',
     generalSourcesContent: 'Nous agrégeons les données haute résolution d\'Open-Meteo et utilisons le moteur de raisonnement Google Gemini 3.0 pour l\'analyse tactique.',
     iceRisk: 'Analyse d\'Adhérence',
-    iceRiskContent: 'Le système surveille l\'inertie thermique du sol sur 6 heures. Si le gel est probable malgré une température de l\'air positive, une alerte verglas est générée.',
+    iceRiskContent: 'The system monitors ground thermal history over a 6-hour window. If surface inertia indicates freezing potential despite positive air temperatures, a black ice alert is generated.',
     surfaceCondition: 'État de la Surface',
     surfaceConditionContent: 'Basé sur les précipitations et l\'évaporation, le système projette l\'humidité au sol. Le statut "Mouillé" indique un coefficient de friction réduit.',
     windCondition: 'Impact Aérodynamique',
@@ -241,7 +240,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     commuteScore: 'De Forenzen-Score',
     commuteScoreContent: 'De basis is 100%. Aftrekpunten gelden voor nadelige variabelen: ijsrisico (-70), zware neerslag (-40) en tegenwind. Een hoge score betekent optimale efficiëntie.',
     trainingMode: 'Prestatie-optimalisatie',
-    trainingModeContent: 'Gebruik de Trainingsmodus om het "Gouden Venster" te vinden — het moment waarop wind en temperatuur het gunstiger zijn voor inspanning.',
+    trainingModeContent: 'Gebruik de Trainingsmodus om het "Gouden Venster" te vinden — het moment waarop wind en temperatuur het gunstiger zijn for inspanning.',
     generalSources: 'Gegevensbronnen',
     generalSourcesContent: 'We gebruiken hoge-resolutie data van Open-Meteo en Google\'s Gemini 3.0 engine for tactische analyse.',
     iceRisk: 'Grip-analyse',
