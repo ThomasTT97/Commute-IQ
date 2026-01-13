@@ -1,6 +1,7 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
-import { BELGIAN_CITIES } from "../constants";
+import { BELGIAN_CITIES, ROAD_DETOUR_FACTOR } from "../constants";
 import { BelgianLocation, REGIONAL_LOCATIONS } from "../locations";
 
 export let lastApiErrorMessage: string | null = null;
@@ -22,6 +23,14 @@ export const MODEL_CHAIN = [
   "gemini-2.5-flash",          
   "gemini-flash-lite-latest" 
 ];
+
+/**
+ * Standardizes the calculation of estimated road distance from a straight-line (Haversine) distance.
+ * Based on average urban detour factors for cyclists.
+ */
+export const estimateRoadDistance = (straightDistance: number): number => {
+  return straightDistance * ROAD_DETOUR_FACTOR;
+};
 
 export const getDirectLocationSuggestions = async (query: string): Promise<BelgianLocation[]> => {
   if (!query || query.length < 3) return [];
@@ -485,14 +494,10 @@ export const aggregateRawWeather = (
   const overnightFreeze = minPastTemp <= 0.5;
 
   // GROUND TEMPERATURE ESTIMATION MODEL
-  // Pavement temp lags air temp significantly. Cooling is faster than heating for pavement in winter.
   let groundTemp = avgTemp;
   if (overnightFreeze) {
-    // If it froze recently, ground temp is heavily influenced by the sub-zero thermal mass
-    // Weighted average favoring recent past (70% weight to recent min)
     groundTemp = (avgTemp * 0.3) + (minPastTemp * 0.7);
   } else {
-    // Standard lag: usually 1.5 - 2.5 degrees lower than air in cool weather
     groundTemp = avgTemp - 1.8;
   }
   
@@ -619,19 +624,6 @@ export const getTrainingSessionAIAdvice = async (settings: CommuteSettings, cond
       config: { responseMimeType: "application/json" } 
     });
     return extractJson(response.text);
-  });
-  return data;
-};
-
-export const getCommuteRoadDistance = async (home: string, work: string): Promise<number | null> => {
-  const { data } = await callWithRetry(async (ai, model) => {
-    const response = await ai.models.generateContent({ 
-      model, 
-      contents: `Calculate the actual cycling road distance between ${home} and ${work} strictly in kilometers (km). Return the numerical distance only, no units.`, 
-      config: { tools: [{ googleSearch: {} }] } 
-    });
-    const match = (response.text || "").match(/(\d+(\.\d+)?)/);
-    return match ? parseFloat(match[1]) : null;
   });
   return data;
 };

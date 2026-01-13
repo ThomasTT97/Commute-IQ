@@ -19,7 +19,6 @@ import {
   getAIInsights,
   getCommuteDayAIAdvice,
   getTrainingSessionAIAdvice,
-  getCommuteRoadDistance, 
   fetchRawWeatherData, 
   fetchWeatherAPIFallback,
   aggregateRawWeather, 
@@ -36,7 +35,8 @@ import {
   remainingLLMAlternativesCount,
   lastApiErrorMessage,
   getNearbyCyclingHubs,
-  activeWeatherProvider
+  activeWeatherProvider,
+  estimateRoadDistance
 } from './services/geminiService';
 
 const App: React.FC = () => {
@@ -204,6 +204,12 @@ const App: React.FC = () => {
   const [showTrainingSuggestions, setShowTrainingSuggestions] = useState(false);
   const [trainingLoading, setTrainingLoading] = useState(false);
   const [manualStartHour, setManualStartHour] = useState<number | null>(null);
+
+  // Define onManualHourChange to handle user-selected training start times
+  const onManualHourChange = (hour: number | null) => {
+    setManualStartHour(hour);
+  };
+
   const [trainingSlots, setTrainingSlots] = useState<any[]>([]);
   const [trainingWeek, setTrainingWeek] = useState<any[]>([]);
   const [isTrainingWeekLoading, setIsTrainingWeekLoading] = useState(false);
@@ -227,7 +233,6 @@ const App: React.FC = () => {
     return trainingSlots.reduce((prev, curr) => (curr.effectiveScore > prev.effectiveScore ? curr : prev), trainingSlots[0]).startHour;
   }, [trainingSlots]);
 
-  // Derived sorted list for the UI that responds to sort changes without triggering re-scans
   const sortedLocationAdvice = useMemo(() => {
     const sorted = [...currentLocationAdvice];
     if (searchCriteria.sortBy === 'distance') {
@@ -235,7 +240,6 @@ const App: React.FC = () => {
     } else if (searchCriteria.sortBy === 'hour') {
       return sorted.sort((a, b) => (a.bestHour || 0) - (b.bestHour || 0)).slice(0, 15);
     } else {
-      // Default: Sort by tactical score
       return sorted.sort((a, b) => (b.sortScore || b.score || 0) - (a.sortScore || a.score || 0)).slice(0, 15);
     }
   }, [currentLocationAdvice, searchCriteria.sortBy]);
@@ -303,7 +307,7 @@ const App: React.FC = () => {
         const batchResults = await Promise.all(batch.map(async (loc) => {
           try {
             const straightDist = calculateDistance(baseCoords, loc);
-            const roadDistFromCenter = straightDist * ROAD_DETOUR_FACTOR;
+            const roadDistFromCenter = estimateRoadDistance(straightDist);
             
             if (roadDistFromCenter < 10 || roadDistFromCenter > searchCriteria.maxDistance) return null;
             const lRaw = await fetchRawWeatherData(loc);
@@ -320,10 +324,16 @@ const App: React.FC = () => {
               const pastTemps = lRaw.hourly.temperature_2m.slice(Math.max(0, lDayIdx + h - 6), lDayIdx + h);
               const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
               const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
+              
+              // TACTICAL FILTER: If Dry Roads is selected, we perform a hard rejection of anything DAMP or WET (>= 10% chance)
+              if (searchCriteria.drySurface && lCond.wetSurfaceChance >= 10) continue;
+              
+              // TACTICAL FILTER: If No Ice is selected, perform hard rejection of ice risk
+              if (searchCriteria.noIce && lCond.iceRisk) continue;
+
               const isDaylight = !lCond.isDark;
               let effectiveScore = lCond.score + (isDaylight ? 20 : 0);
-              if (searchCriteria.drySurface && lCond.wetSurfaceChance > 30) effectiveScore -= 60;
-              if (searchCriteria.noIce && lCond.iceRisk) effectiveScore -= 120;
+              
               if (effectiveScore > maxFinalScore) {
                 maxFinalScore = effectiveScore;
                 lBestHour = h;
@@ -349,8 +359,6 @@ const App: React.FC = () => {
           combined.forEach(item => {
             if (!uniqueMap.has(item.name) || (uniqueMap.get(item.name).sortScore || 0) < (item.sortScore || 0)) uniqueMap.set(item.name, item);
           });
-          
-          // We store up to 50 in the raw pool to allow client-side sorting without loss of data
           return Array.from(uniqueMap.values()).slice(0, 50);
         });
         await new Promise(res => setTimeout(res, 200));
@@ -358,7 +366,6 @@ const App: React.FC = () => {
     } catch (e) { } finally { setIsScanningAlternatives(false); setScanningProgress(100); }
   }, [training.dateOffset, training.distance, training.coords, training.location, settings, searchCriteria.maxDistance, searchCriteria.drySurface, searchCriteria.noIce, dynamicPool, trainingLoading]);
 
-  // Effect to trigger search only on parameters that actually change the search grid/results
   useEffect(() => {
     if (viewMode === 'training' && !trainingLoading) {
       searchAlternativesProgressive();
@@ -380,9 +387,9 @@ const App: React.FC = () => {
   }, [selectedDateOffset]);
 
   const displayedDistance = useMemo(() => {
-    if (settings.roadDistance) return settings.roadDistance;
-    return calculateDistance(settings.homeCoords, settings.workCoords) * ROAD_DETOUR_FACTOR;
-  }, [settings.roadDistance, settings.homeCoords, settings.workCoords]);
+    const direct = calculateDistance(settings.homeCoords, settings.workCoords);
+    return estimateRoadDistance(direct);
+  }, [settings.homeCoords, settings.workCoords]);
 
   const commuteSequence = useMemo(() => {
     return {
@@ -494,7 +501,7 @@ const App: React.FC = () => {
       const optAdvice = REGIONAL_LOCATIONS
         .map(loc => {
           const straightDist = calculateDistance(training.coords, loc);
-          return { ...loc, roadDistFromCenter: straightDist * ROAD_DETOUR_FACTOR };
+          return { ...loc, roadDistFromCenter: estimateRoadDistance(straightDist) };
         })
         .filter(loc => loc.roadDistFromCenter > roadTargetRideOut * 0.8 && loc.roadDistFromCenter < roadTargetRideOut * 1.2)
         .filter(loc => {
@@ -600,13 +607,21 @@ const App: React.FC = () => {
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
     setIsSettingsOpen(false);
     const locationChanged = newSettings.homeLocation !== settings.homeLocation || newSettings.workLocation !== settings.workLocation;
-    let updated = { ...newSettings };
-    setSettings(updated); localStorage.setItem('velo_settings', JSON.stringify(updated));
+    
+    let updated = { 
+      ...newSettings
+    };
+    
+    setSettings(updated); 
+    localStorage.setItem('velo_settings', JSON.stringify(updated));
+    
     if (locationChanged) {
-      setPulseDataMap({}); localStorage.removeItem(CACHE_KEY);
-      try { const dist = await getCommuteRoadDistance(newSettings.homeLocation, newSettings.workLocation); if (dist) { updated.roadDistance = dist; setSettings(updated); localStorage.setItem('velo_settings', JSON.stringify(updated)); } } catch (e) { }
+      setPulseDataMap({}); 
+      localStorage.removeItem(CACHE_KEY);
       await syncFullWeek(updated);
-    } else await syncFullWeek(updated, true);
+    } else {
+      await syncFullWeek(updated, true);
+    }
   };
 
   const getDayLabel = (offset: number) => {
@@ -654,7 +669,7 @@ const App: React.FC = () => {
       {!isReleaseNotesOpen && (
         <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${viewMode.includes('weekly') ? 'pt-[max(0.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'} ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
           {viewMode === 'daily' && (
-            <DailyView activeLegIndex={activeLegIndex} setActiveLegIndex={setActiveLegIndex} isAdviceExpanded={isAdviceExpanded} setIsAdviceExpanded={setIsAdviceExpanded} primaryData={primaryData} secondaryData={secondaryData} activeWeather={activeLegIndex === 0 ? primaryData.condition : secondaryData.condition} displayedDistance={displayedDistance} settings={settings} isCurrentDayLoading={loadingOffsets.includes(selectedDateOffset)} isCurrentDayEnhanced={pulseDataMap[selectedDateOffset]?.isEnhanced ?? false} isDark={isDark} onPopupStateChange={setIsPopupActive} />
+            <DailyView activeLegIndex={activeLegIndex} setActiveLegIndex={setActiveLegIndex} isAdviceExpanded={isAdviceExpanded} setIsAdviceExpanded={setIsAdviceExpanded} primaryData={primaryData} secondaryData={secondaryData} activeWeather={activeLegIndex === 0 ? primaryData.condition : secondaryData.condition} displayedDistance={displayedDistance} isDistanceVerified={false} settings={settings} isCurrentDayLoading={loadingOffsets.includes(selectedDateOffset)} isCurrentDayEnhanced={pulseDataMap[selectedDateOffset]?.isEnhanced ?? false} isDark={isDark} onPopupStateChange={setIsPopupActive} />
           )}
           {viewMode === 'weekly' && (
             <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
@@ -668,7 +683,7 @@ const App: React.FC = () => {
               onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
               onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
               onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
-              onManualHourChange={setManualStartHour} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
+              onManualHourChange={onManualHourChange} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
               onSelectWeeklySlot={(offset, hour) => { 
                 setSelectedDateOffset(offset); 
                 setManualStartHour(null); 

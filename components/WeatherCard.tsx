@@ -200,7 +200,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   const iceRiskReason = useMemo(() => {
     if (!condition) return "";
     const groundTemp = condition.estimatedGroundTemp ?? (condition.temp - 2.5);
-    const isGroundFrozen = groundTemp <= 0.8;
+    const hum = condition.humidity;
 
     if (condition.iceRisk) {
       if (condition.isSnowy) {
@@ -208,13 +208,16 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       }
       const isWet = (condition.wetSurfaceChance ?? 0) >= 10;
       if (isWet) {
-        return `Black Ice: Ground temp is ${groundTemp}°C. Moisture is freezing on contact. Surfaces will be indistinguishable from dry pavement but offer zero traction.`;
+        return `Black Ice: Ground temp is ${groundTemp.toFixed(1)}°C. Moisture is freezing on contact. Surfaces will be indistinguishable from dry pavement but offer zero traction.`;
       } else {
-        return `Hoar Frost: High humidity (${condition.humidity}%) meeting a ${groundTemp}°C surface. Moisture is crystallizing directly onto the road. Corners will be greasy.`;
+        return `Hoar Frost: High humidity (${hum}%) meeting a ${groundTemp.toFixed(1)}°C surface. Moisture is crystallizing directly onto the road. Corners will be greasy.`;
       }
     } else {
-      if (isGroundFrozen) {
-          return `Dry Cold: Ground is at ${groundTemp}°C, but low humidity (${condition.humidity}%) prevents frost formation. Surfaces remain dry and safe for now.`;
+      if (groundTemp <= 0.8) {
+          if (hum < 70) {
+            return `Dry Cold: Ground is at ${groundTemp.toFixed(1)}°C, but low humidity (${hum}%) prevents frost formation. Surfaces remain dry and safe for now.`;
+          }
+          return `Near Freezing: Ground is at ${groundTemp.toFixed(1)}°C with ${hum}% humidity. Conditions are borderline; exercise caution in shaded areas.`;
       }
       return "Safe: Surface and air temperatures remain comfortably above the freezing boundary.";
     }
@@ -345,9 +348,9 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
             <div className="flex items-center gap-2 truncate">
               <MapPin className="w-2.5 h-2.5 flex-none text-blue-500/50" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2 h-2 opacity-30 flex-none" /><span className="truncate">{endLocation}</span>
             </div>
-            {distance && (
-              <span className="flex-none text-[9px] font-black text-slate-500 opacity-60 tabular-nums">
-                {distance.toFixed(1)}KM
+            {distance !== undefined && (
+              <span className={`flex-none text-[9px] font-black tabular-nums transition-colors ${distance <= 0 ? 'text-blue-500 animate-pulse' : 'text-slate-500 opacity-60'}`}>
+                {distance > 0 ? `${distance.toFixed(1)} ROAD KM` : 'CALC...'}
               </span>
             )}
           </div>
@@ -471,9 +474,27 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
 
       {showIceDetails && (
         <Modal onClose={() => setShowIceDetails(false)} isDark={isDark}>
-          <div className="flex items-center justify-between mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk Assessment</span><button onClick={() => setShowIceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4" /></button></div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-3">{iceVitals.map((item, i) => (<div key={i} className="flex items-center justify-between text-[11px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span></div><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>))}</div>
-          <div className={`p-3 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-100'}`}><span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Assessment Details</span><p className={`text-[11px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{iceRiskReason}</p></div>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest leading-none">Risk Assessment</span>
+            <button onClick={() => setShowIceDetails(false)} className="p-1 rounded-md hover:bg-white/10"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-5">
+            {iceVitals.map((item, i) => (
+              <div key={i} className="flex items-center justify-between text-[11px] font-bold">
+                <div className="flex items-center gap-2">
+                  <div className="flex-none w-5 flex justify-center">{item.icon}</div>
+                  <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span>
+                </div>
+                <span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span>
+              </div>
+            ))}
+          </div>
+          <div className={`p-4 rounded-2xl border flex flex-col gap-2 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+            <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Assessment Details</span>
+            <p className={`text-[12px] font-semibold leading-[1.4] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+              {iceRiskReason}
+            </p>
+          </div>
         </Modal>
       )}
 
@@ -605,7 +626,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
                     <span className={`text-[14px] font-black uppercase tracking-tight leading-none truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{loc.name.split(',')[0]}</span>
                     {loc.distanceFromTrainingCenter !== undefined && (
                       <span className={`px-1.5 py-0.5 rounded bg-blue-500/10 text-[8px] font-black uppercase tracking-widest whitespace-nowrap flex-none ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
-                        {Math.round(loc.distanceFromTrainingCenter)} KM
+                        {Math.round(loc.distanceFromTrainingCenter)} ROAD KM
                       </span>
                     )}
                   </div>
@@ -655,7 +676,14 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
       </div>
       <div className="flex-none flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-tight truncate max-w-[70%]"><MapPin className="w-3 h-3 text-blue-500/50 flex-none" /><span className="truncate">{startLocation}</span><ArrowRight className="w-2.5 h-2.5 opacity-30 flex-none" /><span className="truncate">{endLocation}</span></div>
-        {distance && (<div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 flex-none"><Bike className="w-2.5 h-2.5 text-blue-500" /><span className="tracking-tighter tabular-nums">{distance.toFixed(1)} KM</span></div>)}
+        {distance !== undefined && (
+          <div className="flex items-center gap-1.5 text-[9px] font-black flex-none">
+            <Bike className="w-2.5 h-2.5 text-blue-500" />
+            <span className={`tracking-tighter tabular-nums transition-colors ${distance <= 0 ? 'text-blue-500 animate-pulse' : 'text-slate-500'}`}>
+              {distance > 0 ? `${distance.toFixed(1)} ROAD KM` : 'CALC...'}
+            </span>
+          </div>
+        )}
       </div>
 
       {((optimizationAdvice && optimizationAdvice.length > 0) || (locationAdvice && (locationAdvice.length > 0 || isScanning)) || onToggleIntelligence) && (
@@ -687,7 +715,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         <div className="relative">
           <button onClick={toggleLights} className={`rounded-[1.25rem] p-2.5 flex items-center gap-3 min-w-[110px] transition-all active:scale-[0.98] ${isDark ? 'bg-[#161920] border border-white/5 hover:bg-[#1c2029]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
             <Lightbulb className={`w-5 h-5 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
-            <div className="flex flex-col text-left"><span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
+            <div className="flex flex-col text-left"><span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-50'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
           </button>
         </div>
       </div>

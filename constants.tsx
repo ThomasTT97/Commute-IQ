@@ -4,26 +4,26 @@ import { Language, CommuteSettings, Coordinates } from './types';
 export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
-export const APP_VERSION = "2.7.0"; // Enhanced Tactical Intelligence Update
-// SYSTEM_TIME_SYNC: FEB 12, 2025 - 10:45 AM BRUSSELS
+export const APP_VERSION = "2.8.0"; // Strategic Surface Intelligence Update
+// SYSTEM_TIME_SYNC: FEB 13, 2025 - 09:15 AM BRUSSELS
 
 export const RELEASE_NOTES = {
   version: APP_VERSION,
   features: [
     {
-      title: "Advanced Aero-Vectoring",
-      description: "Proprietary wind-drag calculation now accounts for yaw angles, providing more accurate score deductions for crosswinds versus direct headwinds.",
-      icon: "Wind"
+      title: "Cryo-Inertia Mapping",
+      description: "New predictive ground temperature model monitors surface thermal history to identify black ice risks before they manifest visually.",
+      icon: "Snowflake"
     },
     {
-      title: "Dynamic Training Grid",
-      description: "Enhanced regional scanning engine now probes 30+ European cycling hubs in parallel, identifying high-safety windows within a 300km radius.",
-      icon: "Zap"
-    },
-    {
-      title: "ML Surface Decay v2",
-      description: "Our evaporation physics model now integrates solar radiation data to predict road drying times with 15% higher accuracy during winter sun cycles.",
+      title: "Phase Persistence Engine",
+      description: "Advanced evaporation physics now calculates road drying times based on residual moisture, humidity, and solar radiation cycles.",
       icon: "Droplets"
+    },
+    {
+      title: "Euro-Hub Expansion",
+      description: "Regional scanning grid now probes major cycling centers in FR, NL, and DE to find optimal weather within a 300km tactical radius.",
+      icon: "Globe"
     }
   ]
 };

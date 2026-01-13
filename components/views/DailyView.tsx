@@ -15,6 +15,7 @@ interface DailyViewProps {
   secondaryData: any;
   activeWeather: WeatherCondition | null;
   displayedDistance: number;
+  isDistanceVerified: boolean;
   settings: any;
   isCurrentDayLoading: boolean;
   isCurrentDayEnhanced: boolean;
@@ -58,14 +59,11 @@ export const DailyView: React.FC<DailyViewProps> = ({
   }, [isAdviceExpanded, activeLegIndex]); 
   
   const shouldShowBlock = (index: number) => {
-    // If AI is disabled or enhanced data exists, we show steps.
-    // If enhanced data doesn't exist, we immediately show all standardized blocks.
     if (settings.disableAI || !isCurrentDayEnhanced) return true;
     return typingStep >= index;
   };
 
   const renderAdviceText = (text: string | undefined, fallback: string, stepIndex: number) => {
-    // If we have AI-enhanced text, typewriter it.
     if (isCurrentDayEnhanced && !settings.disableAI && text) {
       return (
         <TypewriterText 
@@ -76,7 +74,6 @@ export const DailyView: React.FC<DailyViewProps> = ({
         />
       );
     }
-    // Otherwise, show the fallback (standardized advice) instantly.
     return <span className={`transition-opacity duration-300 ${isDark ? 'text-white' : 'text-slate-950'}`}>{fallback}</span>;
   };
 
