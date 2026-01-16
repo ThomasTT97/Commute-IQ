@@ -467,6 +467,17 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               <div className={`h-1 w-full rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.max(0, 100 - (condition.wetSurfaceChance || 0))}%` }} /></div>
             </div>
           )}
+          
+          <div className={`flex items-center justify-between p-3 rounded-xl border mb-3 ${isDark ? 'bg-blue-600/5 border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}>
+             <div className="flex items-center gap-2">
+                <CloudRain className="w-4 h-4 text-blue-500" />
+                <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Rain Vol (24h)</span>
+             </div>
+             <span className={`text-lg font-black font-mono tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+               {condition?.precip24h !== undefined ? condition.precip24h : 0}<span className="text-[10px] text-slate-500 ml-1">MM/M²</span>
+             </span>
+          </div>
+
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-3">{surfaceVitals.map((item, i) => (<div key={i} className="flex items-center justify-between text-[11px] font-bold"><div className="flex items-center gap-2"><div className="flex-none w-5 flex justify-center">{item.icon}</div><span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{item.label}</span></div><span className={isDark ? 'text-slate-100' : 'text-slate-900'}>{item.value}</span></div>))}</div>
           <div className={`p-3 rounded-xl border flex flex-col gap-1 ${isDark ? 'bg-black border-white/10' : 'bg-slate-50 border-slate-100'}`}><span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Atmos Logic Analysis</span><p className={`text-[11px] font-bold leading-tight ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{surfaceRiskReason}</p></div>
         </Modal>
@@ -715,7 +726,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         <div className="relative">
           <button onClick={toggleLights} className={`rounded-[1.25rem] p-2.5 flex items-center gap-3 min-w-[110px] transition-all active:scale-[0.98] ${isDark ? 'bg-[#161920] border border-white/5 hover:bg-[#1c2029]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
             <Lightbulb className={`w-5 h-5 transition-all ${condition?.isDark ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'text-slate-300'}`} />
-            <div className="flex flex-col text-left"><span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-50'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
+            <div className="flex flex-col text-left"><span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Lights</span><span className={`text-[10px] font-black uppercase ${condition?.isDark ? 'text-yellow-500' : 'text-slate-500'}`}>{condition?.isDark ? 'Required' : 'Optional'}</span></div>
           </button>
         </div>
       </div>

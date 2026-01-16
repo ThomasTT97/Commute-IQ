@@ -103,6 +103,7 @@ export interface WeatherCondition {
   lastPrecipitationTime?: string;
   estimatedDryTime?: number; // Unix timestamp in ms
   precipDuringSession: number;
+  precip24h?: number;
   scoreBreakdown?: ScoreDeduction[];
   sunrise?: string;
   sunset?: string;

@@ -430,66 +430,155 @@ export const aggregateRawWeather = (
     isDark = startH < 6 || startH >= 21; 
   }
 
-  // PHASE CHANGE PERSISTENCE MODEL
-  let lastPrecipIdx = -1;
+  // --- SURFACE WETNESS: WATER BUDGET MODEL ---
+  // Replaces older heuristic with Mass Balance (Water In - Water Out)
+  let waterFilmDepth = 0; // in mm
+  const DRAINAGE_CAP = 0.5; // mm. Maximum standing water on cambered road before runoff.
+  const LOOKBACK_HOURS = 24; // Physics simulation window
   let lastPrecipTime = "None";
-  let lastPrecipVolume = 0;
-  let lastPrecipWasSnow = false;
-
-  if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
-    for (let i = 1; i <= 36; i++) {
-      const idx = sessionStartAbsoluteIdx - i;
-      if (idx >= 0 && fullRawHourlyPrecip[idx] > 0.1) {
-        if (lastPrecipIdx === -1) {
-          lastPrecipIdx = idx;
-          lastPrecipVolume = fullRawHourlyPrecip[idx];
-          const hour = idx % 24;
-          lastPrecipTime = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
-        }
-        if (fullRawHourlyCodes && [71, 73, 75, 77, 85, 86].includes(fullRawHourlyCodes[idx]) && i <= 24) {
-          lastPrecipWasSnow = true;
-        }
-      }
-    }
-  }
-
+  let precipDuringSession = totalPrecip;
   let estimatedDryTime: number | undefined;
-  let wetSurfaceChance = 5;
+  
+  // Calculate 24h Precipitation Volume
+  let precip24h = 0;
 
-  if (totalPrecip > 0.1) {
-    wetSurfaceChance = 98;
-  } else if (lastPrecipIdx !== -1) {
-    const lastRainTemp = fullRawHourlyTemp?.[lastPrecipIdx] ?? avgTemp;
-    const lastRainHum = fullRawHourlyHumidity?.[lastPrecipIdx] ?? avgHum;
-    let evapDelayHours = 4.0;
-    if (lastPrecipWasSnow) {
-      evapDelayHours *= 3.5; 
-      if (lastRainTemp < 4.5) evapDelayHours += 12.0;
-    }
-    if (lastRainHum > 88) evapDelayHours += 8.0;
-    else if (lastRainHum > 78) evapDelayHours += 4.5;
-    if (lastRainTemp < 3) evapDelayHours += 9.0;
-    else if (lastRainTemp < 10) evapDelayHours += 4.0;
-    if (lastPrecipVolume > 1.5) evapDelayHours += 3.5;
-    if (lastPrecipVolume > 5.0) evapDelayHours += 6.0;
-    const windEffect = 1 + (maxWind / 25);
-    evapDelayHours /= windEffect;
-    if (isDark) evapDelayHours *= 1.4;
-    else evapDelayHours *= 0.7; 
-    const startDate = new Date(); 
-    startDate.setDate(startDate.getDate() - 1); 
-    startDate.setHours(0, 0, 0, 0);
-    estimatedDryTime = startDate.getTime() + (lastPrecipIdx + 1 + evapDelayHours) * 3600000;
-    const nowMs = startDate.getTime() + (sessionStartAbsoluteIdx || 0) * 3600000;
-    const remainingDryingTimeMs = estimatedDryTime - nowMs;
-    if (remainingDryingTimeMs > 0) {
-      const hoursRemaining = remainingDryingTimeMs / 3600000;
-      if (hoursRemaining < 0.3) wetSurfaceChance = 12;
-      else if (hoursRemaining < 2.0) wetSurfaceChance = 45;
-      else if (hoursRemaining < 5.0) wetSurfaceChance = 75;
-      else wetSurfaceChance = 92;
+  // Backward Simulation: Establish current state
+  if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
+    // We simulate from past to present to accumulate/evaporate water
+    for (let i = LOOKBACK_HOURS; i >= 0; i--) {
+      const idx = sessionStartAbsoluteIdx - i;
+      if (idx < 0) continue; // Boundary check
+
+      const hRain = fullRawHourlyPrecip[idx] ?? 0;
+      const hTemp = fullRawHourlyTemp?.[idx] ?? avgTemp;
+      const hHum = fullRawHourlyHumidity?.[idx] ?? avgHum;
+      const hCode = fullRawHourlyCodes?.[idx] ?? 0;
+      // Use maxWind of the slice as a proxy for historical wind if full array not easily accessible here
+      // This assumption avoids changing function signature for now.
+      const hWind = maxWind; 
+
+      const hour = idx % 24;
+      const isDaytime = hour >= 7 && hour <= 19; // Approximation for historical loop
+
+      // Calculate 24h precip sum (excluding current hour for "past 24h")
+      if (i > 0) {
+        precip24h += hRain;
+      }
+
+      // 1. ADD WATER (Precipitation)
+      if (hRain > 0) {
+        waterFilmDepth += hRain;
+        if (waterFilmDepth > DRAINAGE_CAP) waterFilmDepth = DRAINAGE_CAP;
+        
+        // Track last rain time label
+        const timeLabel = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
+        if (i > 0) lastPrecipTime = timeLabel;
+      }
+
+      // 2. ADD WATER (Condensation / Dew)
+      // Dew Point approximation: T - ((100 - RH)/5)
+      const dewPoint = hTemp - ((100 - hHum) / 5);
+      // If surface temp (approx air temp at night) drops to Dew Point + 1 margin
+      if (!isDaytime && hTemp <= dewPoint + 1.0 && hHum > 90) {
+         waterFilmDepth += 0.05; // Trace condensation (frost/dew)
+         if (waterFilmDepth > DRAINAGE_CAP) waterFilmDepth = DRAINAGE_CAP;
+      }
+
+      // 3. REMOVE WATER (Evaporation - Penman Monteith Simplified)
+      // Base Rate: ~0.1mm/hr at 15C, 50% RH
+      let evapBase = 0.1;
+
+      // Factors
+      // Solar: Black asphalt absorbs heat. Sunny days evaporate MUCH faster.
+      let solarFactor = 1.0; 
+      if (!isDaytime) solarFactor = 0.2; // Night drying is very slow
+      else if (hCode <= 2) solarFactor = 2.5; // Direct sun
+      else solarFactor = 1.0; // Overcast
+
+      // Humidity: Driving force is vapor pressure deficit.
+      // 100% RH = 0 evaporation. 50% RH = Normal. 
+      const humidityFactor = Math.max(0, (100 - hHum) / 50);
+
+      // Wind: Strips boundary layer. 
+      const windFactor = 1 + (hWind / 15);
+
+      // Temp: Warmer air holds exponentially more moisture.
+      // Factor is 1.0 at 15C.
+      const tempFactor = Math.pow(1.05, (hTemp - 15));
+
+      const totalEvap = evapBase * solarFactor * humidityFactor * windFactor * tempFactor;
+      
+      waterFilmDepth = Math.max(0, waterFilmDepth - totalEvap);
     }
   }
+
+  // Forward Simulation: Calculate Estimated Dry Time
+  if (waterFilmDepth > 0 && sessionStartAbsoluteIdx !== undefined) {
+    let futureDepth = waterFilmDepth;
+    let hoursForward = 0;
+    
+    // Simulate up to 24 hours into the future
+    while (futureDepth > 0 && hoursForward < 24) {
+       hoursForward++;
+       const idx = sessionStartAbsoluteIdx + hoursForward;
+       
+       // Future weather parameters (using current slice averages if beyond forecast or simple persistence)
+       // We use current slice averages as proxy for near-future if array bounds exceeded
+       const hTemp = fullRawHourlyTemp?.[idx] ?? avgTemp;
+       const hHum = fullRawHourlyHumidity?.[idx] ?? avgHum;
+       const hCode = fullRawHourlyCodes?.[idx] ?? maxCode;
+       const hWind = maxWind;
+       const hour = idx % 24;
+       const isDaytime = hour >= 7 && hour <= 19;
+
+       // Evap Logic (Same as above)
+       let evapBase = 0.1;
+       let solarFactor = (!isDaytime) ? 0.2 : (hCode <= 2 ? 2.5 : 1.0);
+       const humidityFactor = Math.max(0, (100 - hHum) / 50);
+       const windFactor = 1 + (hWind / 15);
+       const tempFactor = Math.pow(1.05, (hTemp - 15));
+       const totalEvap = evapBase * solarFactor * humidityFactor * windFactor * tempFactor;
+
+       futureDepth = Math.max(0, futureDepth - totalEvap);
+    }
+    
+    // Calculate timestamp
+    const now = new Date();
+    // Normalize "today" based on session index vs now if needed, but here simply:
+    // estimatedDryTime is (start time of session + hoursForward)
+    // We need a reference date. The system usually passes 'offset' but let's approximate
+    // using the date object logic available in other functions or simply relative ms
+    // Ideally we assume sessionStartAbsoluteIdx is relative to "now" if 0 is "start of dataset"
+    // For simplicity, we just return a relative timestamp from "now" based on the lookback loop + forward
+    // But since we don't have the absolute epoch of index 0 easily here, we construct it:
+    // This is a limitation of the stateless helper. We'll use a rough relative time.
+    const oneHourMs = 3600 * 1000;
+    // We assume the caller knows "sessionStartAbsoluteIdx" corresponds to the requested time slot.
+    // We don't have the absolute date object of the slot here easily without passing it.
+    // However, existing logic calculated dry time relative to 'lastPrecipIdx'. 
+    // We will return a value relative to the Session Start.
+    // The UI handles 'estimatedDryTime' as a unix timestamp. 
+    // We will estimate it relative to Date.now() if it's today's slot, but that's risky.
+    // Let's rely on the fact that if waterFilmDepth > 0, it's wet NOW.
+    // We can just return the number of hours to dry if we change the type, but let's stick to timestamp.
+    // We will grab the date from the `sunTimes` if available or `timeWindow`? No.
+    // We will reuse the "today" logic from the previous implementation:
+    const startDate = new Date(); 
+    startDate.setDate(startDate.getDate() - 1); // Safety buffer for timezone
+    startDate.setHours(0,0,0,0);
+    // idx 0 is usually yesterday 00:00 or similar in OpenMeteo past_days=1
+    // sessionStartAbsoluteIdx is hours from that origin.
+    const originMs = startDate.getTime(); 
+    estimatedDryTime = originMs + (sessionStartAbsoluteIdx + hoursForward) * oneHourMs;
+  }
+
+  // Determine Chance based on Depth
+  let wetSurfaceChance = 0;
+  if (waterFilmDepth > 0.1) wetSurfaceChance = 95; // Significant film
+  else if (waterFilmDepth > 0.01) wetSurfaceChance = 45; // Damp / Spotty
+  else wetSurfaceChance = 5; // Dry
+
+  if (totalPrecip > 0.1) wetSurfaceChance = 99; // Currently raining override
 
   const overnightFreeze = minPastTemp <= 0.5;
 
@@ -534,7 +623,9 @@ export const aggregateRawWeather = (
     isDark, wetSurfaceChance, headwindImpact, iceRisk, 
     overnightFreeze, minPastTemp: minPastTemp === 99 ? avgTemp : parseFloat(minPastTemp.toFixed(1)), 
     lastPrecipitationTime: lastPrecipTime, estimatedDryTime,
-    precipDuringSession: parseFloat(totalPrecip.toFixed(1)), sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
+    precipDuringSession: parseFloat(totalPrecip.toFixed(1)), 
+    precip24h: parseFloat(precip24h.toFixed(1)),
+    sunrise: sunTimes?.sunrise, sunset: sunTimes?.sunset
   };
 
   const breakdown = getScoreBreakdown(baseWeather, isTraining, startHour);
