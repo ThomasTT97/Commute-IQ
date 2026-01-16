@@ -38,6 +38,8 @@ export interface CommuteSettings {
   disableAI: boolean;
   equipment: Equipment[];
   averageSpeed: number;
+  commuteCompensation: number; // EUR per KM
+  manualCommuteHistory?: Record<string, number>; // Key: "YYYY-MM", Value: number of legs
   fitnessGoal: FitnessGoal;
   workDays: number[]; // 0=Sun, 1=Mon...
 }

@@ -1,4 +1,3 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
@@ -54,7 +53,7 @@ export default defineConfig(({ mode }) => {
                 cacheName: 'weather-api-cache',
                 expiration: {
                   maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 // 1 hour
+                  maxAgeSeconds: 2 * 60 * 60 // 2 hours
                 }
               }
             }

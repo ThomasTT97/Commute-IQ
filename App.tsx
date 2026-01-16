@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState, SearchCriteria, LocationSuggestion } from './types'; 
 import { BelgianLocation } from './locations';
@@ -47,6 +46,16 @@ const App: React.FC = () => {
     if (!merged.homeCoords) merged.homeCoords = DEFAULT_SETTINGS.homeCoords;
     if (!merged.workCoords) merged.workCoords = DEFAULT_SETTINGS.workCoords;
     return merged;
+  });
+
+  const [history, setHistory] = useState<number[]>(() => {
+    const saved = localStorage.getItem('commute_iq_history');
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return [];
+    }
   });
 
   const [pulseDataMap, setPulseDataMap] = useState<Record<number, any>>(() => {
@@ -205,7 +214,6 @@ const App: React.FC = () => {
   const [trainingLoading, setTrainingLoading] = useState(false);
   const [manualStartHour, setManualStartHour] = useState<number | null>(null);
 
-  // Define onManualHourChange to handle user-selected training start times
   const onManualHourChange = (hour: number | null) => {
     setManualStartHour(hour);
   };
@@ -325,10 +333,7 @@ const App: React.FC = () => {
               const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
               const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
               
-              // TACTICAL FILTER: If Dry Roads is selected, we perform a hard rejection of anything DAMP or WET (>= 10% chance)
               if (searchCriteria.drySurface && lCond.wetSurfaceChance >= 10) continue;
-              
-              // TACTICAL FILTER: If No Ice is selected, perform hard rejection of ice risk
               if (searchCriteria.noIce && lCond.iceRisk) continue;
 
               const isDaylight = !lCond.isDark;
@@ -462,7 +467,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!initialSyncStarted.current) {
       initialSyncStarted.current = true;
-      const needsSync = [0,1,2,3,4,5,6].some(offset => !pulseDataMap[offset] || (Date.now() - (pulseDataMap[offset].lastUpdated || 0)) > 3600000);
+      const needsSync = [0,1,2,3,4,5,6].some(offset => !pulseDataMap[offset] || (Date.now() - (pulseDataMap[offset].lastUpdated || 0)) > 7200000);
       if (needsSync) syncFullWeek(settings, true);
     }
   }, [syncFullWeek, settings, pulseDataMap]);
@@ -607,14 +612,9 @@ const App: React.FC = () => {
   const handleSaveSettings = async (newSettings: CommuteSettings) => {
     setIsSettingsOpen(false);
     const locationChanged = newSettings.homeLocation !== settings.homeLocation || newSettings.workLocation !== settings.workLocation;
-    
-    let updated = { 
-      ...newSettings
-    };
-    
+    let updated = { ...newSettings };
     setSettings(updated); 
     localStorage.setItem('velo_settings', JSON.stringify(updated));
-    
     if (locationChanged) {
       setPulseDataMap({}); 
       localStorage.removeItem(CACHE_KEY);
@@ -623,6 +623,26 @@ const App: React.FC = () => {
       await syncFullWeek(updated, true);
     }
   };
+
+  const handleLogCommute = useCallback(() => {
+    const now = new Date();
+    const timestamp = now.getTime();
+    const monthKey = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    
+    setHistory(prev => {
+      const next = [timestamp, ...prev];
+      localStorage.setItem('commute_iq_history', JSON.stringify(next));
+      return next;
+    });
+
+    setSettings(prev => {
+      const newManual = { ...prev.manualCommuteHistory };
+      newManual[monthKey] = (newManual[monthKey] || 0) + 1;
+      const next = { ...prev, manualCommuteHistory: newManual };
+      localStorage.setItem('velo_settings', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const getDayLabel = (offset: number) => {
     const d = new Date(); d.setDate(d.getDate() + offset);
@@ -669,7 +689,17 @@ const App: React.FC = () => {
       {!isReleaseNotesOpen && (
         <main className={`flex-1 px-5 flex flex-col gap-2 max-w-md mx-auto w-full min-h-0 overflow-y-auto hide-scrollbar relative ${viewMode.includes('weekly') ? 'pt-[max(0.5rem,env(safe-area-inset-top))] pb-0' : 'pt-1 pb-0'} ${isPopupActive ? 'z-[200]' : 'z-10'}`}>
           {viewMode === 'daily' && (
-            <DailyView activeLegIndex={activeLegIndex} setActiveLegIndex={setActiveLegIndex} isAdviceExpanded={isAdviceExpanded} setIsAdviceExpanded={setIsAdviceExpanded} primaryData={primaryData} secondaryData={secondaryData} activeWeather={activeLegIndex === 0 ? primaryData.condition : secondaryData.condition} displayedDistance={displayedDistance} isDistanceVerified={false} settings={settings} isCurrentDayLoading={loadingOffsets.includes(selectedDateOffset)} isCurrentDayEnhanced={pulseDataMap[selectedDateOffset]?.isEnhanced ?? false} isDark={isDark} onPopupStateChange={setIsPopupActive} />
+            <DailyView 
+              activeLegIndex={activeLegIndex} setActiveLegIndex={setActiveLegIndex} 
+              isAdviceExpanded={isAdviceExpanded} setIsAdviceExpanded={setIsAdviceExpanded} 
+              primaryData={primaryData} secondaryData={secondaryData} 
+              activeWeather={activeLegIndex === 0 ? primaryData.condition : secondaryData.condition} 
+              displayedDistance={displayedDistance} settings={settings} 
+              isCurrentDayLoading={loadingOffsets.includes(selectedDateOffset)} 
+              isCurrentDayEnhanced={pulseDataMap[selectedDateOffset]?.isEnhanced ?? false} 
+              isDark={isDark} onPopupStateChange={setIsPopupActive}
+              history={history} onLogCommute={handleLogCommute}
+            />
           )}
           {viewMode === 'weekly' && (
             <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
@@ -704,12 +734,7 @@ const App: React.FC = () => {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentSettings={settings} onSave={handleSaveSettings} onThemeChange={t => setSettings(prev => ({ ...prev, theme: t }))} onOpenConnectivity={() => setIsConnectivityOpen(true)} onOpenTraining={() => { setViewMode('training'); setManualStartHour(null); }} onOpenReleaseNotes={() => setIsReleaseNotesOpen(true)} isDark={isDark} />
       <ConnectivityModal isOpen={isConnectivityOpen} onClose={() => setIsConnectivityOpen(false)} status={connectionStatus} onCheckConnection={checkConnections} isDark={isDark} />
       <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} isDark={isDark} language={settings.language} />
-      
-      <ReleaseNotesModal 
-        isOpen={isReleaseNotesOpen} 
-        onClose={handleDeployUpdates} 
-        isDark={isDark} 
-      />
+      <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={handleDeployUpdates} isDark={isDark} />
     </div>
   );
 };

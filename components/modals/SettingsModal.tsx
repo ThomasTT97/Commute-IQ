@@ -30,7 +30,12 @@ import {
   CalendarDays,
   RotateCcw,
   AlertTriangle,
-  Sparkles
+  Sparkles,
+  Coins,
+  Euro,
+  ChevronRight,
+  TrendingUp,
+  History
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -57,7 +62,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isDark 
 }) => {
   const [editSettings, setEditSettings] = useState<CommuteSettings>(currentSettings);
-  const [currentView, setCurrentView] = useState<'main' | 'equipment' | 'personal'>('main');
+  const [currentView, setCurrentView] = useState<'main' | 'equipment' | 'personal' | 'financial'>('main');
   
   const [homeSearch, setHomeSearch] = useState(currentSettings.homeLocation);
   const [workSearch, setWorkSearch] = useState(currentSettings.workLocation);
@@ -150,6 +155,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       localStorage.removeItem('velo_settings');
       localStorage.removeItem(CACHE_KEY);
       localStorage.removeItem('commute_iq_usage_log');
+      localStorage.removeItem('commute_iq_history');
       window.location.href = '/'; 
       window.location.reload();
     }
@@ -182,6 +188,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { label: 'S', val: 0 },
   ];
 
+  // Helper to get last 12 months
+  const monthsToDisplay = useMemo(() => {
+    const list = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+      const label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      list.push({ key, label });
+    }
+    return list;
+  }, []);
+
+  const handleManualHistoryChange = (key: string, val: string) => {
+    const num = parseInt(val) || 0;
+    setEditSettings(prev => ({
+      ...prev,
+      manualCommuteHistory: {
+        ...(prev.manualCommuteHistory || {}),
+        [key]: num
+      }
+    }));
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -204,6 +234,88 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClose={() => setCurrentView('main')}
                 isDark={isDark}
              />
+           ) : currentView === 'financial' ? (
+             <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-300">
+                <div className="flex items-center gap-3 mb-4 flex-none">
+                  <button onClick={() => setCurrentView('personal')} className={`p-2 rounded-full transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <h2 className={`text-lg font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Financial Intel</h2>
+                </div>
+
+                <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-6 min-h-0">
+                  {/* Compensation Rate */}
+                  <div className={`p-5 rounded-3xl border flex flex-col gap-4 flex-none ${isDark ? 'bg-[#0a0c10] border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                    <div className="flex items-center gap-2 text-slate-500 px-1">
+                       <Euro className="w-4 h-4" />
+                       <span className="text-[9px] font-black uppercase tracking-widest">Rate Adjustment</span>
+                    </div>
+                    <div className="relative group">
+                       <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                         <Coins className="w-4 h-4 text-blue-500" />
+                       </div>
+                       <input 
+                         type="number" 
+                         step="0.01"
+                         min="0"
+                         value={editSettings.commuteCompensation}
+                         onChange={(e) => setEditSettings(prev => ({ ...prev, commuteCompensation: parseFloat(e.target.value) || 0 }))}
+                         className={`w-full pl-11 pr-16 py-4 rounded-2xl text-base font-black font-mono border outline-none transition-all ${isDark ? 'bg-black border-white/10 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-600 shadow-inner'}`}
+                       />
+                       <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                         EUR / KM
+                       </div>
+                    </div>
+                    <p className={`text-[10px] font-medium leading-relaxed px-1 opacity-60 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      This value is used to calculate your total commute yield based on road distance.
+                    </p>
+                  </div>
+
+                  {/* Monthly History Table */}
+                  <div className={`flex flex-col gap-3 flex-1`}>
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-2 text-slate-500">
+                        <History className="w-4 h-4" />
+                        <span className="text-[9px] font-black uppercase tracking-widest">Historical Registry</span>
+                      </div>
+                      <span className="text-[8px] font-bold text-blue-500 uppercase tracking-widest">1 Ride = 1 Leg</span>
+                    </div>
+
+                    <div className={`rounded-3xl border overflow-hidden ${isDark ? 'bg-[#0a0c10] border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                      {monthsToDisplay.map(({ key, label }, idx) => (
+                        <div 
+                          key={key} 
+                          className={`flex items-center justify-between p-4 ${idx !== 0 ? (isDark ? 'border-t border-white/5' : 'border-t border-slate-200') : ''} ${idx === 0 ? (isDark ? 'bg-blue-600/5' : 'bg-blue-50/50') : ''}`}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`text-[11px] font-black uppercase tracking-tight ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{label}</span>
+                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Manual Adjustment</span>
+                          </div>
+                          <div className="relative w-20">
+                            <input 
+                              type="number"
+                              min="0"
+                              value={editSettings.manualCommuteHistory?.[key] ?? ""}
+                              placeholder="0"
+                              onChange={(e) => handleManualHistoryChange(key, e.target.value)}
+                              className={`w-full py-2 px-3 rounded-xl text-center text-xs font-black font-mono border outline-none transition-all ${isDark ? 'bg-black border-white/10 text-white focus:border-blue-500' : 'bg-white border-slate-300 text-slate-900 focus:border-blue-600'}`}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-none pt-4">
+                  <button 
+                    onClick={() => setCurrentView('personal')}
+                    className={`w-full py-3.5 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-lg transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800 text-white border border-white/10' : 'bg-white text-slate-900 border border-slate-200'}`}
+                  >
+                    Back to Profile
+                  </button>
+                </div>
+             </div>
            ) : currentView === 'personal' ? (
              <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-300">
                 <div className="flex items-center gap-3 mb-4 flex-none">
@@ -250,6 +362,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                        </div>
                     </div>
                   </div>
+
+                  {/* Redesigned Financial Entrypoint */}
+                  <button 
+                    onClick={() => setCurrentView('financial')}
+                    className={`p-5 rounded-3xl border flex items-center justify-between transition-all active:scale-[0.98] ${isDark ? 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10' : 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100/50 shadow-sm'}`}
+                  >
+                    <div className="flex items-center gap-4">
+                       <div className={`p-3 rounded-2xl ${isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white text-emerald-600 shadow-sm'}`}>
+                          <Coins className="w-5 h-5" />
+                       </div>
+                       <div className="flex flex-col items-start">
+                          <span className={`text-sm font-black uppercase tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>Financial Settings</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-emerald-500/70' : 'text-emerald-600'}`}>€{editSettings.commuteCompensation.toFixed(2)} / KM</span>
+                       </div>
+                    </div>
+                    <ChevronRight className={`w-5 h-5 ${isDark ? 'text-emerald-500/50' : 'text-emerald-400'}`} />
+                  </button>
 
                   <div className={`p-5 rounded-3xl border flex flex-col gap-4 flex-none ${isDark ? 'bg-[#05070a] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
                     <div className="flex items-center gap-2 text-slate-500 px-1">
@@ -458,7 +587,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
            )}
         </div>
 
-        {currentView === 'main' && (
+        {(currentView === 'main' || currentView === 'personal' || currentView === 'financial') && (
           <div className="flex-none pt-2">
             <button 
               onClick={handleSaveClick} 
