@@ -3,20 +3,20 @@ import { Language, CommuteSettings, Coordinates } from './types';
 export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
-export const APP_VERSION = "3.0.1"; // Refined Financials
+export const APP_VERSION = "3.0.2"; // Thermal Logic V2
 
 export const RELEASE_NOTES = {
   version: APP_VERSION,
   features: [
     {
-      title: "Optimized Financial Registry",
-      description: "Default compensation rate updated to 0.31 EUR/km. The system now utilizes a unified monthly registry for improved logging accuracy.",
-      icon: "Euro"
+      title: "Thermal Logic V2",
+      description: "Ground temperature estimation now accounts for the 'blanket effect' of humidity. This prevents false ice positives in damp conditions (e.g., 3°C Air / 98% Humidity) where clouds prevent radiative cooling.",
+      icon: "Snowflake"
     },
     {
-      title: "Tactical UI Refinement",
-      description: "Enhanced dashboard density with a more compact commute log and recalibrated action buttons.",
-      icon: "Zap"
+      title: "Physics Model Tuning",
+      description: "Adjusted radiative cooling coefficients for clear vs. cloudy nights to better predict black ice formation windows.",
+      icon: "Activity"
     }
   ]
 };

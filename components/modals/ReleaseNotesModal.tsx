@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Sparkles, Snowflake, Droplets, Clock, Zap, ShieldCheck } from 'lucide-react';
+import { Sparkles, Snowflake, Droplets, Clock, Zap, ShieldCheck, Activity } from 'lucide-react';
 import { RELEASE_NOTES } from '../../constants';
 
 interface ReleaseNotesModalProps {
@@ -16,6 +15,7 @@ const getFeatureIcon = (name: string) => {
     case 'Clock': return <Clock className="w-5 h-5 text-emerald-500" />;
     case 'ShieldCheck': return <ShieldCheck className="w-5 h-5 text-blue-400" />;
     case 'Zap': return <Zap className="w-5 h-5 text-orange-400" />;
+    case 'Activity': return <Activity className="w-5 h-5 text-emerald-500" />;
     default: return <Sparkles className="w-5 h-5 text-blue-500" />;
   }
 };

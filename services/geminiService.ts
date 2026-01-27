@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommuteSettings, WeatherCondition, Language, Coordinates, ScoreDeduction, Equipment, TireSetup } from "../types";
 import { BELGIAN_CITIES, ROAD_DETOUR_FACTOR } from "../constants";
@@ -470,8 +469,10 @@ export const aggregateRawWeather = (
         waterFilmDepth += hRain;
         if (waterFilmDepth > DRAINAGE_CAP) waterFilmDepth = DRAINAGE_CAP;
         
-        // Track last rain time label
-        const timeLabel = `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
+        // Track last rain time label with Day differentiation (Today vs Yest)
+        const dayDiff = Math.floor(sessionStartAbsoluteIdx / 24) - Math.floor(idx / 24);
+        const dayLabel = dayDiff === 0 ? "Today" : "Yest";
+        const timeLabel = `${dayLabel} ${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
         if (i > 0) lastPrecipTime = timeLabel;
       }
 
@@ -491,16 +492,16 @@ export const aggregateRawWeather = (
       // Factors
       // Solar: Black asphalt absorbs heat. Sunny days evaporate MUCH faster.
       let solarFactor = 1.0; 
-      if (!isDaytime) solarFactor = 0.2; // Night drying is very slow
+      if (!isDaytime) solarFactor = 0.1; // Night drying is extremely slow
       else if (hCode <= 2) solarFactor = 2.5; // Direct sun
       else solarFactor = 1.0; // Overcast
 
       // Humidity: Driving force is vapor pressure deficit.
-      // 100% RH = 0 evaporation. 50% RH = Normal. 
-      const humidityFactor = Math.max(0, (100 - hHum) / 50);
+      // If Humidity > 95% (Fog), evaporation stops almost completely.
+      const humidityFactor = Math.max(0, (95 - hHum) / 45);
 
-      // Wind: Strips boundary layer. 
-      const windFactor = 1 + (hWind / 15);
+      // Wind: Strips boundary layer. Wind helps significantly.
+      const windFactor = 1 + (hWind / 10);
 
       // Temp: Warmer air holds exponentially more moisture.
       // Factor is 1.0 at 15C.
@@ -533,9 +534,9 @@ export const aggregateRawWeather = (
 
        // Evap Logic (Same as above)
        let evapBase = 0.1;
-       let solarFactor = (!isDaytime) ? 0.2 : (hCode <= 2 ? 2.5 : 1.0);
-       const humidityFactor = Math.max(0, (100 - hHum) / 50);
-       const windFactor = 1 + (hWind / 15);
+       let solarFactor = (!isDaytime) ? 0.1 : (hCode <= 2 ? 2.5 : 1.0);
+       const humidityFactor = Math.max(0, (95 - hHum) / 45);
+       const windFactor = 1 + (hWind / 10);
        const tempFactor = Math.pow(1.05, (hTemp - 15));
        const totalEvap = evapBase * solarFactor * humidityFactor * windFactor * tempFactor;
 
@@ -543,15 +544,6 @@ export const aggregateRawWeather = (
     }
     
     // Calculate timestamp
-    const now = new Date();
-    // Normalize "today" based on session index vs now if needed, but here simply:
-    // estimatedDryTime is (start time of session + hoursForward)
-    // We need a reference date. The system usually passes 'offset' but let's approximate
-    // using the date object logic available in other functions or simply relative ms
-    // Ideally we assume sessionStartAbsoluteIdx is relative to "now" if 0 is "start of dataset"
-    // For simplicity, we just return a relative timestamp from "now" based on the lookback loop + forward
-    // But since we don't have the absolute epoch of index 0 easily here, we construct it:
-    // This is a limitation of the stateless helper. We'll use a rough relative time.
     const oneHourMs = 3600 * 1000;
     // We assume the caller knows "sessionStartAbsoluteIdx" corresponds to the requested time slot.
     // We don't have the absolute date object of the slot here easily without passing it.
@@ -575,22 +567,36 @@ export const aggregateRawWeather = (
   // Determine Chance based on Depth
   let wetSurfaceChance = 0;
   if (waterFilmDepth > 0.1) wetSurfaceChance = 95; // Significant film
-  else if (waterFilmDepth > 0.01) wetSurfaceChance = 45; // Damp / Spotty
+  else if (waterFilmDepth > 0.02) wetSurfaceChance = 45; // Damp / Spotty (increased threshold to 0.02)
   else wetSurfaceChance = 5; // Dry
 
-  if (totalPrecip > 0.1) wetSurfaceChance = 99; // Currently raining override
+  if (totalPrecip > 0.05) wetSurfaceChance = 100; // Currently raining override (strictly wet)
 
   const overnightFreeze = minPastTemp <= 0.5;
 
   // GROUND TEMPERATURE ESTIMATION MODEL
   let groundTemp = avgTemp;
+  
+  // UPDATED LOGIC: Radiative cooling is heavily dependent on cloud cover (approximated by humidity).
+  // High humidity (>85%) implies clouds/fog which trap ground heat, reducing the air-ground delta.
+  // Previous static offset of -2.8C (1.8 + 1.0) was creating false positives in damp, non-freezing weather (e.g., 3°C Air, 98% Hum).
+  let coolingOffset = 1.8;
+  if (avgHum >= 90) coolingOffset = 0.4;
+  else if (avgHum >= 75) coolingOffset = 1.0;
+  else if (avgHum <= 45) coolingOffset = 2.5;
+
   if (overnightFreeze) {
     groundTemp = (avgTemp * 0.3) + (minPastTemp * 0.7);
   } else {
-    groundTemp = avgTemp - 1.8;
+    groundTemp = avgTemp - coolingOffset;
   }
   
-  if (isDark) groundTemp -= 1.0; 
+  if (isDark) {
+    // Radiative cooling at night is also suppressed by humidity blanket
+    if (avgHum >= 85) groundTemp -= 0.2;
+    else groundTemp -= 1.0; 
+  }
+  
   const finalGroundTemp = parseFloat(groundTemp.toFixed(1));
 
   let iceRisk = false;
