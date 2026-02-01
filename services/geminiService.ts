@@ -17,9 +17,10 @@ export let activeWeatherProvider: 'Open-Meteo' | 'WeatherAPI' | 'Unknown' = 'Unk
 
 const USAGE_CACHE_KEY = 'commute_iq_usage_log';
 
+// Standardized model names as per latest GenAI SDK guidelines.
 export const MODEL_CHAIN = [
   "gemini-3-flash-preview",
-  "gemini-2.5-flash",          
+  "gemini-flash-latest",          
   "gemini-flash-lite-latest" 
 ];
 
@@ -263,12 +264,12 @@ const extractJson = (text?: string): any => {
   try { return JSON.parse(cleanText); } catch (e) { return {}; }
 };
 
+// Refactored to strictly use named parameter for GoogleGenAI and direct process.env mapping.
 const callWithRetry = async <T>(fn: (aiInstance: GoogleGenAI, modelName: string) => Promise<T>): Promise<{ data: T; model: string }> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey });
+  if (!process.env.API_KEY) throw new Error("API Key missing");
   for (let i = 0; i < MODEL_CHAIN.length; i++) {
     try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const res = await fn(ai, MODEL_CHAIN[i]);
       currentLLMModel = MODEL_CHAIN[i];
       isUsingFallbackModel = i > 0;
@@ -283,7 +284,15 @@ const callWithRetry = async <T>(fn: (aiInstance: GoogleGenAI, modelName: string)
 
 export const checkLLMConnectivity = async (): Promise<boolean> => {
   try { 
-    await callWithRetry(async (ai, model) => ai.models.generateContent({ model, contents: "Hi", config: { maxOutputTokens: 5 } })); 
+    // Optimization: Setting thinkingBudget to 0 for rapid connectivity checks.
+    await callWithRetry(async (ai, model) => ai.models.generateContent({ 
+      model, 
+      contents: "Hi", 
+      config: { 
+        maxOutputTokens: 10, 
+        thinkingConfig: { thinkingBudget: 0 } 
+      } 
+    })); 
     return true; 
   } catch (e) { 
     return false; 
@@ -348,14 +357,17 @@ export const getScoreBreakdown = (w: Partial<WeatherCondition>, isTraining: bool
     }
   }
 
-  if ((w.windSpeed || 0) > 12) {
-    const windDeduction = ((w.windSpeed || 0) - 12) * 1.65;
+  // Toned down wind speed impact: factor reduced from 1.65 to 1.0, threshold increased to 15
+  if ((w.windSpeed || 0) > 15) {
+    const windDeduction = ((w.windSpeed || 0) - 15) * 1.0;
     items.push({ label: "Wind Intensity", val: -Math.round(windDeduction) });
   }
 
   if (!isTraining) {
     if ((w.headwindImpact || 0) > 20) {
-      const headwindDeduction = (w.headwindImpact || 0) / 4.5;
+      // Capped headwind deduction to max 10% as requested
+      const rawDeduction = (w.headwindImpact || 0) / 8;
+      const headwindDeduction = Math.min(10, rawDeduction);
       items.push({ label: "Headwind Drag", val: -Math.round(headwindDeduction) });
     } else if ((w.headwindImpact || 0) < -30) {
       items.push({ label: "Tailwind Boost", val: 5 });
@@ -388,7 +400,7 @@ export const aggregateRawWeather = (
   customWindow?: [string, string], fullRawHourlyPrecip?: number[],
   sessionStartAbsoluteIdx?: number, isTraining: boolean = false,
   fullRawHourlyHumidity?: number[], fullRawHourlyTemp?: number[],
-  fullRawHourlyCodes?: number[]
+  fullRawHourlyCodes?: number[], fullRawHourlyWinds?: number[]
 ): WeatherCondition => {
   const temps = (rawSlice.temperature_2m || []) as number[];
   const apparentTemps = (rawSlice.apparent_temperature || []) as number[];
@@ -430,12 +442,11 @@ export const aggregateRawWeather = (
   }
 
   // --- SURFACE WETNESS: WATER BUDGET MODEL ---
-  // Replaces older heuristic with Mass Balance (Water In - Water Out)
   let waterFilmDepth = 0; // in mm
   const DRAINAGE_CAP = 0.5; // mm. Maximum standing water on cambered road before runoff.
   const LOOKBACK_HOURS = 24; // Physics simulation window
+  const DRY_THRESHOLD = 0.02; // Threshold at which road transition from DAMP/WET to DRY
   let lastPrecipTime = "None";
-  let precipDuringSession = totalPrecip;
   let estimatedDryTime: number | undefined;
   
   // Calculate 24h Precipitation Volume
@@ -443,33 +454,26 @@ export const aggregateRawWeather = (
 
   // Backward Simulation: Establish current state
   if (fullRawHourlyPrecip && sessionStartAbsoluteIdx !== undefined) {
-    // We simulate from past to present to accumulate/evaporate water
     for (let i = LOOKBACK_HOURS; i >= 0; i--) {
       const idx = sessionStartAbsoluteIdx - i;
-      if (idx < 0) continue; // Boundary check
+      if (idx < 0) continue;
 
       const hRain = fullRawHourlyPrecip[idx] ?? 0;
       const hTemp = fullRawHourlyTemp?.[idx] ?? avgTemp;
       const hHum = fullRawHourlyHumidity?.[idx] ?? avgHum;
       const hCode = fullRawHourlyCodes?.[idx] ?? 0;
-      // Use maxWind of the slice as a proxy for historical wind if full array not easily accessible here
-      // This assumption avoids changing function signature for now.
-      const hWind = maxWind; 
+      const hWind = fullRawHourlyWinds?.[idx] ?? maxWind; 
 
       const hour = idx % 24;
-      const isDaytime = hour >= 7 && hour <= 19; // Approximation for historical loop
+      const isDaytime = hour >= 7 && hour <= 19;
 
-      // Calculate 24h precip sum (excluding current hour for "past 24h")
-      if (i > 0) {
-        precip24h += hRain;
-      }
+      if (i > 0) precip24h += hRain;
 
       // 1. ADD WATER (Precipitation)
       if (hRain > 0) {
         waterFilmDepth += hRain;
         if (waterFilmDepth > DRAINAGE_CAP) waterFilmDepth = DRAINAGE_CAP;
         
-        // Track last rain time label with Day differentiation (Today vs Yest)
         const dayDiff = Math.floor(sessionStartAbsoluteIdx / 24) - Math.floor(idx / 24);
         const dayLabel = dayDiff === 0 ? "Today" : "Yest";
         const timeLabel = `${dayLabel} ${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
@@ -477,62 +481,39 @@ export const aggregateRawWeather = (
       }
 
       // 2. ADD WATER (Condensation / Dew)
-      // Dew Point approximation: T - ((100 - RH)/5)
       const dewPoint = hTemp - ((100 - hHum) / 5);
-      // If surface temp (approx air temp at night) drops to Dew Point + 1 margin
       if (!isDaytime && hTemp <= dewPoint + 1.0 && hHum > 90) {
-         waterFilmDepth += 0.05; // Trace condensation (frost/dew)
+         waterFilmDepth += 0.05; 
          if (waterFilmDepth > DRAINAGE_CAP) waterFilmDepth = DRAINAGE_CAP;
       }
 
-      // 3. REMOVE WATER (Evaporation - Penman Monteith Simplified)
-      // Base Rate: ~0.1mm/hr at 15C, 50% RH
+      // 3. REMOVE WATER (Evaporation)
       let evapBase = 0.1;
-
-      // Factors
-      // Solar: Black asphalt absorbs heat. Sunny days evaporate MUCH faster.
-      let solarFactor = 1.0; 
-      if (!isDaytime) solarFactor = 0.1; // Night drying is extremely slow
-      else if (hCode <= 2) solarFactor = 2.5; // Direct sun
-      else solarFactor = 1.0; // Overcast
-
-      // Humidity: Driving force is vapor pressure deficit.
-      // If Humidity > 95% (Fog), evaporation stops almost completely.
+      let solarFactor = !isDaytime ? 0.1 : (hCode <= 2 ? 2.5 : 1.0);
       const humidityFactor = Math.max(0, (95 - hHum) / 45);
-
-      // Wind: Strips boundary layer. Wind helps significantly.
       const windFactor = 1 + (hWind / 10);
-
-      // Temp: Warmer air holds exponentially more moisture.
-      // Factor is 1.0 at 15C.
       const tempFactor = Math.pow(1.05, (hTemp - 15));
-
       const totalEvap = evapBase * solarFactor * humidityFactor * windFactor * tempFactor;
-      
       waterFilmDepth = Math.max(0, waterFilmDepth - totalEvap);
     }
   }
 
   // Forward Simulation: Calculate Estimated Dry Time
-  if (waterFilmDepth > 0 && sessionStartAbsoluteIdx !== undefined) {
+  if (waterFilmDepth > DRY_THRESHOLD && sessionStartAbsoluteIdx !== undefined) {
     let futureDepth = waterFilmDepth;
     let hoursForward = 0;
     
-    // Simulate up to 24 hours into the future
-    while (futureDepth > 0 && hoursForward < 24) {
+    // Aligned to loop until futureDepth reaches the same DRY_THRESHOLD used by the UI label
+    while (futureDepth > DRY_THRESHOLD && hoursForward < 24) {
        hoursForward++;
        const idx = sessionStartAbsoluteIdx + hoursForward;
-       
-       // Future weather parameters (using current slice averages if beyond forecast or simple persistence)
-       // We use current slice averages as proxy for near-future if array bounds exceeded
        const hTemp = fullRawHourlyTemp?.[idx] ?? avgTemp;
        const hHum = fullRawHourlyHumidity?.[idx] ?? avgHum;
        const hCode = fullRawHourlyCodes?.[idx] ?? maxCode;
-       const hWind = maxWind;
+       const hWind = fullRawHourlyWinds?.[idx] ?? maxWind;
        const hour = idx % 24;
        const isDaytime = hour >= 7 && hour <= 19;
 
-       // Evap Logic (Same as above)
        let evapBase = 0.1;
        let solarFactor = (!isDaytime) ? 0.1 : (hCode <= 2 ? 2.5 : 1.0);
        const humidityFactor = Math.max(0, (95 - hHum) / 45);
@@ -543,56 +524,40 @@ export const aggregateRawWeather = (
        futureDepth = Math.max(0, futureDepth - totalEvap);
     }
     
-    // Calculate timestamp
     const oneHourMs = 3600 * 1000;
-    // We assume the caller knows "sessionStartAbsoluteIdx" corresponds to the requested time slot.
-    // We don't have the absolute date object of the slot here easily without passing it.
-    // However, existing logic calculated dry time relative to 'lastPrecipIdx'. 
-    // We will return a value relative to the Session Start.
-    // The UI handles 'estimatedDryTime' as a unix timestamp. 
-    // We will estimate it relative to Date.now() if it's today's slot, but that's risky.
-    // Let's rely on the fact that if waterFilmDepth > 0, it's wet NOW.
-    // We can just return the number of hours to dry if we change the type, but let's stick to timestamp.
-    // We will grab the date from the `sunTimes` if available or `timeWindow`? No.
-    // We will reuse the "today" logic from the previous implementation:
-    const startDate = new Date(); 
-    startDate.setDate(startDate.getDate() - 1); // Safety buffer for timezone
-    startDate.setHours(0,0,0,0);
-    // idx 0 is usually yesterday 00:00 or similar in OpenMeteo past_days=1
-    // sessionStartAbsoluteIdx is hours from that origin.
-    const originMs = startDate.getTime(); 
-    estimatedDryTime = originMs + (sessionStartAbsoluteIdx + hoursForward) * oneHourMs;
+    // CRITICAL: Aligned temporal origin.
+    // Instead of recalculating new Date() per call, we anchor relative to the day index.
+    // Index 24 is always "Today 00:00" in our OpenMeteo past_days=1 setup.
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const todayMs = today.getTime();
+    
+    // Convert current absolute index + hoursForward into a timestamp relative to Today 00:00
+    // sessionStartAbsoluteIdx is hours since Yesterday 00:00.
+    const hoursSinceTodayStart = sessionStartAbsoluteIdx - 24;
+    estimatedDryTime = todayMs + (hoursSinceTodayStart + hoursForward) * oneHourMs;
   }
 
-  // Determine Chance based on Depth
   let wetSurfaceChance = 0;
-  if (waterFilmDepth > 0.1) wetSurfaceChance = 95; // Significant film
-  else if (waterFilmDepth > 0.02) wetSurfaceChance = 45; // Damp / Spotty (increased threshold to 0.02)
-  else wetSurfaceChance = 5; // Dry
+  if (waterFilmDepth > 0.1) wetSurfaceChance = 95; 
+  else if (waterFilmDepth > DRY_THRESHOLD) wetSurfaceChance = 45; 
+  else wetSurfaceChance = 5; 
 
-  if (totalPrecip > 0.05) wetSurfaceChance = 100; // Currently raining override (strictly wet)
+  if (totalPrecip > 0.05) wetSurfaceChance = 100;
 
   const overnightFreeze = minPastTemp <= 0.5;
 
   // GROUND TEMPERATURE ESTIMATION MODEL
   let groundTemp = avgTemp;
-  
-  // UPDATED LOGIC: Radiative cooling is heavily dependent on cloud cover (approximated by humidity).
-  // High humidity (>85%) implies clouds/fog which trap ground heat, reducing the air-ground delta.
-  // Previous static offset of -2.8C (1.8 + 1.0) was creating false positives in damp, non-freezing weather (e.g., 3°C Air, 98% Hum).
   let coolingOffset = 1.8;
   if (avgHum >= 90) coolingOffset = 0.4;
   else if (avgHum >= 75) coolingOffset = 1.0;
   else if (avgHum <= 45) coolingOffset = 2.5;
 
-  if (overnightFreeze) {
-    groundTemp = (avgTemp * 0.3) + (minPastTemp * 0.7);
-  } else {
-    groundTemp = avgTemp - coolingOffset;
-  }
+  if (overnightFreeze) groundTemp = (avgTemp * 0.3) + (minPastTemp * 0.7);
+  else groundTemp = avgTemp - coolingOffset;
   
   if (isDark) {
-    // Radiative cooling at night is also suppressed by humidity blanket
     if (avgHum >= 85) groundTemp -= 0.2;
     else groundTemp -= 1.0; 
   }
@@ -603,7 +568,7 @@ export const aggregateRawWeather = (
   if (isSnowy) {
     iceRisk = true;
   } else {
-    const isGroundFrozen = finalGroundTemp <= 0.8; // Buffer for near-freezing risk
+    const isGroundFrozen = finalGroundTemp <= 0.8; 
     if (isGroundFrozen) {
       const hasMoisture = (wetSurfaceChance >= 10) || (avgHum > 78);
       if (hasMoisture) iceRisk = true;
@@ -659,11 +624,11 @@ export const getTelemetryBatch = async (settings: CommuteSettings, offsets: numb
     const dayStartIdx = (offset + 1) * 24;
     const sunTimesM = { sunrise: homeRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: homeRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const mIdx = dayStartIdx + parseInt(settings.morningWindow[0].split(':')[0]);
-    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...(homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx) || [avgTemp])), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m, homeRaw.hourly.weather_code);
+    const mWeather = aggregateRawWeather(sliceWeatherData(homeRaw.hourly, settings.morningWindow, offset), calculateBearing(settings.homeCoords, settings.workCoords), true, settings, sunTimesM, Math.min(...(homeRaw.hourly.temperature_2m.slice(Math.max(0, mIdx - 6), mIdx) || [avgTemp])), undefined, homeRaw.hourly.precipitation, mIdx, false, homeRaw.hourly.relative_humidity_2m, homeRaw.hourly.temperature_2m, homeRaw.hourly.weather_code, homeRaw.hourly.wind_speed_10m);
     
     const sunTimesE = { sunrise: workRaw.daily?.sunrise?.[offset + 1] || "07:00", sunset: workRaw.daily?.sunset?.[offset + 1] || "20:00" };
     const eIdx = dayStartIdx + parseInt(settings.eveningWindow[0].split(':')[0]);
-    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...(workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx) || [avgTemp])), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m, workRaw.hourly.weather_code);
+    const eWeather = aggregateRawWeather(sliceWeatherData(workRaw.hourly, settings.eveningWindow, offset), calculateBearing(settings.workCoords, settings.homeCoords), false, settings, sunTimesE, Math.min(...(workRaw.hourly.temperature_2m.slice(Math.max(0, eIdx - 6), eIdx) || [avgTemp])), undefined, workRaw.hourly.precipitation, eIdx, false, workRaw.hourly.relative_humidity_2m, workRaw.hourly.temperature_2m, workRaw.hourly.weather_code, workRaw.hourly.wind_speed_10m);
 
     batch[offset] = {
       weather: { morning: mWeather, evening: eWeather }, lastUpdated: Date.now(),

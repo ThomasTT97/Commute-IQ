@@ -1,3 +1,5 @@
+
+// Added React to imports to resolve namespace and JSX issues.
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CommuteSettings, Coordinates, TrainingState, ConnectionStatusState, SearchCriteria, LocationSuggestion } from './types'; 
 import { BelgianLocation } from './locations';
@@ -331,7 +333,7 @@ const App: React.FC = () => {
               if (!lSlice.temperature_2m) continue;
               const pastTemps = lRaw.hourly.temperature_2m.slice(Math.max(0, lDayIdx + h - 6), lDayIdx + h);
               const lWin: [string, string] = [formatH(h), formatH(h + durationInt)];
-              const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m);
+              const lCond = aggregateRawWeather(lSlice, 0, true, settings, lSun, pastTemps.length ? Math.min(...pastTemps) : 10, lWin, lRaw.hourly.precipitation, lDayIdx + h, true, lRaw.hourly.relative_humidity_2m, lRaw.hourly.temperature_2m, lRaw.hourly.weather_code, lRaw.hourly.wind_speed_10m);
               
               if (searchCriteria.drySurface && lCond.wetSurfaceChance >= 10) continue;
               if (searchCriteria.noIce && lCond.iceRisk) continue;
@@ -490,7 +492,7 @@ const App: React.FC = () => {
         if (!slice.temperature_2m) continue;
         const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
         const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
-        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
+        const condition = aggregateRawWeather(slice, 0, true, settings, sunTimes, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m, raw.hourly.weather_code, raw.hourly.wind_speed_10m);
         const isDaylight = !condition.isDark;
         const effectiveScore = condition.score + (isDaylight ? 20 : 0);
         slots.push({ startHour: h, condition, window: winHours, score: condition.score, effectiveScore });
@@ -564,7 +566,7 @@ const App: React.FC = () => {
             if (!slice.temperature_2m) continue;
             const past = raw.hourly.temperature_2m.slice(Math.max(0, dayIdx+h-6), dayIdx+h);
             const winHours: [string, string] = [formatH(h), formatH(h + durationInt)];
-            const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m);
+            const condition = aggregateRawWeather(slice, 0, true, settings, sun, past.length ? Math.min(...past) : 10, winHours, raw.hourly.precipitation, dayIdx + h, true, raw.hourly.relative_humidity_2m, raw.hourly.temperature_2m, raw.hourly.weather_code, raw.hourly.wind_speed_10m);
             const isDaylight = !condition.isDark;
             const eff = condition.score + (isDaylight ? 20 : 0);
             if (eff > maxEff) {
@@ -712,7 +714,7 @@ const App: React.FC = () => {
               trainingData={activeTrainingSlot} trainingLoading={trainingLoading} manualStartHour={manualStartHour} bestStartHour={bestStartHour} theme={settings.theme} 
               onReturn={() => setViewMode('daily')} onSearchChange={(v) => { setTrainingSearch(v); setShowTrainingSuggestions(true); }} 
               onSetToHome={() => { setTraining(prev => ({...prev, location: settings.homeLocation, coords: settings.homeCoords as Coordinates})); setTrainingSearch(settings.homeLocation); setManualStartHour(null); setShowTrainingSuggestions(false); }} 
-              onSetToCurrent={handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
+              onSetToCurrent = {handleSetTrainingToCurrentLocation} onDateOffsetChange={setSelectedDateOffset} onDistanceChange={d => { setTraining(prev => ({...prev, distance: d})); setManualStartHour(null); }} 
               onManualHourChange={onManualHourChange} onSelectSuggestion={handleSelectLocationAdvice} onShowWeekly={syncTrainingWeek} 
               onSelectWeeklySlot={(offset, hour) => { 
                 setSelectedDateOffset(offset); 

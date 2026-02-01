@@ -3,20 +3,25 @@ import { Language, CommuteSettings, Coordinates } from './types';
 export const ROAD_DETOUR_FACTOR = 1.28;
 export const CACHE_KEY = 'commute_iq_pulse_cache_v2';
 export const AVG_TRAINING_SPEED = 28; // km/h
-export const APP_VERSION = "3.0.2"; // Thermal Logic V2
+export const APP_VERSION = "3.0.5"; // Kinetic & Surface Refinement
 
 export const RELEASE_NOTES = {
   version: APP_VERSION,
   features: [
     {
-      title: "Thermal Logic V2",
-      description: "Ground temperature estimation now accounts for the 'blanket effect' of humidity. This prevents false ice positives in damp conditions (e.g., 3°C Air / 98% Humidity) where clouds prevent radiative cooling.",
-      icon: "Snowflake"
+      title: "Kinetic Wind Tuning",
+      description: "Wind intensity scoring has been recalibrated. Headwind deductions are now capped at 10% to prevent excessive score drops, and the detection threshold for impact has been increased to 15km/h for more realistic safety assessments.",
+      icon: "Zap"
     },
     {
-      title: "Physics Model Tuning",
-      description: "Adjusted radiative cooling coefficients for clear vs. cloudy nights to better predict black ice formation windows.",
-      icon: "Activity"
+      title: "Surface Recovery V3",
+      description: "Improved temporal consistency for surface diagnostics. Estimated dry times now use full-day wind telemetry and fixed temporal anchors to ensure identical drying predictions across morning and evening commute legs.",
+      icon: "Droplets"
+    },
+    {
+      title: "System Stability",
+      description: "Resolved namespace conflicts and optimized telemetry ingestion for high-frequency updates in Training Mode.",
+      icon: "ShieldCheck"
     }
   ]
 };
